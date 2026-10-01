@@ -9,7 +9,7 @@ Tasks are available on web and desktop.
 ## Start a task
 
 Choose **New task** in the sidebar or the command palette and pick a branch that already exists
-on the remote. T3 Code fetches it, checks it out in a new worktree that tracks the remote branch,
+on the remote. Merge fetches it, checks it out in a new worktree that tracks the remote branch,
 and sets up the workspace. A task never creates a branch: push the branch first, then start the
 task.
 
@@ -41,7 +41,7 @@ destination is kept unless `overwrite` is set.
 
 ## Pull requests, checks, and review
 
-You don't link a pull request yourself. T3 Code looks for a pull request from the task's branch
+You don't link a pull request yourself. Merge looks for a pull request from the task's branch
 about once a minute, links it, and keeps its checks, review decision, and merge state current on
 the task. The task's status sums this up together with what its threads are doing, such as
 **Checks failing**, **Changes requested**, or **Ready to merge**.
@@ -70,7 +70,7 @@ Failing checks are tracked in the task's status but don't start a thread.
 Archiving stops the task's agents, closes its terminals, removes the worktree, and archives its
 threads. The remote branch, the pull request, and the thread history stay.
 
-T3 Code asks you to confirm when archiving could lose work: uncommitted changes, commits that
+Merge asks you to confirm when archiving could lose work: uncommitted changes, commits that
 were never pushed, an open pull request, or an agent that is still running.
 
 ## Taskboard

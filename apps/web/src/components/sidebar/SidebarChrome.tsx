@@ -90,7 +90,7 @@ function SidebarBrand({ onBackdrop }: { onBackdrop: boolean }) {
         <T3Wordmark aria-hidden className="h-[1cap] w-auto shrink-0" />
         <span
           className={cn(
-            "truncate [text-box:trim-both_cap_alphabetic]",
+            "whitespace-nowrap [text-box:trim-both_cap_alphabetic]",
             onBackdrop ? "text-white/70" : "text-muted-foreground",
           )}
         >

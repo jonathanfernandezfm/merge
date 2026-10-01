@@ -186,17 +186,34 @@ const TASK_STATUS_ICON: Readonly<Record<TaskStatus, LucideIcon | typeof WorkingS
   archived: ArchiveIcon,
 };
 
+/**
+ * A hue per status for the sidebar, finer than the shared tones so a glance at the task list
+ * separates CI, review, and merge stages. Resting states stay muted so active ones stand out.
+ */
+const TASK_STATUS_ICON_CLASS: Readonly<Record<TaskStatus, string>> = {
+  "setting-up": "text-sky-600 dark:text-sky-400",
+  "setup-failed": "text-destructive-foreground",
+  working: "text-info-foreground",
+  "waiting-for-user": "text-warning-foreground",
+  idle: "text-muted-foreground",
+  "ci-running": "text-cyan-600 dark:text-cyan-400",
+  "ci-failing": "text-destructive-foreground",
+  "changes-requested": "text-orange-600 dark:text-orange-400",
+  "addressing-comments": "text-violet-600 dark:text-violet-400",
+  "waiting-for-review": "text-indigo-600 dark:text-indigo-400",
+  approved: "text-success-foreground",
+  "merge-ready": "text-success-foreground",
+  merged: "text-purple-600 dark:text-purple-400",
+  archived: "text-muted-foreground/70",
+};
+
 /** A status-tinted icon for dense lists; pair it with a text label for assistive tech. */
 export function TaskStatusIcon({ status, className }: { status: TaskStatus; className?: string }) {
   const Icon = TASK_STATUS_ICON[status];
   return (
     <Icon
       aria-hidden
-      className={cn(
-        "size-3.5 shrink-0",
-        TONE_CLASS[TASK_STATUS_PRESENTATION[status].tone],
-        className,
-      )}
+      className={cn("size-3.5 shrink-0", TASK_STATUS_ICON_CLASS[status], className)}
     />
   );
 }

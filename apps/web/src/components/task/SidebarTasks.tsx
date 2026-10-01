@@ -8,7 +8,13 @@ import type { EnvironmentId, TaskId } from "@t3tools/contracts";
 import { TASK_STATUS_PRESENTATION } from "@t3tools/shared/taskStatus";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import * as Schema from "effect/Schema";
-import { ChevronDownIcon, FolderOpenIcon, PlusIcon, SquareKanbanIcon } from "lucide-react";
+import {
+  ChevronDownIcon,
+  FolderClosedIcon,
+  FolderOpenIcon,
+  PlusIcon,
+  SquareKanbanIcon,
+} from "lucide-react";
 import { memo, useCallback, useMemo, type MouseEvent, type ReactNode } from "react";
 
 import { useLocalStorage } from "~/hooks/useLocalStorage";
@@ -26,6 +32,8 @@ import { useOpenTask, useTaskContextMenu } from "./useTaskActions";
 
 const EMPTY_THREADS: ReadonlyArray<EnvironmentThreadShell> = [];
 const TASKS_EXPANDED_KEY = "t3code:sidebar:tasks-expanded";
+const PROJECTS_EXPANDED_KEY = "t3code:sidebar:task-projects-expanded";
+const ProjectsExpandedSchema = Schema.Record(Schema.String, Schema.Boolean);
 
 function taskMatchesQuery(task: EnvironmentTask, query: string): boolean {
   return (
@@ -65,11 +73,11 @@ function useActiveTaskKey(): string | null {
 }
 
 /**
- * Projects with their active tasks. Archived tasks leave the sidebar; their
- * history stays on the Taskboard. Renders nothing without an active task (or,
- * while the sidebar searches, without a task whose title or branch matches
- * `searchQuery`); the Taskboard stays reachable from the utility menu and the
- * command palette.
+ * Every project with its active tasks; projects without tasks start collapsed.
+ * Archived tasks leave the sidebar; their history stays on the Taskboard.
+ * While the sidebar searches, only projects with a task whose title or branch
+ * matches `searchQuery` render. Renders nothing when nothing is left to show;
+ * the Taskboard stays reachable from the utility menu and the command palette.
  */
 export const SidebarTasks = memo(function SidebarTasks({
   searchQuery = "",
@@ -100,8 +108,9 @@ export const SidebarTasks = memo(function SidebarTasks({
     }
     return projects.flatMap((project) => {
       const key = `${project.environmentId}:${project.id}`;
-      const projectTasks = byProject.get(key);
-      if (projectTasks === undefined) return [];
+      const projectTasks = byProject.get(key) ?? [];
+      // Searching narrows to projects with a matching task.
+      if (searching && projectTasks.length === 0) return [];
       return [
         {
           key,
@@ -114,7 +123,18 @@ export const SidebarTasks = memo(function SidebarTasks({
         },
       ];
     });
-  }, [projects, query, tasks]);
+  }, [projects, query, searching, tasks]);
+
+  // Explicit toggles per project; untouched projects open only when they have tasks.
+  const [projectExpanded, setProjectExpanded] = useLocalStorage(
+    PROJECTS_EXPANDED_KEY,
+    {},
+    ProjectsExpandedSchema,
+  );
+  const isProjectExpanded = (group: TaskProjectGroup) =>
+    searching || (projectExpanded[group.key] ?? group.tasks.length > 0);
+  const toggleProject = (group: TaskProjectGroup) =>
+    setProjectExpanded((value) => ({ ...value, [group.key]: !isProjectExpanded(group) }));
 
   const closeMobileSidebar = useCallback(() => {
     if (isMobile) setOpenMobile(false);
@@ -169,45 +189,63 @@ export const SidebarTasks = memo(function SidebarTasks({
       </div>
       {expanded ? (
         <ul className="flex flex-col gap-1.5 pb-2">
-          {groups.map((group) => (
-            <li key={group.key} className="flex flex-col">
-              <div className="group/task-project flex h-8 items-center gap-2 ps-2 pe-0.5 text-sidebar-foreground/85">
-                <FolderOpenIcon
-                  aria-hidden
-                  className="size-4 shrink-0 text-sidebar-muted-foreground"
-                />
-                <span className="min-w-0 flex-1 truncate text-sm">{group.title}</span>
-                <span className="flex opacity-0 group-focus-within/task-project:opacity-100 group-hover/task-project:opacity-100">
-                  <TaskIconAction
-                    label={`New task in ${group.title}`}
-                    onClick={() =>
-                      openNewTaskDialog({
-                        environmentId: group.environmentId,
-                        projectId: group.projectId,
-                      })
-                    }
+          {groups.map((group) => {
+            const projectOpen = isProjectExpanded(group);
+            const FolderIcon = projectOpen ? FolderOpenIcon : FolderClosedIcon;
+            return (
+              <li key={group.key} className="flex flex-col">
+                <div className="group/task-project flex h-8 items-center gap-2 ps-2 pe-0.5 text-sidebar-foreground/85">
+                  <button
+                    type="button"
+                    aria-expanded={projectOpen}
+                    disabled={searching}
+                    onClick={() => toggleProject(group)}
+                    className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-left hover:text-sidebar-foreground"
                   >
-                    <PlusIcon />
-                  </TaskIconAction>
-                </span>
-              </div>
-              <ul className="flex flex-col gap-px">
-                {group.tasks.map((task) => {
-                  const key = taskThreadsKey(task.environmentId, task.id);
-                  return (
-                    <SidebarTaskRow
-                      key={key}
-                      task={task}
-                      threads={threadsByTask.get(key) ?? EMPTY_THREADS}
-                      active={key === activeTaskKey}
-                      onOpen={openTask}
-                      onContextMenu={openTaskContextMenu}
+                    <FolderIcon
+                      aria-hidden
+                      className="size-4 shrink-0 text-sidebar-muted-foreground"
                     />
-                  );
-                })}
-              </ul>
-            </li>
-          ))}
+                    <span className="min-w-0 flex-1 truncate text-sm">{group.title}</span>
+                  </button>
+                  <span className="flex opacity-0 group-focus-within/task-project:opacity-100 group-hover/task-project:opacity-100">
+                    <TaskIconAction
+                      label={`New task in ${group.title}`}
+                      onClick={() =>
+                        openNewTaskDialog({
+                          environmentId: group.environmentId,
+                          projectId: group.projectId,
+                        })
+                      }
+                    >
+                      <PlusIcon />
+                    </TaskIconAction>
+                  </span>
+                </div>
+                {!projectOpen ? null : group.tasks.length === 0 ? (
+                  <p className="h-8 ps-8 pe-2 text-sm leading-8 text-sidebar-muted-foreground/70">
+                    No tasks
+                  </p>
+                ) : (
+                  <ul className="flex flex-col gap-px">
+                    {group.tasks.map((task) => {
+                      const key = taskThreadsKey(task.environmentId, task.id);
+                      return (
+                        <SidebarTaskRow
+                          key={key}
+                          task={task}
+                          threads={threadsByTask.get(key) ?? EMPTY_THREADS}
+                          active={key === activeTaskKey}
+                          onOpen={openTask}
+                          onContextMenu={openTaskContextMenu}
+                        />
+                      );
+                    })}
+                  </ul>
+                )}
+              </li>
+            );
+          })}
         </ul>
       ) : null}
     </SidebarGroup>
