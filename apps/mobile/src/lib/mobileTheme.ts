@@ -1,10 +1,12 @@
 import {
   BUILT_IN_THEMES,
+  DEFAULT_THEME_ID,
+  MERGE_THEME,
   T3_CHAT_THEME,
   T3_CODE_LIGHT_THEME_COLORS,
   T3_CODE_DARK_THEME_COLORS,
   getThemeColorsForAppearance,
-  MOBILE_DEFAULT_THEME_ID,
+  MOBILE_STANDARD_THEME_ID,
   MOBILE_THEME_IDS as SHARED_MOBILE_THEME_IDS,
   type MobileThemeId as SharedMobileThemeId,
   type ThemeAppearance,
@@ -15,7 +17,10 @@ import {
   type ThemePreviewColors,
 } from "@t3tools/shared/themePreview";
 
-export const DEFAULT_MOBILE_THEME_ID = MOBILE_DEFAULT_THEME_ID;
+/** The stock T3 Code palette (the Uniwind `light`/`dark` themes), still selectable. */
+export const STANDARD_MOBILE_THEME_ID = MOBILE_STANDARD_THEME_ID;
+/** What a missing or unknown stored preference resolves to. */
+export const DEFAULT_MOBILE_THEME_ID: SharedMobileThemeId = DEFAULT_THEME_ID;
 export const MOBILE_THEME_IDS = [...SHARED_MOBILE_THEME_IDS, "material-you"] as const;
 export type MobileThemeId = SharedMobileThemeId | "material-you";
 export type MobileThemeAppearance = ThemeAppearance;
@@ -26,7 +31,7 @@ export const MOBILE_THEME_OPTIONS: ReadonlyArray<{
   readonly id: MobileThemeId;
   readonly label: string;
 }> = [
-  { id: DEFAULT_MOBILE_THEME_ID, label: "T3 Code" },
+  { id: STANDARD_MOBILE_THEME_ID, label: "T3 Code" },
   { id: "material-you", label: "Material You" },
   ...BUILT_IN_THEMES.map((theme) => ({ id: theme.id as MobileThemeId, label: theme.label })),
 ];
@@ -354,10 +359,10 @@ export function getMobileThemeColors(
   themeId: SharedMobileThemeId,
   appearance: MobileThemeAppearance,
 ): ThemeColors {
-  if (themeId === DEFAULT_MOBILE_THEME_ID) {
+  if (themeId === STANDARD_MOBILE_THEME_ID) {
     return appearance === "dark" ? T3_CODE_DARK_THEME_COLORS : T3_CODE_LIGHT_THEME_COLORS;
   }
-  const theme = BUILT_IN_THEMES.find((candidate) => candidate.id === themeId) ?? T3_CHAT_THEME;
+  const theme = BUILT_IN_THEMES.find((candidate) => candidate.id === themeId) ?? MERGE_THEME;
   return getThemeColorsForAppearance(theme, appearance) ?? theme.colors;
 }
 
@@ -370,13 +375,13 @@ export function getMobileThemeVariables(
   // Mobile settings groups and fallback materials use tonal fills where desktop
   // uses outlined cards. Regular cards retain their shared desktop surface.
   const groupedCard =
-    themeId === DEFAULT_MOBILE_THEME_ID
+    themeId === STANDARD_MOBILE_THEME_ID
       ? appearance === "light"
         ? colors.toolbarControlHover
         : colors.sidebarRowActive
       : colors.surface;
   const mobileColors =
-    themeId === DEFAULT_MOBILE_THEME_ID
+    themeId === STANDARD_MOBILE_THEME_ID
       ? {
           ...colors,
           messageSurface: flattenThemeColor(
@@ -398,9 +403,9 @@ export function getMobileThemePreviewColors(
   themeId: MobileThemeId,
   appearance: MobileThemeAppearance,
 ): ThemePreviewColors {
-  if (themeId === DEFAULT_MOBILE_THEME_ID || themeId === "material-you")
+  if (themeId === STANDARD_MOBILE_THEME_ID || themeId === "material-you")
     return STANDARD_THEME_PREVIEW_COLORS[appearance];
-  const theme = BUILT_IN_THEMES.find((candidate) => candidate.id === themeId) ?? T3_CHAT_THEME;
+  const theme = BUILT_IN_THEMES.find((candidate) => candidate.id === themeId) ?? MERGE_THEME;
   const colors = getThemeColorsForAppearance(theme, appearance) ?? theme.colors;
   return {
     canvas: themeColorToNativeColor(colors.canvas),

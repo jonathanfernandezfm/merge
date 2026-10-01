@@ -22,6 +22,8 @@ import {
   type ThemeAppearance,
   type ThemeDefinition,
   type ThemeHalves,
+  DEFAULT_THEME_ID,
+  MERGE_THEME,
   T3_CHAT_THEME,
   EMBER_THEME,
   GROVE_THEME,
@@ -55,6 +57,7 @@ import {
 import { ThemeWireframe } from "./ThemeWireframe";
 
 const MAINTAINER_THEMES: ReadonlyArray<ThemeDefinition> = [
+  MERGE_THEME,
   T3_CHAT_THEME,
   GROVE_THEME,
   OCEAN_THEME,
@@ -589,9 +592,10 @@ export function ThemeLibrary({
     // published theme whose set has not streamed in yet is pruned from the
     // `themeHalves` prop, and rebuilding from that would drop it.
     const storedHalves = readThemeHalvesRaw();
-    // Keep the themes installed if we cannot move the selection off one of
-    // them; the dialog stays open so the user can retry or cancel.
-    if (removesBase && !persistTheme(appearanceMode === "system" ? "system" : appearanceMode)) {
+    // Removing the theme in use falls back to the default theme. Keep the
+    // themes installed if we cannot move the selection off one of them; the
+    // dialog stays open so the user can retry or cancel.
+    if (removesBase && !persistTheme(DEFAULT_THEME_ID)) {
       return;
     }
     for (const appearance of ["light", "dark"] as const) {
@@ -613,7 +617,6 @@ export function ThemeLibrary({
     }
     setIsThemeRemovalOpen(false);
   }, [
-    appearanceMode,
     notifyThemeRemovalFailure,
     persistTheme,
     setThemeHalf,
@@ -691,8 +694,8 @@ export function ThemeLibrary({
   };
 
   // Rings always show the effective owner of each appearance: an unpicked
-  // half belongs to the default card (a null owner), so a fresh install
-  // shows T3 Code selected instead of nothing.
+  // half belongs to the T3 Code card (a null owner). A fresh install resolves
+  // to the default theme, so its card shows selected instead.
   const pickedModesFor = (cardId: string | null): ThemeMode[] => {
     const rings: ThemeMode[] = [];
     if (lightOwner === cardId) rings.push("light");

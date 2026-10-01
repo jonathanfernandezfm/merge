@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vite-plus/test";
 import indexHtml from "../index.html?raw";
 import {
   CUSTOM_THEMES_STORAGE_KEY,
+  DEFAULT_THEME_ID,
   getDefaultThemeColors,
   getThemeColorsForMode,
   invalidateCustomThemes,
@@ -12,6 +13,7 @@ import {
   EMBER_THEME,
   GROVE_THEME,
   IRIS_THEME,
+  MERGE_THEME,
   OCEAN_THEME,
   THEME_APPEARANCE_MODE_STORAGE_KEY,
   THEME_FOLLOW_SYSTEM_STORAGE_KEY,
@@ -113,7 +115,7 @@ function runtimeResolvedAppearance(
   invalidateCustomThemes();
   try {
     const raw = storage[THEME_STORAGE_KEY] ?? null;
-    const theme = raw !== null && isKnownThemePreference(raw) ? raw : "system";
+    const theme = raw !== null && isKnownThemePreference(raw) ? raw : DEFAULT_THEME_ID;
     const followRaw = storage[THEME_FOLLOW_SYSTEM_STORAGE_KEY] ?? null;
     const appearanceRaw = storage[THEME_APPEARANCE_MODE_STORAGE_KEY] ?? null;
     const appearanceMode =
@@ -123,7 +125,7 @@ function runtimeResolvedAppearance(
           ? "system"
           : followRaw === "false"
             ? null
-            : theme === "system"
+            : theme === "system" || theme === DEFAULT_THEME_ID
               ? "system"
               : null;
     const followSystem = appearanceMode === "system";
@@ -342,7 +344,14 @@ describe("index.html boot script", () => {
   // boot script's hand-maintained copy into a CI-enforced contract: any
   // palette change breaks this test until the copy in index.html is updated.
   it("keeps every built-in boot splash in sync with the real palettes", () => {
-    for (const theme of [T3_CHAT_THEME, GROVE_THEME, OCEAN_THEME, EMBER_THEME, IRIS_THEME]) {
+    for (const theme of [
+      MERGE_THEME,
+      T3_CHAT_THEME,
+      GROVE_THEME,
+      OCEAN_THEME,
+      EMBER_THEME,
+      IRIS_THEME,
+    ]) {
       // The boot script resolves every built-in from a light base appearance.
       expect(theme.appearance).toBe("light");
       for (const mode of ["light", "dark"] as const) {
@@ -491,28 +500,49 @@ describe("index.html boot script", () => {
       prefersDark: false,
     });
 
-    expect(boot.themeId).toBeUndefined();
-    expect(boot.themeSelected).toBeUndefined();
-    expect(boot.backgroundColor).toBe("#ffffff");
-    expect(boot.metaContent).toBe("#ffffff");
+    const lightDefault = getThemeColorsForMode(MERGE_THEME, "light")!;
+    expect(boot.themeId).toBe(DEFAULT_THEME_ID);
+    expect(boot.backgroundColor).toBe(lightDefault.chrome);
+    expect(boot.metaContent).toBe(lightDefault.chrome);
   });
 
-  it("leaves unknown preferences unthemed so the runtime default applies", () => {
+  it("paints the default theme for a fresh install, following the OS", () => {
+    for (const prefersDark of [false, true]) {
+      const boot = runBootScript({ storage: {}, prefersDark });
+      const colors = getThemeColorsForMode(MERGE_THEME, prefersDark ? "dark" : "light")!;
+      expect(boot.themeId).toBe(DEFAULT_THEME_ID);
+      expect(boot.themeSelected).toBe("true");
+      expect(boot.isDark).toBe(prefersDark);
+      expect(boot.bootVariables["--boot-background"]).toBe(colors.canvas);
+      expect(boot.backgroundColor).toBe(colors.chrome);
+    }
+  });
+
+  it("keeps the stock look for a stored system preference", () => {
+    const boot = runBootScript({ storage: { [THEME_STORAGE_KEY]: "system" }, prefersDark: true });
+    expect(boot.themeId).toBeUndefined();
+    expect(boot.isDark).toBe(true);
+    expect(boot.backgroundColor).toBe("#0a0a0a");
+  });
+
+  it("falls back to the default theme for unknown preferences, like the runtime", () => {
     const boot = runBootScript({
       storage: { [THEME_STORAGE_KEY]: "gone-theme" },
       prefersDark: true,
     });
-    expect(boot.themeId).toBeUndefined();
-    expect(boot.themeSelected).toBeUndefined();
+    expect(boot.themeId).toBe(DEFAULT_THEME_ID);
+    expect(boot.themeSelected).toBe("true");
     expect(boot.isDark).toBe(true);
   });
 
-  it("follows the OS appearance when storage is unavailable", () => {
+  it("wears the default theme following the OS when storage is unavailable", () => {
     const light = runBootScript({ storageThrows: true, prefersDark: false });
     expect(light.isDark).toBe(false);
-    expect(light.themeId).toBeUndefined();
+    expect(light.themeId).toBe(DEFAULT_THEME_ID);
+    expect(light.backgroundColor).toBe(getThemeColorsForMode(MERGE_THEME, "light")!.chrome);
 
     const dark = runBootScript({ storageThrows: true, prefersDark: true });
     expect(dark.isDark).toBe(true);
+    expect(dark.backgroundColor).toBe(getThemeColorsForMode(MERGE_THEME, "dark")!.chrome);
   });
 });

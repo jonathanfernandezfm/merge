@@ -70,6 +70,35 @@ describe("theme failure handling", () => {
     }
   });
 
+  it("resolves a fresh install to the Merge theme following the OS", async () => {
+    vi.stubGlobal("window", { localStorage: createStorage() });
+
+    const { readAppearanceModePreference, readThemePreference } = await import("./useTheme");
+
+    expect(readThemePreference()).toBe("merge");
+    expect(readAppearanceModePreference("merge")).toBe("system");
+  });
+
+  it("falls back to the Merge theme for an unknown stored preference", async () => {
+    vi.stubGlobal("window", {
+      localStorage: createStorage({ getItem: (key) => (key === "t3code:theme" ? "gone" : null) }),
+    });
+
+    const { readThemePreference } = await import("./useTheme");
+
+    expect(readThemePreference()).toBe("merge");
+  });
+
+  it("keeps an explicitly stored stock preference", async () => {
+    vi.stubGlobal("window", {
+      localStorage: createStorage({ getItem: (key) => (key === "t3code:theme" ? "system" : null) }),
+    });
+
+    const { readThemePreference } = await import("./useTheme");
+
+    expect(readThemePreference()).toBe("system");
+  });
+
   it("reads the persisted T3 Chat theme preference", async () => {
     vi.stubGlobal("window", {
       localStorage: createStorage({

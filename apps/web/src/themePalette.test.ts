@@ -28,9 +28,11 @@ import {
   subscribeToCustomThemes,
   themeAllowsSidebarArtwork,
   T3_CHAT_THEME,
+  DEFAULT_THEME_ID,
   EMBER_THEME,
   GROVE_THEME,
   IRIS_THEME,
+  MERGE_THEME,
   OCEAN_THEME,
   updateCustomTheme,
   CUSTOM_THEMES_STORAGE_KEY,
@@ -482,6 +484,70 @@ describe("theme files", () => {
       }
     }
     expect(themeAllowsSidebarArtwork("my-custom-theme")).toBe(false);
+  });
+
+  it("makes Merge the default built-in, readable in both appearances", () => {
+    expect(DEFAULT_THEME_ID).toBe("merge");
+    expect(getThemeDefinition(DEFAULT_THEME_ID)).toBe(MERGE_THEME);
+    expect(BUILT_IN_THEMES[0]).toBe(MERGE_THEME);
+    expect(getThemeModes(MERGE_THEME)).toEqual(["light", "dark"]);
+    // Plain sidebar: Merge ships no reviewed artwork.
+    expect(themeAllowsSidebarArtwork(MERGE_THEME.id)).toBe(false);
+    expect(resolveThemeAppearance(DEFAULT_THEME_ID, true, true)).toBe("dark");
+    expect(resolveThemeAppearance(DEFAULT_THEME_ID, false, true)).toBe("light");
+    expect(resolveDesktopTheme(DEFAULT_THEME_ID, true)).toBe("system");
+    // The role fill for partial theme files stays T3 Chat so imports keep
+    // rendering as authored.
+    expect(getDefaultThemeColors("light")).toBe(T3_CHAT_THEME.colors);
+
+    expectThemeColors(MERGE_THEME.colors, {
+      canvas: "#f5f4ef",
+      sidebar: "#eceae3",
+      surface: "#fbfaf7",
+      text: "#16181c",
+      accent: "#4d6b00",
+      accentForeground: "#f5ffd6",
+    });
+    expectThemeColors(MERGE_THEME.variants!.dark!, {
+      canvas: "#0a0c0f",
+      sidebar: "#0e1014",
+      surface: "#12151a",
+      text: "#e7eaee",
+      accent: "#c8f04a",
+      accentForeground: "#0b0d10",
+    });
+
+    const readablePairs = [
+      ["text", "canvas"],
+      ["textMuted", "canvas"],
+      ["accentForeground", "accent"],
+      ["toolbarControlForeground", "toolbarControl"],
+      ["messageForeground", "messageSurface"],
+      ["messageActionForeground", "messageAction"],
+      ["messageActionForeground", "messageActionHover"],
+      ["mutedForeground", "muted"],
+      ["placeholder", "surfaceRaised"],
+      ["secondaryForeground", "secondary"],
+      ["sidebarForeground", "sidebar"],
+      ["sidebarMutedForeground", "sidebar"],
+      ["sidebarMutedForeground", "sidebarRowHover"],
+      ["accentSurfaceForeground", "accentSurface"],
+      ["errorForeground", "errorSurface"],
+      ["warningForeground", "warningSurface"],
+      ["updateForeground", "updateSurface"],
+      ["codeForeground", "codeBackground"],
+      ["terminalForeground", "terminalBackground"],
+    ] as const;
+    for (const mode of ["light", "dark"] as const) {
+      const colors = getThemeColorsForMode(MERGE_THEME, mode)!;
+      expect(contrastRatio(colors.text, colors.canvas)).toBeGreaterThanOrEqual(7);
+      for (const [foreground, background] of readablePairs) {
+        expect(
+          contrastRatio(colors[foreground], colors[background]),
+          `${mode} ${foreground} on ${background}`,
+        ).toBeGreaterThanOrEqual(4.5);
+      }
+    }
   });
 
   it("rejects a variant that repeats the base appearance", () => {

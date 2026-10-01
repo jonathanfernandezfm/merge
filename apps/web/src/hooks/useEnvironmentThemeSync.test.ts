@@ -141,7 +141,8 @@ describe("published theme refresh", () => {
     expectPreview();
     publish([LIGHT_THEME, { ...NIGHTFALL_THEME, id: "unused-theme" }]);
     expectPreview();
-    expect(publish([]).theme).toBe("system");
+    // The published theme is gone, so the stored id falls back to the default.
+    expect(publish([]).theme).toBe(palette.DEFAULT_THEME_ID);
     expectPreview();
 
     const current = publish([{ ...NIGHTFALL_THEME, canvas: "#112233" }]);

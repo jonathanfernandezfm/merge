@@ -4,9 +4,11 @@ import "culori/css";
 import { converter, parse } from "culori/fn";
 import {
   BUILT_IN_THEMES,
+  DEFAULT_THEME_ID,
   EMBER_THEME,
   GROVE_THEME,
   IRIS_THEME,
+  MERGE_THEME,
   OCEAN_THEME,
   T3_CHAT_THEME,
   T3_CODE_LIGHT_THEME_COLORS,
@@ -20,7 +22,16 @@ import {
   type ThemeVariants,
 } from "@t3tools/shared/themePalettes";
 
-export { EMBER_THEME, GROVE_THEME, IRIS_THEME, OCEAN_THEME, T3_CHAT_THEME, THEME_COLOR_ROLES };
+export {
+  DEFAULT_THEME_ID,
+  EMBER_THEME,
+  GROVE_THEME,
+  IRIS_THEME,
+  MERGE_THEME,
+  OCEAN_THEME,
+  T3_CHAT_THEME,
+  THEME_COLOR_ROLES,
+};
 export type { ThemeAppearance, ThemeColorRole, ThemeColors, ThemeDefinition, ThemeVariants };
 
 export const T3_CHAT_THEME_ID = "t3-chat" as const;
@@ -870,7 +881,12 @@ function standardMutedThemeText(
   return readableThemeText(background, foreground, 1, target);
 }
 
-/** Theme-file defaults follow the flagship palette for the requested mode. */
+/**
+ * Theme-file defaults follow the T3 Chat palette for the requested mode. This is
+ * the fill for roles a theme file omits, not the theme a fresh client wears
+ * ({@link DEFAULT_THEME_ID}): changing it would silently repaint every partial
+ * theme a user already imported.
+ */
 export function getDefaultThemeColors(appearance: ThemeAppearance): ThemeColors {
   return appearance === "dark" ? T3_CHAT_THEME.variants!.dark! : T3_CHAT_THEME.colors;
 }

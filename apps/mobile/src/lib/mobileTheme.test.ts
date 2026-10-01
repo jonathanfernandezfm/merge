@@ -16,6 +16,7 @@ import {
   createMobileThemeSelectionPatch,
   createMobileThemeVariables,
   DEFAULT_MOBILE_THEME_ID,
+  STANDARD_MOBILE_THEME_ID,
   flattenThemeColor,
   getMobileThemePreviewColors,
   getMobileThemeVariables,
@@ -85,7 +86,7 @@ describe("mobile themes", () => {
           ? T3_CODE_DARK_THEME_COLORS
           : T3_CODE_LIGHT_THEME_COLORS;
       const variables =
-        themeId === DEFAULT_MOBILE_THEME_ID
+        themeId === STANDARD_MOBILE_THEME_ID
           ? readDefaultMobileThemeVariables(appearance)
           : getMobileThemeVariables(themeId, appearance);
       expect(variables["--color-screen"]).toBe(themeColorToNativeColor(colors.canvas));
@@ -97,7 +98,7 @@ describe("mobile themes", () => {
       expect(variables["--color-card"]).toBe(themeColorToNativeColor(colors.surface));
       expect(variables["--color-composer-surface"]).toBe(
         themeColorWithAlpha(
-          themeId === DEFAULT_MOBILE_THEME_ID
+          themeId === STANDARD_MOBILE_THEME_ID
             ? variables["--color-grouped-card"]
             : themeColorToNativeColor(colors.surface),
           appearance === "dark" ? 0.9 : 0.94,
@@ -110,7 +111,7 @@ describe("mobile themes", () => {
         themeColorToNativeColor(colors.sidebarForeground),
       );
       expect(variables["--color-primary"]).toBe(themeColorToNativeColor(colors.messageAction));
-      if (themeId !== DEFAULT_MOBILE_THEME_ID) {
+      if (themeId !== STANDARD_MOBILE_THEME_ID) {
         expect(variables["--color-user-bubble"]).toBe(
           themeColorToNativeColor(colors.messageSurface),
         );
@@ -224,7 +225,7 @@ describe("mobile themes", () => {
   );
 
   it("uses the same preview roles and standard artwork as desktop", () => {
-    expect(getMobileThemePreviewColors(DEFAULT_MOBILE_THEME_ID, "light")).toEqual({
+    expect(getMobileThemePreviewColors(STANDARD_MOBILE_THEME_ID, "light")).toEqual({
       canvas: "#fcfcfc",
       accent: "#f4f4f5",
       messageAction: "#4f46e5",
@@ -240,6 +241,9 @@ describe("mobile themes", () => {
   it("normalizes persisted theme preferences", () => {
     expect(normalizeMobileThemeId("ocean")).toBe("ocean");
     expect(normalizeMobileThemeId("missing-theme")).toBe(DEFAULT_MOBILE_THEME_ID);
+    expect(normalizeMobileThemeId(undefined)).toBe("merge");
+    expect(normalizeMobileThemeId(STANDARD_MOBILE_THEME_ID)).toBe("t3-code");
+    expect(resolveMobileThemeIds({})).toEqual({ light: "merge", dark: "merge" });
     expect(normalizeMobileThemeMode("dark")).toBe("dark");
     expect(normalizeMobileThemeMode("sepia")).toBe("system");
   });

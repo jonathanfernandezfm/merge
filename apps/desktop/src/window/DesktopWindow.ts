@@ -154,8 +154,10 @@ function getIconOption(
   });
 }
 
+// The default Merge theme's canvas, so a fresh window paints the color the
+// renderer is about to show instead of flashing a stock white or black.
 function getInitialWindowBackgroundColor(shouldUseDarkColors: boolean): string {
-  return shouldUseDarkColors ? "#0a0a0a" : "#ffffff";
+  return shouldUseDarkColors ? "#0a0c0f" : "#f5f4ef";
 }
 
 type DisplayBounds = Pick<Electron.Rectangle, "x" | "y" | "width" | "height">;
