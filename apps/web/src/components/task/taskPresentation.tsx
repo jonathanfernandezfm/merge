@@ -17,7 +17,6 @@ import {
   CircleAlertIcon,
   CircleCheckIcon,
   CircleDotDashedIcon,
-  CirclePauseIcon,
   CircleXIcon,
   MessageSquareMoreIcon,
   MessageSquareWarningIcon,
@@ -168,13 +167,25 @@ function WorkingSpinner({ className }: { className?: string; "aria-hidden"?: boo
   );
 }
 
+/** The idle ring from `TaskStatusLabel`, so idle reads the same in both places. */
+function IdleGlyph({ className }: { className?: string; "aria-hidden"?: boolean }) {
+  return (
+    <StatusGlyph
+      glyph={TASK_STATUS_PRESENTATION.idle.glyph}
+      {...(className ? { className } : {})}
+    />
+  );
+}
+
 /** One icon per status, so a dense row tells statuses apart by shape, not just tint. */
-const TASK_STATUS_ICON: Readonly<Record<TaskStatus, LucideIcon | typeof WorkingSpinner>> = {
+const TASK_STATUS_ICON: Readonly<
+  Record<TaskStatus, LucideIcon | typeof WorkingSpinner | typeof IdleGlyph>
+> = {
   "setting-up": WrenchIcon,
   "setup-failed": TriangleAlertIcon,
   working: WorkingSpinner,
   "waiting-for-user": CircleAlertIcon,
-  idle: CirclePauseIcon,
+  idle: IdleGlyph,
   "ci-running": CircleDotDashedIcon,
   "ci-failing": CircleXIcon,
   "changes-requested": MessageSquareWarningIcon,
