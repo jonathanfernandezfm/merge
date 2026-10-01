@@ -1,5 +1,7 @@
 # Brand icons
 
+The Merge logo master is `prod/merge-logo.png` (transparent, trimmed). The tracked raster icons (iOS, macOS, universal, Windows/web ICO and PNG favicons, Android layers, and the `apps/web/public`, `apps/marketing/public`, and marketing WebP copies) were regenerated from it with Pillow, not Icon Composer: each keeps its previous file's shape and alpha mask, filled with `#0B0B0C` and the logo centred at about 62% of the body width. The Icon Composer projects still contain the old artwork, so `vp run icons:check` reports drift until they are updated on macOS.
+
 The three Icon Composer projects are the source of truth for full application icons:
 
 - `dev/app-icon.icon`
