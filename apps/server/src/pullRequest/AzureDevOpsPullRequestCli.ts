@@ -5,7 +5,7 @@ import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import type {
   PullRequestAction,
-  PullRequestComment,
+  PullRequestCheck,
   PullRequestInvolvement,
   PullRequestListState,
   PullRequestMergeMethod,
@@ -17,6 +17,7 @@ import {
   decodeIterationChangesJson,
   decodeIterationsJson,
   decodePullRequestJson,
+  decodePolicyEvaluationsJson,
   decodePullRequestListJson,
   decodeThreadsJson,
   decodeViewerJson,
@@ -25,6 +26,7 @@ import {
   type AzureDevOpsIteration,
   type AzureDevOpsPullRequest,
   type AzureDevOpsRepositoryLocation,
+  type AzureDevOpsThreads,
 } from "./azureDevOpsPullRequestJson.ts";
 import type { ProviderListCursor } from "./PullRequestProvider.ts";
 
@@ -197,7 +199,17 @@ export class AzureDevOpsPullRequestCli extends Context.Service<
       readonly cwd: string;
       readonly location: AzureDevOpsRepositoryLocation;
       readonly number: number;
-    }) => Effect.Effect<ReadonlyArray<PullRequestComment>, AzureDevOpsPullRequestCliError>;
+    }) => Effect.Effect<AzureDevOpsThreads, AzureDevOpsPullRequestCliError>;
+
+    /**
+     * The build and status policies evaluated on a pull request, which is what Azure has in place
+     * of checks. `pullRequestUrl` names the project a build's result page lives under.
+     */
+    readonly listPolicyChecks: (input: {
+      readonly cwd: string;
+      readonly number: number;
+      readonly pullRequestUrl: string | null;
+    }) => Effect.Effect<ReadonlyArray<PullRequestCheck>, AzureDevOpsPullRequestCliError>;
 
     /**
      * The pushes a pull request has had, oldest first. Azure hangs the changed files off an
@@ -605,6 +617,30 @@ export const make = Effect.gen(function* () {
         maxOutputBytes: REVIEW_HISTORY_MAX_OUTPUT_BYTES,
         decode: decodeThreadsJson,
       }),
+
+    listPolicyChecks: (input) =>
+      executeJson({
+        cwd: input.cwd,
+        args: ["repos", "pr", "policy", "list", ...detectArgs, "--id", String(input.number)],
+      }).pipe(
+        Effect.flatMap(
+          (
+            result,
+          ): Effect.Effect<ReadonlyArray<PullRequestCheck>, AzureDevOpsPullRequestCliError> => {
+            const decoded = decodePolicyEvaluationsJson(result.stdout.trim(), input.pullRequestUrl);
+            return Result.isSuccess(decoded)
+              ? Effect.succeed(decoded.success)
+              : Effect.fail(
+                  new AzureDevOpsPullRequestReadError({
+                    command: "az",
+                    cwd: input.cwd,
+                    operation: "listPolicyChecks",
+                    cause: decoded.failure,
+                  }),
+                );
+          },
+        ),
+      ),
 
     listIterations: (input) =>
       invoke({

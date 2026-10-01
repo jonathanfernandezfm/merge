@@ -35,6 +35,7 @@ const PULL_REQUEST = {
   body: "",
   reviewRequestLogins: [],
   reviewers: [],
+  reviewDecision: null,
   location: { project: "acme", repository: "web" },
   autoMergeEnabled: false,
 };
@@ -178,6 +179,7 @@ describe("getChangeRequest", () => {
             listIterations: () => Effect.succeed([ITERATION]),
             listIterationChanges: () =>
               Effect.succeed({ changes: [change("a.ts"), change("b.ts")], truncated: false }),
+            listPolicyChecks: () => Effect.succeed([]),
           }),
         ),
       );
@@ -190,6 +192,123 @@ describe("getChangeRequest", () => {
       });
 
       expect(detail.changedFiles).toBe(2);
+    }),
+  );
+
+  it.effect("reports branch policies as checks, and the votes as a review decision", () =>
+    Effect.gen(function* () {
+      const provider = yield* make.pipe(
+        Effect.provide(
+          Layer.mock(AzureDevOpsPullRequestCli.AzureDevOpsPullRequestCli)({
+            getPullRequest: () =>
+              Effect.succeed({ ...PULL_REQUEST, reviewDecision: "changes-requested" as const }),
+            listIterations: () => Effect.succeed([ITERATION]),
+            listIterationChanges: () => Effect.succeed({ changes: [], truncated: false }),
+            listPolicyChecks: (input) =>
+              Effect.succeed(
+                input.pullRequestUrl === PULL_REQUEST.url
+                  ? [{ name: "CI", status: "failure" as const, description: null, url: null }]
+                  : [],
+              ),
+          }),
+        ),
+      );
+
+      const detail = yield* provider.getChangeRequest({
+        cwd: "/w",
+        repository: "acme/web",
+        host: "dev.azure.com",
+        number: 7,
+      });
+
+      expect(detail.checks.map((check) => [check.name, check.status])).toEqual([["CI", "failure"]]);
+      expect(detail.reviewDecision).toBe("changes-requested");
+    }),
+  );
+
+  it.effect("keeps the detail when the policies cannot be read", () =>
+    Effect.gen(function* () {
+      const provider = yield* make.pipe(
+        Effect.provide(
+          Layer.mock(AzureDevOpsPullRequestCli.AzureDevOpsPullRequestCli)({
+            getPullRequest: () => Effect.succeed(PULL_REQUEST),
+            listIterations: () => Effect.succeed([ITERATION]),
+            listIterationChanges: () => Effect.succeed({ changes: [], truncated: false }),
+            listPolicyChecks: (input) =>
+              Effect.fail(
+                new AzureDevOpsPullRequestCli.AzureDevOpsPullRequestReadError({
+                  command: "az",
+                  cwd: input.cwd,
+                  operation: "listPolicyChecks",
+                  cause: null,
+                }),
+              ),
+          }),
+        ),
+      );
+
+      const detail = yield* provider.getChangeRequest({
+        cwd: "/w",
+        repository: "acme/web",
+        host: "dev.azure.com",
+        number: 7,
+      });
+
+      expect(detail.checks).toEqual([]);
+    }),
+  );
+});
+
+describe("getChangeRequestActivity", () => {
+  it.effect("hands over Azure's file threads as review threads beside the timeline", () =>
+    Effect.gen(function* () {
+      const thread = {
+        id: "5",
+        path: "src/app.ts",
+        line: 12,
+        side: "right" as const,
+        isResolved: false,
+        isOutdated: false,
+        comments: [
+          {
+            id: "5:1",
+            author: null,
+            body: "Rename this.",
+            createdAt: "2026-07-02T00:00:00Z",
+            url: null,
+          },
+        ],
+      };
+      const provider = yield* make.pipe(
+        Effect.provide(
+          Layer.mock(AzureDevOpsPullRequestCli.AzureDevOpsPullRequestCli)({
+            getPullRequest: () => Effect.succeed(PULL_REQUEST),
+            listThreads: () =>
+              Effect.succeed({
+                comments: [
+                  {
+                    ...thread.comments[0]!,
+                    kind: "review-comment" as const,
+                    path: "/src/app.ts",
+                    reviewState: null,
+                    isResolved: false,
+                  },
+                ],
+                threads: [thread],
+              }),
+          }),
+        ),
+      );
+
+      const activity = yield* provider.getChangeRequestActivity({
+        cwd: "/w",
+        repository: "acme/web",
+        host: "dev.azure.com",
+        number: 7,
+      });
+
+      expect(activity.comments.map((comment) => comment.id)).toEqual(["5:1"]);
+      expect(activity.reviewThreads).toEqual([thread]);
     }),
   );
 });

@@ -4,9 +4,12 @@ import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import type {
   PullRequestActor,
+  PullRequestCheck,
   PullRequestComment,
   PullRequestMergeMethod,
   PullRequestMergeability,
+  PullRequestReviewDecision,
+  PullRequestReviewThread,
   PullRequestState,
 } from "@t3tools/contracts";
 import { TrimmedNonEmptyString } from "@t3tools/contracts";
@@ -25,6 +28,16 @@ const RawIdentitySchema = Schema.Struct({
   /** An email or UPN, which is what `az account show` reports for the signed-in user. */
   uniqueName: Schema.optional(Schema.NullOr(Schema.String)),
   imageUrl: Schema.optional(Schema.NullOr(Schema.String)),
+});
+
+/**
+ * A reviewer is an identity plus where it stands. Azure's vote is 10 approved, 5 approved with
+ * suggestions, 0 no vote, -5 waiting for the author and -10 rejected.
+ */
+const RawReviewerSchema = Schema.Struct({
+  ...RawIdentitySchema.fields,
+  vote: Schema.optional(Schema.NullOr(Schema.Number)),
+  isRequired: Schema.optional(Schema.NullOr(Schema.Boolean)),
 });
 
 const RawPullRequestSchema = Schema.Struct({
@@ -49,7 +62,7 @@ const RawPullRequestSchema = Schema.Struct({
   ),
   mergeStatus: Schema.optional(Schema.NullOr(Schema.String)),
   createdBy: Schema.optional(Schema.NullOr(RawIdentitySchema)),
-  reviewers: Schema.optional(Schema.NullOr(Schema.Array(RawIdentitySchema))),
+  reviewers: Schema.optional(Schema.NullOr(Schema.Array(RawReviewerSchema))),
   // Required, and required to be non-empty: the wire contract will not carry a change request
   // without a branch or a created time, so a row missing one is skipped rather than breaking the
   // response it travels in.
@@ -80,12 +93,25 @@ const RawPullRequestSchema = Schema.Struct({
   ),
 });
 
+const RawFilePositionSchema = Schema.optional(
+  Schema.NullOr(Schema.Struct({ line: Schema.optional(Schema.NullOr(Schema.Number)) })),
+);
+
 /** A pull request thread, which is how Azure keeps its conversation. */
 const RawThreadSchema = Schema.Struct({
   id: Schema.Int,
   isDeleted: Schema.optional(Schema.NullOr(Schema.Boolean)),
+  /** `active` and `pending` are open; `fixed`, `closed`, `byDesign` and `wontFix` resolve it. */
+  status: Schema.optional(Schema.NullOr(Schema.String)),
   threadContext: Schema.optional(
-    Schema.NullOr(Schema.Struct({ filePath: Schema.optional(Schema.NullOr(Schema.String)) })),
+    Schema.NullOr(
+      Schema.Struct({
+        filePath: Schema.optional(Schema.NullOr(Schema.String)),
+        /** Where the thread sits in the changed file; `leftFileStart` on a removed line. */
+        rightFileStart: RawFilePositionSchema,
+        leftFileStart: RawFilePositionSchema,
+      }),
+    ),
   ),
   comments: Schema.optional(
     Schema.NullOr(
@@ -144,6 +170,8 @@ export interface AzureDevOpsPullRequest {
   readonly body: string;
   readonly reviewRequestLogins: ReadonlyArray<string>;
   readonly reviewers: ReadonlyArray<PullRequestActor>;
+  /** What the reviewers' votes add up to, or null when nobody has been asked. */
+  readonly reviewDecision: PullRequestReviewDecision | null;
   /** Where this pull request lives, when Azure said enough to work it out. */
   readonly location: AzureDevOpsRepositoryLocation | null;
   /** Whether Azure is set to complete this on its own once its policies pass. */
@@ -162,11 +190,29 @@ function normalizeRefName(refName: string): string {
 }
 
 /** A login has to compare against `az account show`, which reports an email. */
-function toActor(raw: Schema.Schema.Type<typeof RawIdentitySchema> | null | undefined) {
+function toActor(
+  raw: Schema.Schema.Type<typeof RawIdentitySchema> | null | undefined,
+): PullRequestActor | null {
   const login = trimmed(raw?.uniqueName) ?? trimmed(raw?.displayName);
   return login === null
     ? null
     : { login, name: trimmed(raw?.displayName), avatarUrl: trimmed(raw?.imageUrl) };
+}
+
+/**
+ * The reviewers' votes read as one decision, the way Azure's own completion gate reads them: any
+ * rejection or wait for the author holds the change, a required reviewer who has not approved
+ * still owes a review, and otherwise one approval is enough.
+ */
+export function azureDevOpsReviewDecision(
+  reviewers: ReadonlyArray<Schema.Schema.Type<typeof RawReviewerSchema>>,
+): PullRequestReviewDecision | null {
+  if (reviewers.length === 0) return null;
+  const voteOf = (reviewer: (typeof reviewers)[number]) => reviewer.vote ?? 0;
+  if (reviewers.some((reviewer) => voteOf(reviewer) < 0)) return "changes-requested";
+  const required = reviewers.filter((reviewer) => reviewer.isRequired === true);
+  if (required.some((reviewer) => voteOf(reviewer) < 5)) return "review-required";
+  return reviewers.some((reviewer) => voteOf(reviewer) >= 5) ? "approved" : "review-required";
 }
 
 function toState(raw: Schema.Schema.Type<typeof RawPullRequestSchema>): PullRequestState {
@@ -267,6 +313,7 @@ function toPullRequest(
     body: raw.description ?? "",
     reviewRequestLogins: reviewers.map((reviewer) => reviewer.login),
     reviewers,
+    reviewDecision: azureDevOpsReviewDecision(raw.reviewers ?? []),
     location: toLocation(raw),
     autoMergeEnabled: (raw.autoCompleteSetBy ?? null) !== null,
     ...(autoMergeMethod === undefined ? {} : { autoMergeMethod }),
@@ -330,28 +377,51 @@ export function decodeViewerJson(raw: string): Result.Result<string | null, Deco
     : Result.fail(decoded.failure);
 }
 
+/** The conversation both ways round: one flat timeline, and the threads pinned to a file. */
+export interface AzureDevOpsThreads {
+  readonly comments: ReadonlyArray<PullRequestComment>;
+  readonly threads: ReadonlyArray<PullRequestReviewThread>;
+}
+
+/** Statuses that leave a thread open. A thread with no status, or `unknown`, reads as open. */
+const OPEN_THREAD_STATUSES = new Set(["active", "pending", "unknown"]);
+
+function isResolvedThreadStatus(status: string | null | undefined): boolean {
+  const value = status?.trim().toLowerCase() ?? "";
+  return value.length > 0 && !OPEN_THREAD_STATUSES.has(value);
+}
+
+function toLine(value: number | null | undefined): number | null {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : null;
+}
+
 /**
  * Azure keeps its conversation as threads of comments, and every one of them is a remark
  * somebody wrote: a reply under a thread is as much of the conversation as the line that opened
- * it. A thread pinned to a file is a line-level review comment.
+ * it. A thread pinned to a file is a line-level review comment, and is also returned as a review
+ * thread carrying its line and whether it was resolved. Azure resolves general threads too, so
+ * every comment carries its own thread's resolution.
+ *
+ * Azure's own notes (`commentType: system`) are events rather than remarks and are dropped.
  *
  * Azure answers the whole thread collection in one response, with no cursor and no page to
  * follow, so what this returns is everything the host has.
  */
-export function decodeThreadsJson(
-  raw: string,
-): Result.Result<ReadonlyArray<PullRequestComment>, DecodeFailure> {
+export function decodeThreadsJson(raw: string): Result.Result<AzureDevOpsThreads, DecodeFailure> {
   const decoded = decodeThreadPage(raw);
   if (!Result.isSuccess(decoded)) {
     return Result.fail(decoded.failure);
   }
   const comments: PullRequestComment[] = [];
+  const threads: PullRequestReviewThread[] = [];
   for (const entry of decoded.success.value) {
     const decodedThread = decodeThreadEntry(entry);
     if (Exit.isFailure(decodedThread)) continue;
     const thread = decodedThread.value;
     if (thread.isDeleted === true) continue;
     const path = trimmed(thread.threadContext?.filePath);
+    const isResolved = isResolvedThreadStatus(thread.status);
+    const threadComments: PullRequestComment[] = [];
     for (const comment of thread.comments ?? []) {
       const publishedDate = trimmed(comment.publishedDate);
       if (
@@ -362,7 +432,7 @@ export function decodeThreadsJson(
       ) {
         continue;
       }
-      comments.push({
+      threadComments.push({
         id: `${thread.id}:${comment.id ?? 0}`,
         kind: path === null ? "issue-comment" : "review-comment",
         author: toActor(comment.author),
@@ -371,12 +441,162 @@ export function decodeThreadsJson(
         url: null,
         path,
         reviewState: null,
+        isResolved,
       });
     }
+    comments.push(...threadComments);
+    // The diff addresses files without the slash Azure leads its paths with.
+    const threadPath = toRepositoryPath(path);
+    if (threadPath === null || threadComments.length === 0) continue;
+    const rightLine = toLine(thread.threadContext?.rightFileStart?.line);
+    const leftLine = toLine(thread.threadContext?.leftFileStart?.line);
+    const side = rightLine === null && leftLine !== null ? "left" : "right";
+    threads.push({
+      id: String(thread.id),
+      path: threadPath,
+      line: side === "left" ? leftLine : rightLine,
+      side,
+      isResolved,
+      // Azure moves a thread along with later pushes rather than marking it outdated.
+      isOutdated: false,
+      comments: threadComments
+        .toSorted((left, right) => left.createdAt.localeCompare(right.createdAt))
+        .map((comment) => ({
+          id: comment.id,
+          author: comment.author,
+          body: comment.body,
+          createdAt: comment.createdAt,
+          url: comment.url,
+        })),
+    });
   }
-  return Result.succeed(
-    comments.toSorted((left, right) => left.createdAt.localeCompare(right.createdAt)),
-  );
+  return Result.succeed({
+    comments: comments.toSorted((left, right) => left.createdAt.localeCompare(right.createdAt)),
+    threads,
+  });
+}
+
+/**
+ * A branch policy's evaluation on a pull request, as `az repos pr policy list` reports it. Only
+ * build and status policies are checks; reviewer, comment and work-item policies are not.
+ */
+const RawPolicyEvaluationSchema = Schema.Struct({
+  /** `queued`, `running`, `approved`, `rejected`, `notApplicable` or `broken`. */
+  status: Schema.optional(Schema.NullOr(Schema.String)),
+  configuration: Schema.optional(
+    Schema.NullOr(
+      Schema.Struct({
+        isBlocking: Schema.optional(Schema.NullOr(Schema.Boolean)),
+        isEnabled: Schema.optional(Schema.NullOr(Schema.Boolean)),
+        type: Schema.optional(
+          Schema.NullOr(
+            Schema.Struct({
+              id: Schema.optional(Schema.NullOr(Schema.String)),
+              displayName: Schema.optional(Schema.NullOr(Schema.String)),
+            }),
+          ),
+        ),
+        settings: Schema.optional(
+          Schema.NullOr(
+            Schema.Struct({
+              displayName: Schema.optional(Schema.NullOr(Schema.String)),
+              defaultDisplayName: Schema.optional(Schema.NullOr(Schema.String)),
+              statusGenre: Schema.optional(Schema.NullOr(Schema.String)),
+              statusName: Schema.optional(Schema.NullOr(Schema.String)),
+            }),
+          ),
+        ),
+      }),
+    ),
+  ),
+  context: Schema.optional(
+    Schema.NullOr(Schema.Struct({ buildId: Schema.optional(Schema.NullOr(Schema.Number)) })),
+  ),
+});
+
+/** Azure's own ids for the two policy types that are checks, which survive a renamed type. */
+const BUILD_POLICY_TYPE_ID = "0609b952-1397-4640-95ec-e00a01b2c241";
+const STATUS_POLICY_TYPE_ID = "cbdc66da-9728-4af8-aada-9a5a32e4a226";
+
+const RawPolicyEvaluationListSchema = Schema.Union([
+  Schema.Array(Schema.Unknown),
+  Schema.Struct({ value: Schema.Array(Schema.Unknown) }),
+]);
+const decodePolicyEvaluationList = decodeJsonResult(RawPolicyEvaluationListSchema);
+const decodePolicyEvaluationEntry = Schema.decodeUnknownExit(RawPolicyEvaluationSchema);
+
+function toCheckStatus(
+  status: string | null | undefined,
+  isBlocking: boolean,
+): PullRequestCheck["status"] {
+  switch (status?.trim().toLowerCase()) {
+    case "approved":
+      return "success";
+    case "notapplicable":
+      return "skipped";
+    case "rejected":
+    case "broken":
+      // An optional policy that failed does not hold the merge, which a failing check would say.
+      return isBlocking ? "failure" : "neutral";
+    default:
+      // `queued`, `running`, and anything Azure adds later.
+      return "pending";
+  }
+}
+
+/**
+ * The build and status policies evaluated on a pull request, read as checks. A build's result
+ * page hangs off the project, which the pull request's own web url names.
+ */
+export function decodePolicyEvaluationsJson(
+  raw: string,
+  pullRequestUrl: string | null,
+): Result.Result<ReadonlyArray<PullRequestCheck>, DecodeFailure> {
+  // az prints nothing at all for a pull request no policy applies to.
+  const decoded = decodePolicyEvaluationList(raw.length === 0 ? "[]" : raw);
+  if (!Result.isSuccess(decoded)) return Result.fail(decoded.failure);
+  // `az repos pr policy list` answers with a bare list; the REST route wraps it in `value`.
+  const entries = "value" in decoded.success ? decoded.success.value : decoded.success;
+  const projectUrl =
+    pullRequestUrl !== null && pullRequestUrl.includes("/_git/")
+      ? pullRequestUrl.slice(0, pullRequestUrl.indexOf("/_git/"))
+      : null;
+  const checks: PullRequestCheck[] = [];
+  for (const entry of entries) {
+    const decodedEvaluation = decodePolicyEvaluationEntry(entry);
+    if (Exit.isFailure(decodedEvaluation)) continue;
+    const evaluation = decodedEvaluation.value;
+    const configuration = evaluation.configuration;
+    if (configuration?.isEnabled === false) continue;
+    const typeId = trimmed(configuration?.type?.id)?.toLowerCase() ?? null;
+    const typeName = trimmed(configuration?.type?.displayName)?.toLowerCase() ?? null;
+    const isBuild = typeId === BUILD_POLICY_TYPE_ID || typeName === "build";
+    const isStatus = typeId === STATUS_POLICY_TYPE_ID || typeName === "status";
+    if (!isBuild && !isStatus) continue;
+    const settings = configuration?.settings;
+    const statusName = [trimmed(settings?.statusGenre), trimmed(settings?.statusName)]
+      .filter((part) => part !== null)
+      .join("/");
+    const name =
+      trimmed(settings?.displayName) ??
+      trimmed(settings?.defaultDisplayName) ??
+      trimmed(statusName) ??
+      trimmed(configuration?.type?.displayName);
+    if (name === null) continue;
+    // Azure treats a policy as required unless it was configured as optional.
+    const isBlocking = configuration?.isBlocking !== false;
+    const buildId = evaluation.context?.buildId;
+    checks.push({
+      name,
+      status: toCheckStatus(evaluation.status, isBlocking),
+      description: isBlocking ? null : "Optional",
+      url:
+        isBuild && projectUrl !== null && typeof buildId === "number"
+          ? `${projectUrl}/_build/results?buildId=${buildId}`
+          : null,
+    });
+  }
+  return Result.succeed(checks);
 }
 
 /**

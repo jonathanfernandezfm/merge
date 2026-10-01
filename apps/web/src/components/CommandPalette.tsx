@@ -44,6 +44,7 @@ import {
 import { useLocation, useNavigate, useParams } from "@tanstack/react-router";
 import * as Option from "effect/Option";
 import {
+  ArchiveIcon,
   ArrowLeftIcon,
   ChartNoAxesColumnIcon,
   CheckIcon,
@@ -53,14 +54,17 @@ import {
   FolderGit2Icon,
   FolderIcon,
   FolderPlusIcon,
+  ListPlusIcon,
   MessageSquareDashedIcon,
   LinkIcon,
   MessageSquareIcon,
+  MessageSquarePlusIcon,
   MonitorIcon,
   MoonIcon,
   PaletteIcon,
   RotateCcwIcon,
   SettingsIcon,
+  SquareKanbanIcon,
   SquarePenIcon,
   SunIcon,
   TextSearchIcon,
@@ -181,6 +185,9 @@ import { Checkbox } from "./ui/checkbox";
 import { ProjectFavicon } from "./ProjectFavicon";
 import { ProjectFilePicker } from "./files/ProjectFilePicker";
 import { openLinkPullRequestDialog } from "./pullRequest/LinkPullRequestDialog";
+import { openArchiveTaskDialog, openNewTaskDialog } from "./task/TaskDialogs";
+import { useCreateTaskThread } from "./task/TaskWorkspaceBar";
+import { useTask } from "../state/tasks";
 import { ProjectContentSearchDialog } from "./search/ProjectContentSearchDialog";
 import { toggleThemeEditorForTheme } from "./settings/themeEditorStore";
 import { searchSettings, SETTINGS_SECTION_LABELS } from "./settings/settingsSearch";
@@ -748,6 +755,8 @@ function OpenCommandPaletteDialog(props: {
   const availableSettingsSearchItems = useAvailableSettingsSearchItems();
   const { activeDraftThread, activeThread, defaultProjectRef, handleNewThread } =
     useHandleNewThread();
+  const activeTask = useTask(activeThread?.environmentId ?? null, activeThread?.taskId ?? null);
+  const { createTaskThread } = useCreateTaskThread();
   const projects = useProjects();
   const referenceThreadRef =
     pathname === "/pull-requests"
@@ -1914,6 +1923,62 @@ function OpenCommandPaletteDialog(props: {
       icon: <SquarePenIcon className={ITEM_ICON_CLASS} />,
       addonIcon: <SquarePenIcon className={ADDON_ICON_CLASS} />,
       groups: [{ value: "projects", label: "Projects", items: projectThreadItems }],
+    });
+  }
+
+  if (projects.length > 0) {
+    const taskProject = activeThread ?? activeDraftThread ?? null;
+    actionItems.push({
+      kind: "action",
+      value: "action:new-task",
+      searchTerms: ["new task", "task", "branch", "workspace", "worktree"],
+      title: "New task",
+      icon: <ListPlusIcon className={ITEM_ICON_CLASS} />,
+      run: async () => {
+        openNewTaskDialog(
+          taskProject === null
+            ? {}
+            : { environmentId: taskProject.environmentId, projectId: taskProject.projectId },
+        );
+      },
+    });
+    actionItems.push({
+      kind: "action",
+      value: "action:open-taskboard",
+      searchTerms: ["taskboard", "tasks", "board", "running", "agents"],
+      title: "Open Taskboard",
+      icon: <SquareKanbanIcon className={ITEM_ICON_CLASS} />,
+      run: async () => {
+        await navigate({ to: "/taskboard" });
+      },
+    });
+  }
+
+  if (activeTask !== null && activeTask.archivedAt === null) {
+    const task = activeTask;
+    actionItems.push({
+      kind: "action",
+      value: "action:new-task-thread",
+      searchTerms: ["new thread", "task", "tab", "chat"],
+      title: (
+        <>
+          New thread in <span className="font-semibold">{task.title}</span>
+        </>
+      ),
+      icon: <MessageSquarePlusIcon className={ITEM_ICON_CLASS} />,
+      run: async () => {
+        await createTaskThread(task);
+      },
+    });
+    actionItems.push({
+      kind: "action",
+      value: "action:archive-task",
+      searchTerms: ["archive task", "task", "close", "worktree", "remove"],
+      title: "Archive task...",
+      icon: <ArchiveIcon className={ITEM_ICON_CLASS} />,
+      run: async () => {
+        openArchiveTaskDialog({ environmentId: task.environmentId, taskId: task.id });
+      },
     });
   }
 

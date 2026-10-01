@@ -143,6 +143,7 @@ function toChangeRequest(pullRequest: AzureDevOpsPullRequest): ProviderChangeReq
     reviewRequestLogins: pullRequest.reviewRequestLogins,
     // Azure keeps labels on work items rather than on the pull request.
     labels: [],
+    reviewDecision: pullRequest.reviewDecision,
   };
 }
 
@@ -343,6 +344,9 @@ export const make = Effect.gen(function* () {
           closedAt: pullRequest.state === "closed" ? pullRequest.closedAt : null,
           mergedAt: pullRequest.state === "merged" ? pullRequest.closedAt : null,
           updatedAt: pullRequest.updatedAt,
+          // Free with the same read: the votes ride on the pull request. Checks are a read of
+          // their own, so they stay with the detail rather than costing every poll.
+          reviewDecision: pullRequest.reviewDecision,
         })),
       ),
 
@@ -352,10 +356,10 @@ export const make = Effect.gen(function* () {
         const location = pullRequest.location;
         // The file count is two reads past the pull request itself, and it is the only thing
         // riding on them, so a failure leaves it unknown rather than losing the whole detail.
-        const changedFiles =
+        const readChangedFiles =
           location === null
-            ? 0
-            : yield* cli.listIterations({ cwd: input.cwd, location, number: input.number }).pipe(
+            ? Effect.succeed(0)
+            : cli.listIterations({ cwd: input.cwd, location, number: input.number }).pipe(
                 Effect.flatMap((iterations) =>
                   listLatestChanges({
                     cwd: input.cwd,
@@ -367,6 +371,18 @@ export const make = Effect.gen(function* () {
                 Effect.map((listed) => listed.changes.length),
                 Effect.orElseSucceed(() => 0),
               );
+        // Branch policies stand in for checks. A failed read leaves them unknown rather than
+        // losing the detail, the same as the file count.
+        const readChecks = cli
+          .listPolicyChecks({
+            cwd: input.cwd,
+            number: input.number,
+            pullRequestUrl: pullRequest.url,
+          })
+          .pipe(Effect.orElseSucceed(() => []));
+        const [changedFiles, checks] = yield* Effect.all([readChangedFiles, readChecks], {
+          concurrency: 2,
+        });
         const detail: ProviderChangeRequestDetail = {
           ...toChangeRequest(pullRequest),
           body: pullRequest.body,
@@ -374,7 +390,7 @@ export const make = Effect.gen(function* () {
           mergedAt: pullRequest.state === "merged" ? pullRequest.closedAt : null,
           closedAt: pullRequest.state === "closed" ? pullRequest.closedAt : null,
           reviewers: pullRequest.reviewers,
-          checks: [],
+          checks,
           mergeCapabilities: { merge: true, squash: true, rebase: false },
           viewerPermissions: AZURE_DEVOPS_VIEWER_PERMISSIONS,
           autoMergeEnabled: pullRequest.autoMergeEnabled,
@@ -390,7 +406,7 @@ export const make = Effect.gen(function* () {
         Effect.mapError(fail("getChangeRequestActivity")),
         Effect.flatMap((pullRequest) =>
           (pullRequest.location === null
-            ? Effect.succeed({ comments: [], truncated: true })
+            ? Effect.succeed({ comments: [], threads: [], truncated: true })
             : cli
                 .listThreads({
                   cwd: input.cwd,
@@ -398,15 +414,15 @@ export const make = Effect.gen(function* () {
                   number: input.number,
                 })
                 .pipe(
-                  Effect.map((comments) => ({ comments, truncated: false })),
-                  Effect.orElseSucceed(() => ({ comments: [], truncated: true })),
+                  Effect.map((conversation) => ({ ...conversation, truncated: false })),
+                  Effect.orElseSucceed(() => ({ comments: [], threads: [], truncated: true })),
                 )
           ).pipe(
             Effect.map((conversation): ProviderChangeRequestActivity => ({
               comments: conversation.comments,
               commentCount: conversation.comments.length,
               commentsTruncated: conversation.truncated,
-              reviewThreads: [],
+              reviewThreads: conversation.threads,
               commits: [],
             })),
           ),

@@ -71,6 +71,8 @@ import {
   AssetWorkspaceContextResolutionError,
   RpcClientId,
   EnvironmentAuthorizationError,
+  GitCommandError,
+  TaskId,
   ThreadId,
   type TerminalAttachStreamEvent,
   type TerminalError,
@@ -144,6 +146,7 @@ import { linkCreatedPullRequest } from "./git/linkCreatedPullRequest.ts";
 import * as ReviewService from "./review/ReviewService.ts";
 import * as ProjectSetupScriptRunner from "./project/ProjectSetupScriptRunner.ts";
 import * as ProjectCloneTracker from "./project/ProjectCloneTracker.ts";
+import * as TaskWorkspaceService from "./task/TaskWorkspaceService.ts";
 import * as NewProject from "./project/NewProject.ts";
 import * as RepositoryIdentityResolver from "./project/RepositoryIdentityResolver.ts";
 import * as WorktreeSetupTracker from "./project/WorktreeSetupTracker.ts";
@@ -622,6 +625,7 @@ const makeWsRpcLayer = (
       const projectSetupScriptRunner = yield* ProjectSetupScriptRunner.ProjectSetupScriptRunner;
       const worktreeSetupTracker = yield* WorktreeSetupTracker.WorktreeSetupTracker;
       const projectCloneTracker = yield* ProjectCloneTracker.ProjectCloneTracker;
+      const taskWorkspace = yield* TaskWorkspaceService.TaskWorkspaceService;
       const repositoryIdentityResolver =
         yield* RepositoryIdentityResolver.RepositoryIdentityResolver;
       // Clone hooks run on the tracker's fiber, outside any RPC, so the
@@ -873,6 +877,11 @@ const makeWsRpcLayer = (
             });
           case "thread.unarchived":
             return threadUpsertOrRemove(ThreadId.make(event.aggregateId), event.sequence);
+          // Archived tasks stay in the shell as history, so archiving is an upsert.
+          case "task.archived":
+          case "task.created":
+          case "task.meta-updated":
+            return taskUpsertOrRemove(TaskId.make(event.aggregateId), event.sequence);
           default:
             if (event.aggregateKind !== "thread") {
               return Effect.succeedNone;
@@ -887,7 +896,7 @@ const makeWsRpcLayer = (
       // If both attempts fail, log and drop the stream item; treating an error as
       // a missing row would incorrectly remove a still-active aggregate.
       const retryShellProjectionRead = <A, E>(
-        aggregateKind: "project" | "thread",
+        aggregateKind: "project" | "thread" | "task",
         aggregateId: string,
         read: Effect.Effect<A, E>,
       ): Effect.Effect<Option.Option<A>, never, never> =>
@@ -970,6 +979,42 @@ const makeWsRpcLayer = (
               }),
             ),
           ),
+        );
+
+      const taskUpsertOrRemove = (
+        taskId: TaskId,
+        sequence: number,
+      ): Effect.Effect<Option.Option<OrchestrationShellStreamEvent>, never, never> =>
+        retryShellProjectionRead(
+          "task",
+          taskId,
+          projectionSnapshotQuery.getTaskShellById(taskId),
+        ).pipe(
+          Effect.map(
+            Option.map(
+              Option.match({
+                onNone: (): OrchestrationShellStreamEvent => ({
+                  kind: "task-removed" as const,
+                  sequence,
+                  taskId,
+                }),
+                onSome: (task): OrchestrationShellStreamEvent => ({
+                  kind: "task-upserted" as const,
+                  sequence,
+                  task,
+                }),
+              }),
+            ),
+          ),
+        );
+
+      // Older clients cannot decode task shell events, so only clients that
+      // opt in with `includeTasks` receive them.
+      const withoutTaskShellItems = <E, R>(
+        stream: Stream.Stream<OrchestrationShellStreamItem, E, R>,
+      ): Stream.Stream<OrchestrationShellStreamItem, E, R> =>
+        stream.pipe(
+          Stream.filter((item) => item.kind !== "task-upserted" && item.kind !== "task-removed"),
         );
 
       // Turn a batch of domain events into shell stream items, coalescing by
@@ -1779,6 +1824,40 @@ const makeWsRpcLayer = (
         });
 
       const path = yield* Path.Path;
+      // A task owns its worktree until the task is archived, whichever of its
+      // threads is deleted. Only TaskWorkspaceService.archive removes it.
+      const refuseTaskWorktreeRemoval = (input: { readonly cwd: string; readonly path: string }) =>
+        projectionSnapshotQuery.getShellSnapshot().pipe(
+          Effect.mapError(
+            (cause) =>
+              new GitCommandError({
+                operation: "GitWorkflowService.removeWorktree",
+                command: "git worktree remove",
+                cwd: input.cwd,
+                detail: "Failed to check whether a task owns this worktree.",
+                cause,
+              }),
+          ),
+          Effect.flatMap((snapshot) => {
+            const target = path.resolve(input.path);
+            const task = snapshot.tasks?.find(
+              (entry) =>
+                entry.archivedAt === null &&
+                entry.workspace.path !== null &&
+                path.resolve(entry.workspace.path) === target,
+            );
+            return task === undefined
+              ? Effect.void
+              : Effect.fail(
+                  new GitCommandError({
+                    operation: "GitWorkflowService.removeWorktree",
+                    command: "git worktree remove",
+                    cwd: input.cwd,
+                    detail: `This worktree belongs to the task '${task.title}'. Archive the task to remove it.`,
+                  }),
+                );
+          }),
+        );
       // Scratch threads run in a plain folder under the data dir. Inside a
       // checkout (a dev worktree's .t3, a dotfiles home) that folder would
       // inherit the repo's git status and checkpoints, so it is only offered
@@ -2276,6 +2355,9 @@ const makeWsRpcLayer = (
           observeRpcStreamEffect(
             ORCHESTRATION_WS_METHODS.subscribeShell,
             Effect.gen(function* () {
+              const visibleShellItems = <E, R>(
+                stream: Stream.Stream<OrchestrationShellStreamItem, E, R>,
+              ) => (input.includeTasks === true ? stream : withoutTaskShellItems(stream));
               // Coalesce the live shell stream per aggregate over a small window
               // so bursts of high-frequency events (streaming message deltas,
               // activity appends) collapse into a single shell refetch and never
@@ -2354,20 +2436,22 @@ const makeWsRpcLayer = (
               // Offer the completion marker into the same queue as live events.
               // Anything buffered while snapshot/replay work was in flight is
               // therefore delivered before the client is told it is synchronized.
-              const synchronizedThenLive = liveBudget.deliver(
-                input.requestCompletionMarker === true
-                  ? Stream.concat(
-                      Stream.fromEffect(
-                        liveBudget.retain({ kind: "synchronized" as const }).pipe(
-                          Effect.flatMap((item) => Queue.offer(liveBuffer, item)),
-                          Effect.uninterruptible,
-                          Effect.andThen(Queue.takeAll(liveBuffer)),
-                          Effect.flatMap(coalesceRetainedInputs),
-                        ),
-                      ).pipe(Stream.flatMap((items) => Stream.fromIterable(items))),
-                      bufferedLiveStream,
-                    )
-                  : bufferedLiveStream,
+              const synchronizedThenLive = visibleShellItems(
+                liveBudget.deliver(
+                  input.requestCompletionMarker === true
+                    ? Stream.concat(
+                        Stream.fromEffect(
+                          liveBudget.retain({ kind: "synchronized" as const }).pipe(
+                            Effect.flatMap((item) => Queue.offer(liveBuffer, item)),
+                            Effect.uninterruptible,
+                            Effect.andThen(Queue.takeAll(liveBuffer)),
+                            Effect.flatMap(coalesceRetainedInputs),
+                          ),
+                        ).pipe(Stream.flatMap((items) => Stream.fromIterable(items))),
+                        bufferedLiveStream,
+                      )
+                    : bufferedLiveStream,
+                ),
               );
 
               // When the client already holds a shell snapshot (cached, or loaded
@@ -2414,7 +2498,7 @@ const makeWsRpcLayer = (
                       }),
                   ),
                 );
-                return Stream.concat(catchUpStream, synchronizedThenLive);
+                return Stream.concat(visibleShellItems(catchUpStream), synchronizedThenLive);
               }
 
               const snapshot = yield* loadSnapshot;
@@ -3302,6 +3386,28 @@ const makeWsRpcLayer = (
           observeRpcEffect(WS_METHODS.projectsCreateNew, createNewProject(input), {
             "rpc.aggregate": "orchestration",
           }),
+        [WS_METHODS.taskCreate]: (input) =>
+          observeRpcEffect(WS_METHODS.taskCreate, taskWorkspace.create(input), {
+            "rpc.aggregate": "orchestration",
+          }),
+        [WS_METHODS.taskRetrySetup]: (input) =>
+          observeRpcEffect(WS_METHODS.taskRetrySetup, taskWorkspace.retrySetup(input.taskId), {
+            "rpc.aggregate": "orchestration",
+          }),
+        [WS_METHODS.taskArchiveCheck]: (input) =>
+          observeRpcEffect(WS_METHODS.taskArchiveCheck, taskWorkspace.archiveCheck(input.taskId), {
+            "rpc.aggregate": "orchestration",
+          }),
+        [WS_METHODS.taskArchive]: (input) =>
+          observeRpcEffect(WS_METHODS.taskArchive, taskWorkspace.archive(input), {
+            "rpc.aggregate": "orchestration",
+          }),
+        [WS_METHODS.taskCreateThread]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.taskCreateThread,
+            taskWorkspace.createThread({ taskId: input.taskId, title: input.title }),
+            { "rpc.aggregate": "orchestration" },
+          ),
         [WS_METHODS.projectCloneCancel]: (input) =>
           observeRpcEffect(
             WS_METHODS.projectCloneCancel,
@@ -3667,7 +3773,10 @@ const makeWsRpcLayer = (
         [WS_METHODS.vcsRemoveWorktree]: (input) =>
           observeRpcEffect(
             WS_METHODS.vcsRemoveWorktree,
-            gitWorkflow.removeWorktree(input).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
+            refuseTaskWorktreeRemoval(input).pipe(
+              Effect.andThen(gitWorkflow.removeWorktree(input)),
+              Effect.tap(() => refreshGitStatus(input.cwd)),
+            ),
             { "rpc.aggregate": "vcs" },
           ),
         [WS_METHODS.vcsCreateRef]: (input) =>

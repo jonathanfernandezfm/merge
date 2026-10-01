@@ -18,6 +18,7 @@ import {
   PositiveInt,
   ProjectId,
   ProviderItemId,
+  TaskId,
   ThreadId,
   TrimmedNonEmptyString,
   TrimmedString,
@@ -31,6 +32,13 @@ import {
   PullRequestReviewDecision,
   PullRequestState,
 } from "./pullRequest.ts";
+import {
+  OrchestrationTask,
+  OrchestrationTaskPullRequest,
+  OrchestrationTaskShell,
+  OrchestrationTaskWorkspace,
+  ThreadOrigin,
+} from "./task.ts";
 
 export const ORCHESTRATION_WS_METHODS = {
   dispatchCommand: "orchestration.dispatchCommand",
@@ -801,6 +809,11 @@ export const OrchestrationThread = Schema.Struct({
   ),
   branch: Schema.NullOr(TrimmedNonEmptyString),
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
+  // The task this thread works in; its branch/worktreePath are the task
+  // workspace's. Optional so payloads from pre-task servers still decode.
+  taskId: Schema.optional(Schema.NullOr(TaskId)),
+  // Absent or null means "user".
+  origin: Schema.optional(Schema.NullOr(ThreadOrigin)),
   linkedPullRequest: Schema.optional(Schema.NullOr(ThreadLinkedPullRequest)),
   // Optional so payloads from pre-link servers still decode.
   pullRequests: Schema.Array(ThreadPullRequestLink).pipe(
@@ -860,6 +873,8 @@ export const OrchestrationReadModel = Schema.Struct({
   snapshotSequence: NonNegativeInt,
   projects: Schema.Array(OrchestrationProject),
   threads: Schema.Array(OrchestrationThread),
+  // Optional so read models from pre-task servers still decode.
+  tasks: Schema.optional(Schema.Array(OrchestrationTask)),
   updatedAt: IsoDateTime,
 });
 export type OrchestrationReadModel = typeof OrchestrationReadModel.Type;
@@ -892,6 +907,8 @@ export const OrchestrationThreadShell = Schema.Struct({
   ),
   branch: Schema.NullOr(TrimmedNonEmptyString),
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
+  taskId: Schema.optional(Schema.NullOr(TaskId)),
+  origin: Schema.optional(Schema.NullOr(ThreadOrigin)),
   linkedPullRequest: Schema.optional(Schema.NullOr(ThreadLinkedPullRequest)),
   pullRequests: Schema.Array(ThreadPullRequestLink).pipe(
     Schema.withDecodingDefault(Effect.succeed([])),
@@ -947,6 +964,8 @@ export const OrchestrationShellSnapshot = Schema.Struct({
   snapshotSequence: NonNegativeInt,
   projects: Schema.Array(OrchestrationProjectShell),
   threads: Schema.Array(OrchestrationThreadShell),
+  // Optional so snapshots from pre-task servers still decode.
+  tasks: Schema.optional(Schema.Array(OrchestrationTaskShell)),
   updatedAt: IsoDateTime,
 });
 export type OrchestrationShellSnapshot = typeof OrchestrationShellSnapshot.Type;
@@ -971,6 +990,18 @@ export const OrchestrationShellStreamEvent = Schema.Union([
     kind: Schema.Literal("thread-removed"),
     sequence: NonNegativeInt,
     threadId: ThreadId,
+  }),
+  // Only sent to subscribers that pass `includeTasks`, so older clients never
+  // see a kind they cannot decode.
+  Schema.Struct({
+    kind: Schema.Literal("task-upserted"),
+    sequence: NonNegativeInt,
+    task: OrchestrationTaskShell,
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("task-removed"),
+    sequence: NonNegativeInt,
+    taskId: TaskId,
   }),
 ]);
 export type OrchestrationShellStreamEvent = typeof OrchestrationShellStreamEvent.Type;
@@ -1002,6 +1033,8 @@ export const OrchestrationSubscribeShellInput = Schema.Struct({
    * snapshot or catch-up replay and before it begins emitting live events.
    */
   requestCompletionMarker: Schema.optionalKey(Schema.Boolean),
+  /** Opt in to `task-upserted` / `task-removed` events. */
+  includeTasks: Schema.optionalKey(Schema.Boolean),
 });
 export type OrchestrationSubscribeShellInput = typeof OrchestrationSubscribeShellInput.Type;
 
@@ -1129,6 +1162,9 @@ const ThreadCreateCommand = Schema.Struct({
   ),
   branch: Schema.NullOr(TrimmedNonEmptyString),
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
+  // The task must exist and not be archived.
+  taskId: Schema.optional(Schema.NullOr(TaskId)),
+  origin: Schema.optional(Schema.NullOr(ThreadOrigin)),
   createdAt: IsoDateTime,
   historyImport: Schema.optional(Schema.Literal(true)),
 });
@@ -1424,6 +1460,19 @@ const ThreadSessionStopCommand = Schema.Struct({
   onlyIfSettled: Schema.optional(Schema.Boolean),
 });
 
+// Users edit what they own; the workspace, pull request and merge state are
+// written by the server through task.sync.
+const TaskMetaUpdateCommand = Schema.Struct({
+  type: Schema.Literal("task.meta.update"),
+  commandId: CommandId,
+  taskId: TaskId,
+  title: Schema.optional(TrimmedNonEmptyString),
+  description: Schema.optional(Schema.NullOr(Schema.String)),
+  autoHandleReviewFeedback: Schema.optional(Schema.Boolean),
+  autoHandleCIFailures: Schema.optional(Schema.Boolean),
+  waitingForUserReason: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
+});
+
 const DispatchableClientOrchestrationCommand = Schema.Union([
   ProjectCreateCommand,
   ProjectMetaUpdateCommand,
@@ -1454,6 +1503,7 @@ const DispatchableClientOrchestrationCommand = Schema.Union([
   ThreadCheckpointRevertCommand,
   ThreadConversationRevertCommand,
   ThreadSessionStopCommand,
+  TaskMetaUpdateCommand,
 ]);
 export type DispatchableClientOrchestrationCommand =
   typeof DispatchableClientOrchestrationCommand.Type;
@@ -1488,6 +1538,7 @@ export const ClientOrchestrationCommand = Schema.Union([
   ThreadCheckpointRevertCommand,
   ThreadConversationRevertCommand,
   ThreadSessionStopCommand,
+  TaskMetaUpdateCommand,
 ]);
 export type ClientOrchestrationCommand = typeof ClientOrchestrationCommand.Type;
 
@@ -1658,7 +1709,44 @@ const ThreadPullRequestLinkSyncCommand = Schema.Struct({
   stack: Schema.NullOr(ThreadPullRequestStack),
 });
 
+// Dispatched by the task workspace service, never by clients.
+const TaskCreateCommand = Schema.Struct({
+  type: Schema.Literal("task.create"),
+  commandId: CommandId,
+  taskId: TaskId,
+  projectId: ProjectId,
+  title: TrimmedNonEmptyString,
+  description: Schema.NullOr(Schema.String),
+  workspace: OrchestrationTaskWorkspace,
+  autoHandleReviewFeedback: Schema.Boolean,
+  autoHandleCIFailures: Schema.Boolean,
+  createdAt: IsoDateTime,
+});
+
+// Server-observed task state: workspace and setup progress, the pull request
+// snapshot, merge detection and supervisor-raised waiting reasons. Absent
+// fields are left unchanged.
+const TaskSyncCommand = Schema.Struct({
+  type: Schema.Literal("task.sync"),
+  commandId: CommandId,
+  taskId: TaskId,
+  workspace: Schema.optional(OrchestrationTaskWorkspace),
+  pullRequest: Schema.optional(Schema.NullOr(OrchestrationTaskPullRequest)),
+  mergedAt: Schema.optional(Schema.NullOr(IsoDateTime)),
+  waitingForUserReason: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
+});
+
+// Dispatched after the service has stopped sessions and removed the worktree.
+const TaskArchiveCommand = Schema.Struct({
+  type: Schema.Literal("task.archive"),
+  commandId: CommandId,
+  taskId: TaskId,
+});
+
 const InternalOrchestrationCommand = Schema.Union([
+  TaskCreateCommand,
+  TaskSyncCommand,
+  TaskArchiveCommand,
   ThreadAutoSettleCommand,
   ThreadPullRequestSyncCommand,
   ThreadPullRequestLinkSyncCommand,
@@ -1721,10 +1809,13 @@ export const OrchestrationEventType = Schema.Literals([
   "thread.proposed-plan-upserted",
   "thread.turn-diff-completed",
   "thread.activity-appended",
+  "task.created",
+  "task.meta-updated",
+  "task.archived",
 ]);
 export type OrchestrationEventType = typeof OrchestrationEventType.Type;
 
-export const OrchestrationAggregateKind = Schema.Literals(["project", "thread"]);
+export const OrchestrationAggregateKind = Schema.Literals(["project", "thread", "task"]);
 export type OrchestrationAggregateKind = typeof OrchestrationAggregateKind.Type;
 export const OrchestrationActorKind = Schema.Literals(["client", "server", "provider"]);
 
@@ -1772,6 +1863,9 @@ export const ThreadCreatedPayload = Schema.Struct({
   ),
   branch: Schema.NullOr(TrimmedNonEmptyString),
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
+  // Optional so events persisted before tasks still decode.
+  taskId: Schema.optional(Schema.NullOr(TaskId)),
+  origin: Schema.optional(Schema.NullOr(ThreadOrigin)),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
 });
@@ -2000,6 +2094,41 @@ export const ThreadActivityAppendedPayload = Schema.Struct({
   activity: OrchestrationThreadActivity,
 });
 
+export const TaskCreatedPayload = Schema.Struct({
+  taskId: TaskId,
+  projectId: ProjectId,
+  title: TrimmedNonEmptyString,
+  description: Schema.NullOr(Schema.String),
+  workspace: OrchestrationTaskWorkspace,
+  autoHandleReviewFeedback: Schema.Boolean,
+  autoHandleCIFailures: Schema.Boolean,
+  createdAt: IsoDateTime,
+  updatedAt: IsoDateTime,
+});
+export type TaskCreatedPayload = typeof TaskCreatedPayload.Type;
+
+/** A patch from task.meta.update or task.sync: absent is unchanged, null clears. */
+export const TaskMetaUpdatedPayload = Schema.Struct({
+  taskId: TaskId,
+  title: Schema.optional(TrimmedNonEmptyString),
+  description: Schema.optional(Schema.NullOr(Schema.String)),
+  autoHandleReviewFeedback: Schema.optional(Schema.Boolean),
+  autoHandleCIFailures: Schema.optional(Schema.Boolean),
+  waitingForUserReason: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
+  workspace: Schema.optional(OrchestrationTaskWorkspace),
+  pullRequest: Schema.optional(Schema.NullOr(OrchestrationTaskPullRequest)),
+  mergedAt: Schema.optional(Schema.NullOr(IsoDateTime)),
+  updatedAt: IsoDateTime,
+});
+export type TaskMetaUpdatedPayload = typeof TaskMetaUpdatedPayload.Type;
+
+export const TaskArchivedPayload = Schema.Struct({
+  taskId: TaskId,
+  archivedAt: IsoDateTime,
+  updatedAt: IsoDateTime,
+});
+export type TaskArchivedPayload = typeof TaskArchivedPayload.Type;
+
 /**
  * Which client connection dispatched the command that produced an event.
  * Stamped by the orchestration engine on client-dispatched commands; absent on
@@ -2033,7 +2162,7 @@ const EventBaseFields = {
   sequence: NonNegativeInt,
   eventId: EventId,
   aggregateKind: OrchestrationAggregateKind,
-  aggregateId: Schema.Union([ProjectId, ThreadId]),
+  aggregateId: Schema.Union([ProjectId, ThreadId, TaskId]),
   occurredAt: IsoDateTime,
   commandId: Schema.NullOr(CommandId),
   causationEventId: Schema.NullOr(EventId),
@@ -2206,6 +2335,21 @@ export const OrchestrationEvent = Schema.Union([
     ...EventBaseFields,
     type: Schema.Literal("thread.activity-appended"),
     payload: ThreadActivityAppendedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("task.created"),
+    payload: TaskCreatedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("task.meta-updated"),
+    payload: TaskMetaUpdatedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("task.archived"),
+    payload: TaskArchivedPayload,
   }),
 ]);
 export type OrchestrationEvent = typeof OrchestrationEvent.Type;

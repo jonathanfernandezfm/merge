@@ -2,8 +2,10 @@ import type {
   OrchestrationCommand,
   OrchestrationProject,
   OrchestrationReadModel,
+  OrchestrationTask,
   OrchestrationThread,
   ProjectId,
+  TaskId,
   ThreadId,
 } from "@t3tools/contracts";
 import { normalizeProjectPathForComparison } from "@t3tools/shared/path";
@@ -163,6 +165,77 @@ export function requireThreadAbsent(input: {
     invariantError(
       input.command.type,
       `Thread '${input.threadId}' already exists and cannot be created twice.`,
+    ),
+  );
+}
+
+export function requireTask(input: {
+  readonly readModel: OrchestrationReadModel;
+  readonly command: OrchestrationCommand;
+  readonly taskId: TaskId;
+}): Effect.Effect<OrchestrationTask, OrchestrationCommandInvariantError> {
+  const task = input.readModel.tasks?.find((entry) => entry.id === input.taskId);
+  if (task !== undefined && task.deletedAt === null) {
+    return Effect.succeed(task);
+  }
+  return Effect.fail(
+    invariantError(
+      input.command.type,
+      `Task '${input.taskId}' does not exist for command '${input.command.type}'.`,
+    ),
+  );
+}
+
+export function requireTaskNotArchived(input: {
+  readonly readModel: OrchestrationReadModel;
+  readonly command: OrchestrationCommand;
+  readonly taskId: TaskId;
+}): Effect.Effect<OrchestrationTask, OrchestrationCommandInvariantError> {
+  return requireTask(input).pipe(
+    Effect.filterOrFail(
+      (task) => task.archivedAt === null,
+      () =>
+        invariantError(
+          input.command.type,
+          `Task '${input.taskId}' is archived and cannot handle command '${input.command.type}'.`,
+        ),
+    ),
+  );
+}
+
+/**
+ * A thread of an archived task has no worktree anymore: reviving it or starting
+ * a turn would make the provider reactor recreate the worktree behind the task.
+ */
+export function requireThreadTaskNotArchived(input: {
+  readonly readModel: OrchestrationReadModel;
+  readonly command: OrchestrationCommand;
+  readonly thread: OrchestrationThread;
+}): Effect.Effect<void, OrchestrationCommandInvariantError> {
+  const taskId = input.thread.taskId;
+  if (taskId === undefined || taskId === null) return Effect.void;
+  const task = input.readModel.tasks?.find((entry) => entry.id === taskId);
+  if (task === undefined || task.archivedAt === null) return Effect.void;
+  return Effect.fail(
+    invariantError(
+      input.command.type,
+      `Thread '${input.thread.id}' belongs to archived task '${taskId}' and cannot handle command '${input.command.type}'.`,
+    ),
+  );
+}
+
+export function requireTaskAbsent(input: {
+  readonly readModel: OrchestrationReadModel;
+  readonly command: OrchestrationCommand;
+  readonly taskId: TaskId;
+}): Effect.Effect<void, OrchestrationCommandInvariantError> {
+  if (input.readModel.tasks?.some((entry) => entry.id === input.taskId) !== true) {
+    return Effect.void;
+  }
+  return Effect.fail(
+    invariantError(
+      input.command.type,
+      `Task '${input.taskId}' already exists and cannot be created twice.`,
     ),
   );
 }

@@ -1,0 +1,81 @@
+{
+  "artifactId": "vstfs:///Git/PullRequestId/6f9c9b7f-1111-4c2a-9a55-6d1e0c2b7a10%2f2b1f0d2e-2222-4b5b-8d1e-3c4a5b6c7d8e%2f42",
+  "autoCompleteSetBy": null,
+  "closedBy": null,
+  "closedDate": null,
+  "codeReviewId": 42,
+  "commits": null,
+  "completionOptions": null,
+  "completionQueueTime": null,
+  "createdBy": {
+    "descriptor": "aad.NzQ1ZjM3ZWMtYjY4Mi03NmI0LWE4NzgtZDE0YjNmNjQ3ZGNh",
+    "displayName": "Bilal Hassan",
+    "id": "745f37ec-b682-66b4-a878-d14b3f647dca",
+    "imageUrl": "https://dev.azure.com/acme/_api/_common/identityImage?id=745f37ec-b682-66b4-a878-d14b3f647dca",
+    "uniqueName": "bilal@acme.dev",
+    "url": "https://spsprodweu5.vssps.visualstudio.com/A0b1c2d3e/_apis/Identities/745f37ec-b682-66b4-a878-d14b3f647dca"
+  },
+  "creationDate": "2026-07-01T09:12:44.512Z",
+  "description": "Ships the permissions page.",
+  "forkSource": null,
+  "isDraft": false,
+  "labels": [],
+  "lastMergeCommit": { "commitId": "9d3c2a1f0e9b8a7c6d5e4f3a2b1c0d9e8f7a6b5c", "url": null },
+  "lastMergeSourceCommit": { "commitId": "1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b", "url": null },
+  "lastMergeTargetCommit": { "commitId": "0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e", "url": null },
+  "mergeId": "8e7d6c5b-3333-4a4a-9b9b-1c2d3e4f5a6b",
+  "mergeOptions": null,
+  "mergeStatus": "succeeded",
+  "pullRequestId": 42,
+  "remoteUrl": null,
+  "repository": {
+    "id": "2b1f0d2e-2222-4b5b-8d1e-3c4a5b6c7d8e",
+    "name": "web",
+    "project": {
+      "id": "6f9c9b7f-1111-4c2a-9a55-6d1e0c2b7a10",
+      "name": "platform",
+      "state": "unchanged",
+      "visibility": "private"
+    },
+    "url": "https://dev.azure.com/acme/6f9c9b7f-1111-4c2a-9a55-6d1e0c2b7a10/_apis/git/repositories/2b1f0d2e-2222-4b5b-8d1e-3c4a5b6c7d8e"
+  },
+  "reviewers": [
+    {
+      "displayName": "Julius Marminge",
+      "hasDeclined": false,
+      "id": "0c1d2e3f-4444-4a5b-8c9d-0e1f2a3b4c5d",
+      "imageUrl": "https://dev.azure.com/acme/_api/_common/identityImage?id=0c1d2e3f-4444-4a5b-8c9d-0e1f2a3b4c5d",
+      "isFlagged": false,
+      "isRequired": true,
+      "uniqueName": "julius@acme.dev",
+      "url": "https://spsprodweu5.vssps.visualstudio.com/A0b1c2d3e/_apis/Identities/0c1d2e3f-4444-4a5b-8c9d-0e1f2a3b4c5d",
+      "vote": 10
+    },
+    {
+      "displayName": "Sarah Lin",
+      "hasDeclined": false,
+      "id": "5a6b7c8d-5555-4e9f-8a0b-1c2d3e4f5a6b",
+      "imageUrl": "https://dev.azure.com/acme/_api/_common/identityImage?id=5a6b7c8d-5555-4e9f-8a0b-1c2d3e4f5a6b",
+      "isFlagged": false,
+      "uniqueName": "sarah@acme.dev",
+      "url": "https://spsprodweu5.vssps.visualstudio.com/A0b1c2d3e/_apis/Identities/5a6b7c8d-5555-4e9f-8a0b-1c2d3e4f5a6b",
+      "vote": -5
+    },
+    {
+      "displayName": "[platform]\\Web Reviewers",
+      "id": "7e8f9a0b-6666-4c1d-8e2f-3a4b5c6d7e8f",
+      "isContainer": true,
+      "isRequired": false,
+      "uniqueName": "vstfs:///Classification/TeamProject/6f9c9b7f-1111-4c2a-9a55-6d1e0c2b7a10\\Web Reviewers",
+      "url": "https://spsprodweu5.vssps.visualstudio.com/A0b1c2d3e/_apis/Identities/7e8f9a0b-6666-4c1d-8e2f-3a4b5c6d7e8f",
+      "vote": 0
+    }
+  ],
+  "sourceRefName": "refs/heads/feature/permissions",
+  "status": "active",
+  "supportsIterations": true,
+  "targetRefName": "refs/heads/main",
+  "title": "ABC-123 Permissions page",
+  "url": "https://dev.azure.com/acme/6f9c9b7f-1111-4c2a-9a55-6d1e0c2b7a10/_apis/git/repositories/2b1f0d2e-2222-4b5b-8d1e-3c4a5b6c7d8e/pullRequests/42",
+  "workItemRefs": []
+}

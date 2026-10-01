@@ -206,6 +206,12 @@ export const PullRequestComment = Schema.Struct({
   reviewState: Schema.NullOr(Schema.String),
   /** Absent from a host with no reactions at all, which is a different thing from none on this. */
   reactions: Schema.optional(Schema.Array(PullRequestReaction)),
+  /**
+   * The conversation this remark belongs to has been resolved. Present only from a host that
+   * resolves conversations outside line threads (Azure DevOps); elsewhere resolution lives on
+   * `PullRequestReviewThread`.
+   */
+  isResolved: Schema.optional(Schema.Boolean),
 });
 export type PullRequestComment = typeof PullRequestComment.Type;
 

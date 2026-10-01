@@ -268,6 +268,34 @@ describe("ClientSettings notifications", () => {
       expect(() => decodeClientSettingsPatch({ notificationMode })).toThrow();
     },
   );
+
+  it("keeps the original sounds at full volume when existing settings omit sound preferences", () => {
+    const settings = decodeClientSettings({});
+    expect(settings.completionSound).toBe("classic");
+    expect(settings.attentionSound).toBe("alert");
+    expect(settings.notificationVolume).toBe(100);
+  });
+
+  it("round-trips a sound choice and volume", () => {
+    const settings = decodeClientSettings({
+      completionSound: "ding",
+      attentionSound: "off",
+      notificationVolume: 50,
+    });
+    expect(encodeClientSettings(settings)).toMatchObject({
+      completionSound: "ding",
+      attentionSound: "off",
+      notificationVolume: 50,
+    });
+  });
+
+  it.each([{ completionSound: "beep" }, { notificationVolume: 101 }, { notificationVolume: -1 }])(
+    "rejects invalid sound preference %o",
+    (patch) => {
+      expect(() => decodeClientSettings(patch)).toThrow();
+      expect(() => decodeClientSettingsPatch(patch)).toThrow();
+    },
+  );
 });
 
 describe("ClientSettings default diff file state", () => {

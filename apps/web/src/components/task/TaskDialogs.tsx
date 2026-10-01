@@ -1,0 +1,619 @@
+import { useAtomValue } from "@effect/atom-react";
+import {
+  isAtomCommandInterrupted,
+  squashAtomCommandFailure,
+  type AtomCommandResult,
+} from "@t3tools/client-runtime/state/runtime";
+import type { ScopedTaskRef } from "@t3tools/client-runtime/state/tasks";
+import {
+  type EnvironmentId,
+  type ProjectId,
+  type TaskArchiveBlocker,
+  type TaskCreateResult,
+  type VcsRef,
+} from "@t3tools/contracts";
+import { useNavigate } from "@tanstack/react-router";
+import { Atom } from "effect/unstable/reactivity";
+import { GitBranchIcon } from "lucide-react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+
+import { appAtomRegistry } from "~/rpc/atomRegistry";
+import { useProjects, waitForThreadShell } from "~/state/entities";
+import { useEnvironmentQuery } from "~/state/query";
+import { taskEnvironment, useTask } from "~/state/tasks";
+import { useAtomCommand } from "~/state/use-atom-command";
+import { vcsEnvironment } from "~/state/vcs";
+import { Button } from "../ui/button";
+import { Checkbox } from "../ui/checkbox";
+import {
+  Combobox,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+  ComboboxPopup,
+} from "../ui/combobox";
+import {
+  Dialog,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogPanel,
+  DialogPopup,
+  DialogTitle,
+} from "../ui/dialog";
+import { Input } from "../ui/input";
+import { Label } from "../ui/label";
+import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
+import { Spinner } from "../ui/spinner";
+import { Textarea } from "../ui/textarea";
+import { taskTitleFromBranch } from "./taskTitleFromBranch";
+
+interface NewTaskDialogTarget {
+  readonly environmentId?: EnvironmentId;
+  readonly projectId?: ProjectId;
+}
+
+/**
+ * Which task dialog is open. Set by whichever entry point asked (sidebar,
+ * command palette, task header) and rendered once by the chat layout, so a
+ * dialog outlives the palette or menu that opened it.
+ */
+const newTaskDialogAtom = Atom.make<NewTaskDialogTarget | null>(null).pipe(
+  Atom.keepAlive,
+  Atom.withLabel("tasks:new-task-dialog"),
+);
+const archiveTaskDialogAtom = Atom.make<ScopedTaskRef | null>(null).pipe(
+  Atom.keepAlive,
+  Atom.withLabel("tasks:archive-dialog"),
+);
+const waitingReasonDialogAtom = Atom.make<ScopedTaskRef | null>(null).pipe(
+  Atom.keepAlive,
+  Atom.withLabel("tasks:waiting-reason-dialog"),
+);
+
+export function openNewTaskDialog(target: NewTaskDialogTarget = {}): void {
+  appAtomRegistry.set(newTaskDialogAtom, target);
+}
+
+export function openArchiveTaskDialog(ref: ScopedTaskRef): void {
+  appAtomRegistry.set(archiveTaskDialogAtom, ref);
+}
+
+export function openWaitingReasonDialog(ref: ScopedTaskRef): void {
+  appAtomRegistry.set(waitingReasonDialogAtom, ref);
+}
+
+function commandErrorMessage(result: AtomCommandResult<unknown, unknown>, fallback: string) {
+  if (result._tag !== "Failure" || isAtomCommandInterrupted(result)) return null;
+  const error = squashAtomCommandFailure(result);
+  return error instanceof Error && error.message.trim().length > 0 ? error.message : fallback;
+}
+
+/** Mounted once by the chat layout. */
+export function TaskDialogsHost() {
+  const newTaskTarget = useAtomValue(newTaskDialogAtom);
+  const archiveTarget = useAtomValue(archiveTaskDialogAtom);
+  const waitingTarget = useAtomValue(waitingReasonDialogAtom);
+  return (
+    <>
+      {newTaskTarget !== null ? (
+        <NewTaskDialog
+          target={newTaskTarget}
+          onClose={() => appAtomRegistry.set(newTaskDialogAtom, null)}
+        />
+      ) : null}
+      {archiveTarget !== null ? (
+        <ArchiveTaskDialog
+          taskRef={archiveTarget}
+          onClose={() => appAtomRegistry.set(archiveTaskDialogAtom, null)}
+        />
+      ) : null}
+      {waitingTarget !== null ? (
+        <WaitingReasonDialog
+          taskRef={waitingTarget}
+          onClose={() => appAtomRegistry.set(waitingReasonDialogAtom, null)}
+        />
+      ) : null}
+    </>
+  );
+}
+
+/** Navigates to a task's new thread, or to the task itself when it has none yet. */
+export function useOpenCreatedTask() {
+  const navigate = useNavigate();
+  return useCallback(
+    async (environmentId: EnvironmentId, result: TaskCreateResult) => {
+      if (result.threadId !== undefined) {
+        const threadRef = { environmentId, threadId: result.threadId };
+        // The RPC returns before the shell event lands; opening the route
+        // early would briefly render a missing thread.
+        await waitForThreadShell(threadRef).catch(() => undefined);
+        await navigate({ to: "/$environmentId/$threadId", params: threadRef });
+        return;
+      }
+      await navigate({
+        to: "/tasks/$environmentId/$taskId",
+        params: { environmentId, taskId: result.taskId },
+      });
+    },
+    [navigate],
+  );
+}
+
+const REMOTE_REF_LIMIT = 100;
+
+/** A remote ref as the task picker offers it: `origin/feature` checks out `feature`. */
+function remoteBranchOf(ref: VcsRef): { remoteName: string; branch: string } | null {
+  if (!ref.isRemote || !ref.remoteName) return null;
+  const prefix = `${ref.remoteName}/`;
+  if (!ref.name.startsWith(prefix)) return null;
+  const branch = ref.name.slice(prefix.length);
+  return branch.length === 0 || branch === "HEAD" ? null : { remoteName: ref.remoteName, branch };
+}
+
+function NewTaskDialog({ target, onClose }: { target: NewTaskDialogTarget; onClose: () => void }) {
+  const projects = useProjects();
+  const formId = useId();
+  const [projectKey, setProjectKey] = useState<string | null>(() => {
+    const initial =
+      projects.find(
+        (project) =>
+          project.environmentId === target.environmentId && project.id === target.projectId,
+      ) ?? (projects.length === 1 ? projects[0] : undefined);
+    return initial ? `${initial.environmentId}:${initial.id}` : null;
+  });
+  const project = useMemo(
+    () =>
+      projects.find((candidate) => `${candidate.environmentId}:${candidate.id}` === projectKey) ??
+      null,
+    [projectKey, projects],
+  );
+  const projectItems = useMemo(
+    () =>
+      projects.map((candidate) => ({
+        value: `${candidate.environmentId}:${candidate.id}`,
+        label: candidate.title,
+      })),
+    [projects],
+  );
+  const [title, setTitle] = useState("");
+  // Until the user writes their own title, it follows the chosen branch.
+  const [titleEdited, setTitleEdited] = useState(false);
+  const [description, setDescription] = useState("");
+  const [autoHandleReviewFeedback, setAutoHandleReviewFeedback] = useState(true);
+  const [branchQuery, setBranchQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [selectedRefName, setSelectedRefName] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const createTask = useAtomCommand(taskEnvironment.create, { reportFailure: false });
+  const openCreatedTask = useOpenCreatedTask();
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => setDebouncedQuery(branchQuery.trim()), 200);
+    return () => window.clearTimeout(timeout);
+  }, [branchQuery]);
+
+  // Only the unfiltered list fetches from the remote; typing filters what
+  // that fetch brought in instead of fetching on every keystroke.
+  const query =
+    selectedRefName !== null && debouncedQuery === selectedRefName ? "" : debouncedQuery;
+  const refs = useEnvironmentQuery(
+    project === null
+      ? null
+      : vcsEnvironment.listRefs({
+          environmentId: project.environmentId,
+          input: {
+            cwd: project.workspaceRoot,
+            refKind: "remote",
+            // A remote branch is still a valid task source when a local branch
+            // of the same name exists (e.g. left behind by an archived task).
+            includeMatchingRemoteRefs: true,
+            limit: REMOTE_REF_LIMIT,
+            ...(query.length > 0 ? { query } : { refresh: true }),
+          },
+        }),
+  );
+  const remoteRefs = useMemo(
+    () =>
+      (refs.data?.refs ?? []).flatMap((ref) => {
+        const remote = remoteBranchOf(ref);
+        return remote === null ? [] : [{ name: ref.name, ...remote }];
+      }),
+    [refs.data],
+  );
+  // Kept apart from the list so a later filtered fetch cannot drop the choice.
+  const [chosenRemote, setChosenRemote] = useState<{ remoteName: string; branch: string } | null>(
+    null,
+  );
+  const chooseRemote = (remote: { remoteName: string; branch: string } | null) => {
+    setChosenRemote(remote);
+    if (!titleEdited) setTitle(remote === null ? "" : taskTitleFromBranch(remote.branch));
+  };
+
+  const canSubmit =
+    !pending && project !== null && title.trim().length > 0 && chosenRemote !== null;
+
+  const submit = async () => {
+    if (!canSubmit || project === null || chosenRemote === null) return;
+    setPending(true);
+    setError(null);
+    const result = await createTask({
+      environmentId: project.environmentId,
+      input: {
+        projectId: project.id,
+        title: title.trim(),
+        ...(description.trim().length > 0 ? { description: description.trim() } : {}),
+        remoteName: chosenRemote.remoteName,
+        branch: chosenRemote.branch,
+        autoHandleReviewFeedback,
+      },
+    });
+    if (result._tag === "Failure") {
+      setPending(false);
+      setError(commandErrorMessage(result, "Could not create the task."));
+      return;
+    }
+    onClose();
+    await openCreatedTask(project.environmentId, result.value);
+  };
+
+  return (
+    <Dialog open onOpenChange={(open) => (!open && !pending ? onClose() : undefined)}>
+      <DialogPopup className="max-w-xl">
+        <DialogHeader>
+          <DialogTitle>New task</DialogTitle>
+          <DialogDescription>
+            A task works on an existing remote branch in its own worktree. It checks the branch out
+            and never creates one.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogPanel>
+          <form
+            id={formId}
+            className="flex flex-col gap-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void submit();
+            }}
+          >
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor={`${formId}-project`}>Project</Label>
+              <Select
+                items={projectItems}
+                value={projectKey}
+                onValueChange={(value) => {
+                  setProjectKey(value);
+                  setSelectedRefName(null);
+                  chooseRemote(null);
+                  setBranchQuery("");
+                }}
+              >
+                <SelectTrigger id={`${formId}-project`}>
+                  <SelectValue placeholder="Choose a project" />
+                </SelectTrigger>
+                <SelectPopup>
+                  {projectItems.map((item) => (
+                    <SelectItem key={item.value} value={item.value}>
+                      {item.label}
+                    </SelectItem>
+                  ))}
+                </SelectPopup>
+              </Select>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor={`${formId}-title`}>Title</Label>
+              <Input
+                id={`${formId}-title`}
+                autoFocus
+                placeholder="ABC-123 Permissions"
+                value={title}
+                onChange={(event) => {
+                  setTitle(event.target.value);
+                  setTitleEdited(event.target.value.trim().length > 0);
+                }}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor={`${formId}-branch`}>Remote branch</Label>
+              <Combobox
+                items={remoteRefs.map((ref) => ref.name)}
+                value={selectedRefName}
+                onValueChange={(value) => {
+                  setSelectedRefName(value);
+                  const remote = remoteRefs.find((ref) => ref.name === value) ?? null;
+                  chooseRemote(
+                    remote === null
+                      ? null
+                      : { remoteName: remote.remoteName, branch: remote.branch },
+                  );
+                  if (value !== null) setBranchQuery(value);
+                }}
+                inputValue={branchQuery}
+                onInputValueChange={(value) => {
+                  setBranchQuery(value);
+                  // Typing past a selection drops it, so submit never uses a
+                  // branch other than the one the field shows.
+                  if (selectedRefName !== null && value !== selectedRefName) {
+                    setSelectedRefName(null);
+                    chooseRemote(null);
+                  }
+                }}
+                disabled={project === null}
+              >
+                <ComboboxInput
+                  id={`${formId}-branch`}
+                  placeholder={
+                    project === null ? "Choose a project first" : "origin/feature-branch"
+                  }
+                  startAddon={<GitBranchIcon />}
+                />
+                <ComboboxPopup>
+                  <ComboboxEmpty>
+                    {refs.isPending
+                      ? "Fetching remote branches..."
+                      : (refs.error ?? "No matching remote branch.")}
+                  </ComboboxEmpty>
+                  <ComboboxList>
+                    {(name: string) => (
+                      <ComboboxItem key={name} value={name}>
+                        <span className="min-w-0 truncate">{name}</span>
+                      </ComboboxItem>
+                    )}
+                  </ComboboxList>
+                </ComboboxPopup>
+              </Combobox>
+              <p className="text-muted-foreground text-xs">
+                {chosenRemote !== null
+                  ? `Checks out ${chosenRemote.branch} tracking ${chosenRemote.remoteName}/${chosenRemote.branch}.`
+                  : "Pick a branch that already exists on the remote."}
+              </p>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor={`${formId}-description`}>Description (optional)</Label>
+              <Textarea
+                id={`${formId}-description`}
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+              />
+            </div>
+            <Label>
+              <Checkbox
+                checked={autoHandleReviewFeedback}
+                onCheckedChange={(checked) => setAutoHandleReviewFeedback(checked === true)}
+              />
+              Auto-handle review feedback
+            </Label>
+            {error !== null ? <p className="text-destructive text-xs">{error}</p> : null}
+          </form>
+        </DialogPanel>
+        <DialogFooter>
+          <Button type="button" variant="outline" size="sm" onClick={onClose} disabled={pending}>
+            Cancel
+          </Button>
+          <Button type="submit" form={formId} size="sm" disabled={!canSubmit}>
+            {pending ? <Spinner /> : null}
+            {pending ? "Creating..." : "Create task"}
+          </Button>
+        </DialogFooter>
+      </DialogPopup>
+    </Dialog>
+  );
+}
+
+const ARCHIVE_BLOCKER_COPY: Readonly<Record<TaskArchiveBlocker, string>> = {
+  "uncommitted-changes": "The workspace has uncommitted changes. They will be lost.",
+  "unpushed-commits": "Some commits were never pushed. They will be lost.",
+  "pull-request-open": "The pull request is still open.",
+  "agent-running": "An agent is still running. It will be stopped.",
+};
+
+function ArchiveTaskDialog({ taskRef, onClose }: { taskRef: ScopedTaskRef; onClose: () => void }) {
+  const task = useTask(taskRef.environmentId, taskRef.taskId);
+  const navigate = useNavigate();
+  const archiveCheck = useAtomCommand(taskEnvironment.archiveCheck, { reportFailure: false });
+  const archiveTask = useAtomCommand(taskEnvironment.archive, { reportFailure: false });
+  const [blockers, setBlockers] = useState<ReadonlyArray<TaskArchiveBlocker> | null>(null);
+  const [checking, setChecking] = useState(true);
+  const [checkError, setCheckError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // Only the latest check may settle the dialog; unmounting invalidates it too.
+  const checkIdRef = useRef(0);
+
+  const runCheck = useCallback(async () => {
+    const checkId = ++checkIdRef.current;
+    const result = await archiveCheck({
+      environmentId: taskRef.environmentId,
+      input: { taskId: taskRef.taskId },
+    });
+    if (checkId !== checkIdRef.current) return;
+    setChecking(false);
+    if (result._tag === "Success") {
+      setBlockers(result.value.blockers);
+      return;
+    }
+    setCheckError(
+      commandErrorMessage(result, "Could not check the workspace.") ??
+        "Could not check the workspace.",
+    );
+  }, [archiveCheck, taskRef.environmentId, taskRef.taskId]);
+
+  useEffect(() => {
+    void runCheck();
+    return () => {
+      checkIdRef.current += 1;
+    };
+  }, [runCheck]);
+
+  const retryCheck = () => {
+    setChecking(true);
+    setCheckError(null);
+    void runCheck();
+  };
+
+  const confirm = async () => {
+    if (blockers === null) return;
+    setPending(true);
+    setError(null);
+    const result = await archiveTask({
+      environmentId: taskRef.environmentId,
+      input: {
+        taskId: taskRef.taskId,
+        ...(blockers.length > 0 ? { force: true } : {}),
+      },
+    });
+    setPending(false);
+    if (result._tag === "Success") {
+      onClose();
+      // The open thread now belongs to an archived task and can no longer run
+      // turns. The Taskboard lists archived tasks; the task route would race the
+      // thread.archived shell events and redirect back to the stale thread.
+      await navigate({ to: "/taskboard" });
+      return;
+    }
+    // A blocker can appear between the check and the archive (an agent
+    // started); show it and ask again instead of archiving anyway.
+    const failure = squashAtomCommandFailure(result);
+    if (
+      typeof failure === "object" &&
+      failure !== null &&
+      "blockers" in failure &&
+      Array.isArray(failure.blockers)
+    ) {
+      setBlockers(failure.blockers as ReadonlyArray<TaskArchiveBlocker>);
+    }
+    setError(commandErrorMessage(result, "Could not archive the task."));
+  };
+
+  const hasBlockers = blockers !== null && blockers.length > 0;
+  return (
+    <Dialog open onOpenChange={(open) => (!open && !pending ? onClose() : undefined)}>
+      <DialogPopup className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Archive {task?.title ?? "task"}?</DialogTitle>
+          <DialogDescription>
+            Archiving stops the task's agents and removes its worktree. The remote branch is kept,
+            and the task's threads and pull request stay in its history.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogPanel>
+          {checking ? (
+            <p className="flex items-center gap-2 text-muted-foreground text-sm">
+              <Spinner />
+              Checking the workspace...
+            </p>
+          ) : null}
+          {!checking && checkError !== null ? (
+            <div className="flex items-center gap-2">
+              <p className="min-w-0 flex-1 text-destructive text-xs">{checkError}</p>
+              <Button type="button" size="xs" variant="outline" onClick={retryCheck}>
+                Retry check
+              </Button>
+            </div>
+          ) : null}
+          {hasBlockers ? (
+            <div className="flex flex-col gap-2">
+              <p className="text-sm">Before you archive:</p>
+              <ul className="flex list-disc flex-col gap-1 ps-5 text-sm text-warning-foreground">
+                {blockers.map((blocker) => (
+                  <li key={blocker}>{ARCHIVE_BLOCKER_COPY[blocker]}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {error !== null ? <p className="text-destructive text-xs">{error}</p> : null}
+        </DialogPanel>
+        <DialogFooter>
+          <Button type="button" variant="outline" size="sm" onClick={onClose} disabled={pending}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="destructive"
+            disabled={pending || checking || blockers === null}
+            onClick={() => void confirm()}
+          >
+            {pending ? <Spinner /> : null}
+            {hasBlockers ? "Archive anyway" : "Archive task"}
+          </Button>
+        </DialogFooter>
+      </DialogPopup>
+    </Dialog>
+  );
+}
+
+function WaitingReasonDialog({
+  taskRef,
+  onClose,
+}: {
+  taskRef: ScopedTaskRef;
+  onClose: () => void;
+}) {
+  const task = useTask(taskRef.environmentId, taskRef.taskId);
+  const updateTask = useAtomCommand(taskEnvironment.updateMetadata, { reportFailure: false });
+  const [reason, setReason] = useState(task?.waitingForUserReason ?? "");
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async () => {
+    const trimmed = reason.trim();
+    if (pending || trimmed.length === 0) return;
+    setPending(true);
+    setError(null);
+    const result = await updateTask({
+      environmentId: taskRef.environmentId,
+      input: { taskId: taskRef.taskId, waitingForUserReason: trimmed },
+    });
+    setPending(false);
+    if (result._tag === "Success") {
+      onClose();
+      return;
+    }
+    setError(commandErrorMessage(result, "Could not update the task."));
+  };
+
+  return (
+    <Dialog open onOpenChange={(open) => (!open && !pending ? onClose() : undefined)}>
+      <DialogPopup className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Mark waiting for user</DialogTitle>
+          <DialogDescription>
+            The task shows as waiting for you, with this reason, until you clear it.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogPanel>
+          <Input
+            autoFocus
+            aria-label="Reason"
+            placeholder="Needs a product decision on the empty state"
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter") return;
+              event.preventDefault();
+              void submit();
+            }}
+          />
+          {error !== null ? <p className="text-destructive text-xs">{error}</p> : null}
+        </DialogPanel>
+        <DialogFooter>
+          <Button type="button" variant="outline" size="sm" onClick={onClose} disabled={pending}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            disabled={pending || reason.trim().length === 0}
+            onClick={() => void submit()}
+          >
+            {pending ? <Spinner /> : null}
+            Mark waiting
+          </Button>
+        </DialogFooter>
+      </DialogPopup>
+    </Dialog>
+  );
+}

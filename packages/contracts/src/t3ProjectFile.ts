@@ -13,6 +13,7 @@ export const T3_PROJECT_FILE_SCHEMA_URL = "https://t3.codes/schema/t3.json";
 
 const T3_PROJECT_FILE_PATH_MAX_LENGTH = 512;
 const T3_PROJECT_FILE_MAX_SCRIPTS = 50;
+const T3_PROJECT_FILE_MAX_WORKSPACE_COPY_RULES = 50;
 
 // Annotations go on the encoded (string) side so they survive into the
 // published JSON Schema; decoding still trims and re-validates non-emptiness.
@@ -66,6 +67,53 @@ export const T3ProjectFileScript = Schema.Struct({
 });
 export type T3ProjectFileScript = typeof T3ProjectFileScript.Type;
 
+export const T3ProjectFileWorkspaceCopyRule = Schema.Struct({
+  from: trimmedNonEmpty(
+    {
+      description:
+        'Path relative to the main checkout to copy into each new task workspace (e.g. ".env.local"). Files and directories are both supported.',
+    },
+    T3_PROJECT_FILE_PATH_MAX_LENGTH,
+  ),
+  to: Schema.optionalKey(
+    trimmedNonEmpty(
+      {
+        description: "Destination path relative to the workspace. Defaults to `from`.",
+      },
+      T3_PROJECT_FILE_PATH_MAX_LENGTH,
+    ),
+  ),
+  required: Schema.optionalKey(
+    Schema.Boolean.annotate({
+      description:
+        "When true, workspace setup fails if the source is missing. Defaults to false, which skips missing sources.",
+    }),
+  ),
+  overwrite: Schema.optionalKey(
+    Schema.Boolean.annotate({
+      description:
+        "When true, replaces a destination that already exists. Defaults to false, which keeps it.",
+    }),
+  ),
+}).annotate({
+  description: "A file or directory copied from the main checkout into a new task workspace.",
+});
+export type T3ProjectFileWorkspaceCopyRule = typeof T3ProjectFileWorkspaceCopyRule.Type;
+
+export const T3ProjectFileWorkspace = Schema.Struct({
+  copy: Schema.optionalKey(
+    Schema.Array(T3ProjectFileWorkspaceCopyRule)
+      .annotate({
+        description:
+          "Untracked files (such as local env files) copied into each new task workspace before its setup scripts run.",
+      })
+      .check(Schema.isMaxLength(T3_PROJECT_FILE_MAX_WORKSPACE_COPY_RULES)),
+  ),
+}).annotate({
+  description: "How T3 Code prepares task workspaces for this repository.",
+});
+export type T3ProjectFileWorkspace = typeof T3ProjectFileWorkspace.Type;
+
 export const T3ProjectFile = Schema.Struct({
   $schema: Schema.optionalKey(
     Schema.String.annotate({
@@ -100,6 +148,7 @@ export const T3ProjectFile = Schema.Struct({
       })
       .check(Schema.isMaxLength(T3_PROJECT_FILE_MAX_SCRIPTS)),
   ),
+  workspace: Schema.optionalKey(T3ProjectFileWorkspace),
 }).annotate({
   title: "T3 project file",
   description:

@@ -78,6 +78,21 @@ export function useThreadShells(): ReadonlyArray<EnvironmentThreadShell> {
   return useAtomValue(environmentThreadShells.threadShellsAtom);
 }
 
+/** Threads outside tasks; returns the input itself when no thread belongs to a task. */
+export function withoutTaskThreads<T extends { readonly taskId?: unknown }>(
+  threads: ReadonlyArray<T>,
+): ReadonlyArray<T> {
+  return threads.some((thread) => thread.taskId != null)
+    ? threads.filter((thread) => thread.taskId == null)
+    : threads;
+}
+
+/** Threads the thread lists show: task threads live under their task instead. */
+export function useNonTaskThreadShells(): ReadonlyArray<EnvironmentThreadShell> {
+  const threads = useThreadShells();
+  return useMemo(() => withoutTaskThreads(threads), [threads]);
+}
+
 export function useAllEnvironmentShellsBootstrapped(): boolean {
   return useAtomValue(allEnvironmentShellsBootstrappedAtom);
 }
@@ -181,6 +196,35 @@ export function waitForProject(
 
 export function readThreadShell(ref: ScopedThreadRef): EnvironmentThreadShell | null {
   return appAtomRegistry.get(environmentThreadShells.threadShellAtom(ref));
+}
+
+/**
+ * Resolves when a server-created thread reaches the live client store, or,
+ * with `until`, once its shell satisfies it.
+ */
+export function waitForThreadShell(
+  ref: ScopedThreadRef,
+  timeoutMs = 10_000,
+  until: (thread: EnvironmentThreadShell) => boolean = () => true,
+): Promise<EnvironmentThreadShell> {
+  const current = readThreadShell(ref);
+  if (current !== null && until(current)) return Promise.resolve(current);
+
+  return new Promise((resolve, reject) => {
+    let unsubscribe: (() => void) | null = null;
+    const timeout = setTimeout(() => {
+      unsubscribe?.();
+      reject(new Error("The thread did not appear in time."));
+    }, timeoutMs);
+    const finish = (thread: EnvironmentThreadShell | null) => {
+      if (thread === null || !until(thread)) return;
+      clearTimeout(timeout);
+      unsubscribe?.();
+      resolve(thread);
+    };
+    unsubscribe = appAtomRegistry.subscribe(environmentThreadShells.threadShellAtom(ref), finish);
+    finish(readThreadShell(ref));
+  });
 }
 
 /** The thread as `useThread` returns it, read outside React. */

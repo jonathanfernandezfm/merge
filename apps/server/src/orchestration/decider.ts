@@ -39,10 +39,13 @@ import {
   requireActiveProjectWorkspaceRootAbsent,
   requireProject,
   requireProjectAbsent,
+  requireTaskAbsent,
+  requireTaskNotArchived,
   requireThread,
   requireThreadArchived,
   requireThreadAbsent,
   requireThreadNotArchived,
+  requireThreadTaskNotArchived,
 } from "./commandInvariants.ts";
 import { projectEvent } from "./projector.ts";
 import { threadHasQueuedTurnStart } from "./ThreadSettlementPolicy.ts";
@@ -386,6 +389,19 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         command,
         threadId: command.threadId,
       });
+      if (command.taskId !== undefined && command.taskId !== null) {
+        const task = yield* requireTaskNotArchived({
+          readModel,
+          command,
+          taskId: command.taskId,
+        });
+        if (task.projectId !== command.projectId) {
+          return yield* new OrchestrationCommandInvariantError({
+            commandType: command.type,
+            detail: `Task '${task.id}' belongs to project '${task.projectId}', not '${command.projectId}'.`,
+          });
+        }
+      }
       return {
         ...(yield* withEventBase({
           aggregateKind: "thread",
@@ -404,6 +420,12 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           interactionMode: command.interactionMode,
           branch: command.branch,
           worktreePath: command.worktreePath,
+          ...(command.taskId !== undefined && command.taskId !== null
+            ? { taskId: command.taskId }
+            : {}),
+          ...(command.origin !== undefined && command.origin !== null
+            ? { origin: command.origin }
+            : {}),
           createdAt: command.createdAt,
           updatedAt: command.createdAt,
         },
@@ -456,11 +478,12 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
     }
 
     case "thread.unarchive": {
-      yield* requireThreadArchived({
+      const thread = yield* requireThreadArchived({
         readModel,
         command,
         threadId: command.threadId,
       });
+      yield* requireThreadTaskNotArchived({ readModel, command, thread });
       const occurredAt = yield* nowIso;
       return {
         ...(yield* withEventBase({
@@ -1399,6 +1422,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         command,
         threadId: command.threadId,
       });
+      yield* requireThreadTaskNotArchived({ readModel, command, thread: targetThread });
       const sourceProposedPlan = command.sourceProposedPlan;
       const sourceThread = sourceProposedPlan
         ? yield* requireThread({
@@ -2212,6 +2236,108 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         },
       };
       return [unsettledEvent, activityAppendedEvent];
+    }
+
+    case "task.create": {
+      yield* requireProject({
+        readModel,
+        command,
+        projectId: command.projectId,
+      });
+      yield* requireTaskAbsent({
+        readModel,
+        command,
+        taskId: command.taskId,
+      });
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "task",
+          aggregateId: command.taskId,
+          occurredAt: command.createdAt,
+          commandId: command.commandId,
+        })),
+        type: "task.created",
+        payload: {
+          taskId: command.taskId,
+          projectId: command.projectId,
+          title: command.title,
+          description: command.description,
+          workspace: command.workspace,
+          autoHandleReviewFeedback: command.autoHandleReviewFeedback,
+          autoHandleCIFailures: command.autoHandleCIFailures,
+          createdAt: command.createdAt,
+          updatedAt: command.createdAt,
+        },
+      };
+    }
+
+    case "task.meta.update":
+    case "task.sync": {
+      yield* requireTaskNotArchived({
+        readModel,
+        command,
+        taskId: command.taskId,
+      });
+      const occurredAt = yield* nowIso;
+      // Both commands emit the same patch event; only task.sync may carry
+      // server-observed workspace, pull request and merge state.
+      const patch =
+        command.type === "task.meta.update"
+          ? {
+              ...(command.title !== undefined ? { title: command.title } : {}),
+              ...(command.description !== undefined ? { description: command.description } : {}),
+              ...(command.autoHandleReviewFeedback !== undefined
+                ? { autoHandleReviewFeedback: command.autoHandleReviewFeedback }
+                : {}),
+              ...(command.autoHandleCIFailures !== undefined
+                ? { autoHandleCIFailures: command.autoHandleCIFailures }
+                : {}),
+            }
+          : {
+              ...(command.workspace !== undefined ? { workspace: command.workspace } : {}),
+              ...(command.pullRequest !== undefined ? { pullRequest: command.pullRequest } : {}),
+              ...(command.mergedAt !== undefined ? { mergedAt: command.mergedAt } : {}),
+            };
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "task",
+          aggregateId: command.taskId,
+          occurredAt,
+          commandId: command.commandId,
+        })),
+        type: "task.meta-updated",
+        payload: {
+          taskId: command.taskId,
+          ...patch,
+          ...(command.waitingForUserReason !== undefined
+            ? { waitingForUserReason: command.waitingForUserReason }
+            : {}),
+          updatedAt: occurredAt,
+        },
+      };
+    }
+
+    case "task.archive": {
+      yield* requireTaskNotArchived({
+        readModel,
+        command,
+        taskId: command.taskId,
+      });
+      const occurredAt = yield* nowIso;
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "task",
+          aggregateId: command.taskId,
+          occurredAt,
+          commandId: command.commandId,
+        })),
+        type: "task.archived",
+        payload: {
+          taskId: command.taskId,
+          archivedAt: occurredAt,
+          updatedAt: occurredAt,
+        },
+      };
     }
 
     default: {

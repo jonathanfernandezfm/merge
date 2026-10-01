@@ -19,12 +19,15 @@ import type {
   OrchestrationSearchThreadsInput,
   OrchestrationSearchThreadsResult,
   OrchestrationShellSnapshot,
+  OrchestrationTask,
+  OrchestrationTaskShell,
   OrchestrationThread,
   OrchestrationThreadActivity,
   OrchestrationThreadDetailSnapshot,
   OrchestrationThreadDetailWindow,
   OrchestrationThreadShell,
   ProjectId,
+  TaskId,
   ThreadId,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
@@ -250,6 +253,21 @@ export interface ProjectionSnapshotQueryShape {
   readonly getThreadShellById: (
     threadId: ThreadId,
   ) => Effect.Effect<Option.Option<OrchestrationThreadShell>, ProjectionRepositoryError>;
+
+  /**
+   * Read a task by id in any state, archived included.
+   */
+  readonly getTaskById: (
+    taskId: TaskId,
+  ) => Effect.Effect<Option.Option<OrchestrationTask>, ProjectionRepositoryError>;
+
+  /**
+   * Read a single task shell by id, archived included (not deleted). Like the
+   * shell snapshot, it omits the setup logs of steps that did not fail.
+   */
+  readonly getTaskShellById: (
+    taskId: TaskId,
+  ) => Effect.Effect<Option.Option<OrchestrationTaskShell>, ProjectionRepositoryError>;
 
   /** Read the active thread and session facts used to ingest provider events. */
   readonly getThreadRuntimeContext: (

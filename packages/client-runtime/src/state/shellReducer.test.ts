@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { ProjectId, ProviderInstanceId, ThreadId } from "@t3tools/contracts";
-import type { OrchestrationShellSnapshot, OrchestrationShellStreamEvent } from "@t3tools/contracts";
+import { ProjectId, ProviderInstanceId, TaskId, ThreadId } from "@t3tools/contracts";
+import type {
+  OrchestrationShellSnapshot,
+  OrchestrationShellStreamEvent,
+  OrchestrationTaskShell,
+} from "@t3tools/contracts";
 
 import { applyShellStreamEvent } from "./shellReducer.ts";
 
@@ -182,5 +186,53 @@ describe("applyShellStreamEvent", () => {
     const unknownEvent = { kind: "unknown-future-event", sequence: 99 } as any;
     const next = applyShellStreamEvent(baseSnapshot, unknownEvent);
     expect(next).toBe(baseSnapshot);
+  });
+
+  it("upserts and removes tasks, starting from snapshots without tasks", () => {
+    const task: OrchestrationTaskShell = {
+      id: TaskId.make("task-1"),
+      projectId: ProjectId.make("project-1"),
+      title: "Widgets",
+      description: null,
+      workspace: {
+        path: null,
+        branch: "feature/widgets",
+        remoteName: "origin",
+        remoteBranch: "feature/widgets",
+        baseBranch: null,
+        setup: { status: "pending", steps: [], error: null, updatedAt: "2026-04-01T00:00:00.000Z" },
+      },
+      pullRequest: null,
+      autoHandleReviewFeedback: true,
+      autoHandleCIFailures: false,
+      waitingForUserReason: null,
+      createdAt: "2026-04-01T00:00:00.000Z",
+      updatedAt: "2026-04-01T00:00:00.000Z",
+      mergedAt: null,
+      archivedAt: null,
+      deletedAt: null,
+    };
+
+    const created = applyShellStreamEvent(baseSnapshot, {
+      kind: "task-upserted",
+      sequence: 1,
+      task,
+    });
+    expect(created.tasks).toEqual([task]);
+
+    const renamed = applyShellStreamEvent(created, {
+      kind: "task-upserted",
+      sequence: 2,
+      task: { ...task, title: "Better widgets" },
+    });
+    expect(renamed.tasks?.map((entry) => entry.title)).toEqual(["Better widgets"]);
+
+    const removed = applyShellStreamEvent(renamed, {
+      kind: "task-removed",
+      sequence: 3,
+      taskId: task.id,
+    });
+    expect(removed.tasks).toEqual([]);
+    expect(removed.snapshotSequence).toBe(3);
   });
 });

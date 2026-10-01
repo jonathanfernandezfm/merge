@@ -1,0 +1,235 @@
+{
+  "count": 5,
+  "continuation_token": null,
+  "value": [
+    {
+      "id": 101,
+      "publishedDate": "2026-07-01T09:12:50.000Z",
+      "lastUpdatedDate": "2026-07-01T09:12:50.000Z",
+      "comments": [
+        {
+          "id": 1,
+          "parentCommentId": 0,
+          "author": {
+            "displayName": "Microsoft.VisualStudio.Services.TFS",
+            "id": "00000002-0000-8888-8000-000000000000",
+            "uniqueName": "00000002-0000-8888-8000-000000000000@2c895908-04e0-4952-89fd-54b0046d6288"
+          },
+          "content": "Bilal Hassan updated the pull request status to Active",
+          "publishedDate": "2026-07-01T09:12:50.000Z",
+          "lastUpdatedDate": "2026-07-01T09:12:50.000Z",
+          "lastContentUpdatedDate": "2026-07-01T09:12:50.000Z",
+          "commentType": "system",
+          "usersLiked": []
+        }
+      ],
+      "status": null,
+      "threadContext": null,
+      "properties": {
+        "CodeReviewThreadType": { "$type": "System.String", "$value": "StatusUpdate" }
+      },
+      "identities": null,
+      "isDeleted": false,
+      "_links": {}
+    },
+    {
+      "id": 102,
+      "publishedDate": "2026-07-02T10:00:00.000Z",
+      "lastUpdatedDate": "2026-07-02T11:30:00.000Z",
+      "comments": [
+        {
+          "id": 1,
+          "parentCommentId": 0,
+          "author": {
+            "displayName": "Sarah Lin",
+            "id": "5a6b7c8d-5555-4e9f-8a0b-1c2d3e4f5a6b",
+            "uniqueName": "sarah@acme.dev"
+          },
+          "content": "This drops the inherited permissions. Please merge them before checking.",
+          "publishedDate": "2026-07-02T10:00:00.000Z",
+          "lastUpdatedDate": "2026-07-02T10:00:00.000Z",
+          "lastContentUpdatedDate": "2026-07-02T10:00:00.000Z",
+          "commentType": "text",
+          "usersLiked": []
+        },
+        {
+          "id": 2,
+          "parentCommentId": 1,
+          "author": {
+            "displayName": "Bilal Hassan",
+            "id": "745f37ec-b682-66b4-a878-d14b3f647dca",
+            "uniqueName": "Bilal@Acme.dev"
+          },
+          "content": "Good catch, looking.",
+          "publishedDate": "2026-07-02T11:30:00.000Z",
+          "lastUpdatedDate": "2026-07-02T11:30:00.000Z",
+          "lastContentUpdatedDate": "2026-07-02T11:30:00.000Z",
+          "commentType": "text",
+          "usersLiked": []
+        }
+      ],
+      "status": "active",
+      "threadContext": {
+        "filePath": "/src/PermissionService.ts",
+        "rightFileStart": { "line": 184, "offset": 5 },
+        "rightFileEnd": { "line": 184, "offset": 42 },
+        "leftFileStart": null,
+        "leftFileEnd": null
+      },
+      "pullRequestThreadContext": {
+        "iterationContext": { "firstComparingIteration": 1, "secondComparingIteration": 2 },
+        "changeTrackingId": 3
+      },
+      "properties": {},
+      "identities": null,
+      "isDeleted": false,
+      "_links": {}
+    },
+    {
+      "id": 103,
+      "publishedDate": "2026-07-02T10:05:00.000Z",
+      "lastUpdatedDate": "2026-07-02T12:00:00.000Z",
+      "comments": [
+        {
+          "id": 1,
+          "parentCommentId": 0,
+          "author": {
+            "displayName": "Julius Marminge",
+            "id": "0c1d2e3f-4444-4a5b-8c9d-0e1f2a3b4c5d",
+            "uniqueName": "julius@acme.dev"
+          },
+          "content": "Nit: this import is unused.",
+          "publishedDate": "2026-07-02T10:05:00.000Z",
+          "lastUpdatedDate": "2026-07-02T10:05:00.000Z",
+          "lastContentUpdatedDate": "2026-07-02T10:05:00.000Z",
+          "commentType": "text",
+          "usersLiked": []
+        },
+        {
+          "id": 2,
+          "parentCommentId": 1,
+          "author": {
+            "displayName": "Julius Marminge",
+            "id": "0c1d2e3f-4444-4a5b-8c9d-0e1f2a3b4c5d",
+            "uniqueName": "julius@acme.dev"
+          },
+          "content": "Never mind, it is fine now.",
+          "publishedDate": "2026-07-02T12:00:00.000Z",
+          "lastUpdatedDate": "2026-07-02T12:00:00.000Z",
+          "lastContentUpdatedDate": "2026-07-02T12:00:00.000Z",
+          "commentType": "text",
+          "usersLiked": []
+        }
+      ],
+      "status": "fixed",
+      "threadContext": {
+        "filePath": "/src/PermissionService.ts",
+        "rightFileStart": { "line": 3, "offset": 1 },
+        "rightFileEnd": { "line": 3, "offset": 40 },
+        "leftFileStart": null,
+        "leftFileEnd": null
+      },
+      "properties": {},
+      "identities": null,
+      "isDeleted": false,
+      "_links": {}
+    },
+    {
+      "id": 104,
+      "publishedDate": "2026-07-02T13:00:00.000Z",
+      "lastUpdatedDate": "2026-07-02T13:30:00.000Z",
+      "comments": [
+        {
+          "id": 1,
+          "parentCommentId": 0,
+          "author": {
+            "displayName": "Sarah Lin",
+            "id": "5a6b7c8d-5555-4e9f-8a0b-1c2d3e4f5a6b",
+            "uniqueName": "sarah@acme.dev"
+          },
+          "content": "Can we split the migration into its own PR?",
+          "publishedDate": "2026-07-02T13:00:00.000Z",
+          "lastUpdatedDate": "2026-07-02T13:00:00.000Z",
+          "lastContentUpdatedDate": "2026-07-02T13:00:00.000Z",
+          "commentType": "text",
+          "usersLiked": []
+        }
+      ],
+      "status": "wontFix",
+      "threadContext": null,
+      "properties": {},
+      "identities": null,
+      "isDeleted": false,
+      "_links": {}
+    },
+    {
+      "id": 105,
+      "publishedDate": "2026-07-02T14:00:00.000Z",
+      "lastUpdatedDate": "2026-07-02T14:00:00.000Z",
+      "comments": [
+        {
+          "id": 1,
+          "parentCommentId": 0,
+          "author": {
+            "displayName": "Sarah Lin",
+            "id": "5a6b7c8d-5555-4e9f-8a0b-1c2d3e4f5a6b",
+            "uniqueName": "sarah@acme.dev"
+          },
+          "content": "This removed check was load-bearing.",
+          "publishedDate": "2026-07-02T14:00:00.000Z",
+          "lastUpdatedDate": "2026-07-02T14:00:00.000Z",
+          "lastContentUpdatedDate": "2026-07-02T14:00:00.000Z",
+          "commentType": "text",
+          "isDeleted": true,
+          "usersLiked": []
+        }
+      ],
+      "status": "active",
+      "threadContext": {
+        "filePath": "/src/legacy.ts",
+        "rightFileStart": null,
+        "rightFileEnd": null,
+        "leftFileStart": { "line": 27, "offset": 1 },
+        "leftFileEnd": { "line": 27, "offset": 30 }
+      },
+      "properties": {},
+      "identities": null,
+      "isDeleted": false,
+      "_links": {}
+    },
+    {
+      "id": 106,
+      "publishedDate": "2026-07-02T15:00:00.000Z",
+      "lastUpdatedDate": "2026-07-02T15:00:00.000Z",
+      "comments": [
+        {
+          "id": 1,
+          "parentCommentId": 0,
+          "author": {
+            "displayName": "Sarah Lin",
+            "id": "5a6b7c8d-5555-4e9f-8a0b-1c2d3e4f5a6b",
+            "uniqueName": "sarah@acme.dev"
+          },
+          "content": "Why was this branch removed?",
+          "publishedDate": "2026-07-02T15:00:00.000Z",
+          "lastUpdatedDate": "2026-07-02T15:00:00.000Z",
+          "lastContentUpdatedDate": "2026-07-02T15:00:00.000Z",
+          "commentType": "text",
+          "usersLiked": []
+        }
+      ],
+      "status": "pending",
+      "threadContext": {
+        "filePath": "/src/legacy.ts",
+        "rightFileStart": null,
+        "rightFileEnd": null,
+        "leftFileStart": { "line": 31, "offset": 1 },
+        "leftFileEnd": { "line": 31, "offset": 20 }
+      },
+      "properties": {},
+      "identities": null,
+      "isDeleted": false,
+      "_links": {}
+    }
+  ]
+}

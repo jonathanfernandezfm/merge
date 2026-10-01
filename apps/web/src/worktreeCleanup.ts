@@ -9,11 +9,13 @@ function normalizeWorktreePath(path: string | null): string | null {
 }
 
 export function getOrphanedWorktreePathForThread(
-  threads: ReadonlyArray<Pick<ThreadShell, "id" | "worktreePath">>,
+  threads: ReadonlyArray<Pick<ThreadShell, "id" | "worktreePath" | "taskId">>,
   threadId: ThreadShell["id"],
 ): string | null {
   const targetThread = threads.find((thread) => thread.id === threadId);
-  if (!targetThread) {
+  // A task owns its worktree: only archiving the task removes it, so deleting
+  // even its last thread never offers removal.
+  if (!targetThread || targetThread.taskId != null) {
     return null;
   }
 

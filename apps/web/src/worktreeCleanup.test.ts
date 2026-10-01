@@ -1,4 +1,4 @@
-import { EnvironmentId, ProjectId, ProviderInstanceId, ThreadId } from "@t3tools/contracts";
+import { EnvironmentId, ProjectId, ProviderInstanceId, TaskId, ThreadId } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import { DEFAULT_INTERACTION_MODE, DEFAULT_RUNTIME_MODE, type Thread } from "./types";
@@ -38,6 +38,15 @@ function makeThread(overrides: Partial<Thread> = {}): Thread {
 }
 
 describe("getOrphanedWorktreePathForThread", () => {
+  it("never offers to remove a task's worktree, even from its last thread", () => {
+    const threadId = ThreadId.make("thread-task");
+    const threads = [
+      makeThread({ id: threadId, taskId: TaskId.make("task-1"), worktreePath: "/tmp/task-wt" }),
+    ];
+
+    expect(getOrphanedWorktreePathForThread(threads, threadId)).toBeNull();
+  });
+
   it("returns null when the target thread does not exist", () => {
     const result = getOrphanedWorktreePathForThread([], ThreadId.make("missing-thread"));
     expect(result).toBeNull();

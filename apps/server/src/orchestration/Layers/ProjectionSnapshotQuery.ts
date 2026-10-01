@@ -13,6 +13,8 @@ import {
   OrchestrationReadModel,
   OrchestrationThreadSearchSource,
   type OrchestrationShellSnapshot,
+  type OrchestrationTask,
+  type OrchestrationTaskShell,
   OrchestrationThread,
   OrchestrationThreadDetailSnapshot,
   ProjectScript,
@@ -61,6 +63,7 @@ import { ProjectionThreadActivity } from "../../persistence/Services/ProjectionT
 import { ProjectionThreadMessage } from "../../persistence/Services/ProjectionThreadMessages.ts";
 import { ProjectionThreadProposedPlan } from "../../persistence/Services/ProjectionThreadProposedPlans.ts";
 import { ProjectionThreadPullRequest } from "../../persistence/ProjectionThreadPullRequests.ts";
+import * as ProjectionTasks from "../../persistence/ProjectionTasks.ts";
 import { ProjectionThreadSession } from "../../persistence/Services/ProjectionThreadSessions.ts";
 import { ProjectionThread } from "../../persistence/Services/ProjectionThreads.ts";
 import {
@@ -80,6 +83,27 @@ import {
   type ProjectionThreadPullRequests,
   type ProjectionSnapshotQueryShape,
 } from "../Services/ProjectionSnapshotQuery.ts";
+
+/**
+ * The shell carries a task without the setup logs of steps that did not fail:
+ * clients only show the log of a failed step, and every other log is a capped
+ * install transcript nobody reads off the shell.
+ */
+export const toTaskShell = (task: OrchestrationTask): OrchestrationTaskShell =>
+  task.workspace.setup.steps.some((step) => step.log !== null && step.status !== "failed")
+    ? {
+        ...task,
+        workspace: {
+          ...task.workspace,
+          setup: {
+            ...task.workspace.setup,
+            steps: task.workspace.setup.steps.map((step) =>
+              step.log === null || step.status === "failed" ? step : { ...step, log: null },
+            ),
+          },
+        },
+      }
+    : task;
 
 const decodeReadModel = Schema.decodeUnknownEffect(OrchestrationReadModel);
 const decodeThread = Schema.decodeUnknownEffect(OrchestrationThread);
@@ -495,6 +519,8 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
   const threadBackgroundLiveness = yield* ThreadBackgroundLivenessService;
   const threadPlanProgress = yield* ThreadPlanProgressService;
   const sql = yield* SqlClient.SqlClient;
+  // Read-only use of the task repository; it shares this SqlClient.
+  const projectionTasks = yield* ProjectionTasks.make;
   const repositoryIdentityResolver = yield* RepositoryIdentityResolver.RepositoryIdentityResolver;
   const repositoryIdentityResolutionConcurrency = 4;
   const resolveRepositoryIdentitiesForProjects = Effect.fn(
@@ -574,6 +600,8 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           interaction_mode AS "interactionMode",
           branch,
           worktree_path AS "worktreePath",
+          task_id AS "taskId",
+          origin,
           linked_pull_request_json AS "linkedPullRequest",
           branch_pull_request_json AS "branchPullRequest",
           latest_turn_id AS "latestTurnId",
@@ -622,6 +650,8 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           interaction_mode AS "interactionMode",
           branch,
           worktree_path AS "worktreePath",
+          task_id AS "taskId",
+          origin,
           linked_pull_request_json AS "linkedPullRequest",
           branch_pull_request_json AS "branchPullRequest",
           latest_turn_id AS "latestTurnId",
@@ -697,6 +727,8 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           interaction_mode AS "interactionMode",
           branch,
           worktree_path AS "worktreePath",
+          task_id AS "taskId",
+          origin,
           linked_pull_request_json AS "linkedPullRequest",
           branch_pull_request_json AS "branchPullRequest",
           latest_turn_id AS "latestTurnId",
@@ -1301,6 +1333,8 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           interaction_mode AS "interactionMode",
           branch,
           worktree_path AS "worktreePath",
+          task_id AS "taskId",
+          origin,
           linked_pull_request_json AS "linkedPullRequest",
           branch_pull_request_json AS "branchPullRequest",
           latest_turn_id AS "latestTurnId",
@@ -2191,6 +2225,7 @@ pending_approval_requests AS (
               ),
             ),
           ),
+          projectionTasks.listAll(),
         ]),
       )
       .pipe(
@@ -2206,6 +2241,7 @@ pending_approval_requests AS (
             checkpointRows,
             latestTurnRows,
             stateRows,
+            tasks,
           ]) =>
             Effect.gen(function* () {
               const messagesByThread = new Map<string, Array<OrchestrationMessage>>();
@@ -2373,6 +2409,9 @@ pending_approval_requests AS (
                 interactionMode: row.interactionMode,
                 branch: row.branch,
                 worktreePath: row.worktreePath,
+                // Omitted unless set, so threads outside tasks cost nothing on the wire.
+                ...(row.taskId != null ? { taskId: row.taskId } : {}),
+                ...(row.origin != null ? { origin: row.origin } : {}),
                 ...mapThreadPullRequests(
                   pullRequestsByThread.get(row.threadId) ?? [],
                   row.projectId,
@@ -2406,6 +2445,7 @@ pending_approval_requests AS (
                 snapshotSequence: computeSnapshotSequence(stateRows),
                 projects,
                 threads,
+                tasks,
                 updatedAt: updatedAt ?? "1970-01-01T00:00:00.000Z",
               };
 
@@ -2484,6 +2524,7 @@ pending_approval_requests AS (
               ),
             ),
           ),
+          projectionTasks.listAll(),
         ]),
       )
       .pipe(
@@ -2496,6 +2537,7 @@ pending_approval_requests AS (
             sessionRows,
             latestTurnRows,
             stateRows,
+            tasks,
           ]) =>
             Effect.gen(function* () {
               const linkedThreadIds = new Set(pullRequestRows.map((row) => row.threadId));
@@ -2619,6 +2661,8 @@ pending_approval_requests AS (
                   interactionMode: row.interactionMode,
                   branch: row.branch,
                   worktreePath: row.worktreePath,
+                  ...(row.taskId != null ? { taskId: row.taskId } : {}),
+                  ...(row.origin != null ? { origin: row.origin } : {}),
                   ...mapThreadPullRequests(
                     pullRequestsByThread.get(row.threadId) ?? [],
                     row.projectId,
@@ -2653,6 +2697,7 @@ pending_approval_requests AS (
                 snapshotSequence: computeSnapshotSequence(stateRows),
                 projects,
                 threads,
+                tasks,
                 updatedAt: updatedAt ?? "1970-01-01T00:00:00.000Z",
               } satisfies OrchestrationReadModel;
             }),
@@ -2718,11 +2763,21 @@ pending_approval_requests AS (
               ),
             ),
           ),
+          // Archived tasks stay visible as history; only deleted ones leave the shell.
+          projectionTasks.listAll(),
         ]),
       )
       .pipe(
         Effect.flatMap(
-          ([projectRows, threadRows, sessionRows, pullRequestRows, latestTurnRows, stateRows]) =>
+          ([
+            projectRows,
+            threadRows,
+            sessionRows,
+            pullRequestRows,
+            latestTurnRows,
+            stateRows,
+            tasks,
+          ]) =>
             Effect.gen(function* () {
               let updatedAt: string | null = null;
               for (const row of projectRows) {
@@ -2780,6 +2835,8 @@ pending_approval_requests AS (
                         interactionMode: row.interactionMode,
                         branch: row.branch,
                         worktreePath: row.worktreePath,
+                        ...(row.taskId != null ? { taskId: row.taskId } : {}),
+                        ...(row.origin != null ? { origin: row.origin } : {}),
                         branchPullRequest: row.branchPullRequest,
                         ...mapThreadPullRequests(
                           pullRequestsByThread.get(row.threadId) ?? [],
@@ -2813,6 +2870,7 @@ pending_approval_requests AS (
                       } satisfies OrchestrationThreadShell)
                     : Result.failVoid,
                 ),
+                tasks: tasks.filter((task) => task.deletedAt === null).map(toTaskShell),
                 updatedAt: updatedAt ?? "1970-01-01T00:00:00.000Z",
               } satisfies OrchestrationShellSnapshot;
             }),
@@ -2966,6 +3024,8 @@ pending_approval_requests AS (
                   interactionMode: row.interactionMode,
                   branch: row.branch,
                   worktreePath: row.worktreePath,
+                  ...(row.taskId != null ? { taskId: row.taskId } : {}),
+                  ...(row.origin != null ? { origin: row.origin } : {}),
                   branchPullRequest: row.branchPullRequest,
                   ...mapThreadPullRequests(
                     pullRequestsByThread.get(row.threadId) ?? [],
@@ -3312,6 +3372,8 @@ pending_approval_requests AS (
         interactionMode: threadRow.value.interactionMode,
         branch: threadRow.value.branch,
         worktreePath: threadRow.value.worktreePath,
+        ...(threadRow.value.taskId != null ? { taskId: threadRow.value.taskId } : {}),
+        ...(threadRow.value.origin != null ? { origin: threadRow.value.origin } : {}),
         ...mapThreadPullRequests(
           pullRequestRows.map(mapPullRequestRow),
           threadRow.value.projectId,
@@ -3614,6 +3676,8 @@ pending_approval_requests AS (
         interactionMode: threadRow.value.interactionMode,
         branch: threadRow.value.branch,
         worktreePath: threadRow.value.worktreePath,
+        ...(threadRow.value.taskId != null ? { taskId: threadRow.value.taskId } : {}),
+        ...(threadRow.value.origin != null ? { origin: threadRow.value.origin } : {}),
         ...mapThreadPullRequests(
           pullRequestRows.map(mapPullRequestRow),
           threadRow.value.projectId,
@@ -3836,6 +3900,17 @@ pending_approval_requests AS (
         ),
       );
 
+  const getTaskById: ProjectionSnapshotQueryShape["getTaskById"] = (taskId) =>
+    projectionTasks.getById({ taskId });
+
+  const getTaskShellById: ProjectionSnapshotQueryShape["getTaskShellById"] = (taskId) =>
+    projectionTasks
+      .getById({ taskId })
+      .pipe(
+        Effect.map(Option.filter((task) => task.deletedAt === null)),
+        Effect.map(Option.map(toTaskShell)),
+      );
+
   return {
     getCommandReadModel,
     getUserInputActivity,
@@ -3857,6 +3932,8 @@ pending_approval_requests AS (
     getThreadCheckpointContext,
     getFullThreadDiffContext,
     getThreadShellById,
+    getTaskById,
+    getTaskShellById,
     getThreadRuntimeContext,
     getTurnStartMessage,
     getThreadDetailById,

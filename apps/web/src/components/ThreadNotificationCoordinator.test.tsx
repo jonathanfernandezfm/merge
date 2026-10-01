@@ -61,7 +61,12 @@ vi.mock("../hooks/useSettings", () => ({
       settings: Pick<ClientSettings, "notificationMode" | "inAppNotificationsEnabled">,
     ) => unknown,
   ) => select({ notificationMode: state.mode, inAppNotificationsEnabled: state.inApp }),
-  getClientSettings: () => ({ notificationMode: state.mode }),
+  getClientSettings: () => ({
+    notificationMode: state.mode,
+    completionSound: "classic",
+    attentionSound: "alert",
+    notificationVolume: 100,
+  }),
 }));
 vi.mock("../state/environments", () => ({
   useEnvironments: () => ({ environments: [{ environmentId: "env-1" }] }),
@@ -174,7 +179,7 @@ describe("thread notifications", () => {
     await render();
     expect(state.add).toHaveBeenCalledTimes(1);
     expect(state.add).toHaveBeenLastCalledWith(expect.objectContaining({ title }));
-    expect(state.sound).toHaveBeenCalledWith("input", expect.any(Function));
+    expect(state.sound).toHaveBeenCalledWith("alert", 100, expect.any(Function));
     expect(state.notification).not.toHaveBeenCalled();
 
     state[event] = false;
@@ -234,7 +239,7 @@ describe("thread notifications", () => {
     state.mode = "notifications-and-sound";
     await render();
     await complete();
-    expect(state.sound).toHaveBeenCalledWith("completion", expect.any(Function));
+    expect(state.sound).toHaveBeenCalledWith("classic", 100, expect.any(Function));
     expect(state.add).toHaveBeenCalledTimes(1);
     expect(state.notification).not.toHaveBeenCalled();
   });

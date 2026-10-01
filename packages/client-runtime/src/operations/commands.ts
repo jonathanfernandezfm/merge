@@ -58,6 +58,7 @@ export type RevertThreadCheckpointInput = CommandInput<"thread.checkpoint.revert
   readonly restoreFiles?: boolean;
 };
 export type StopThreadSessionInput = CommandInput<"thread.session.stop">;
+export type UpdateTaskMetadataInput = CommandInput<"task.meta.update">;
 
 type DispatchTag = typeof ORCHESTRATION_WS_METHODS.dispatchCommand;
 type CommandEffect = Effect.Effect<
@@ -263,6 +264,16 @@ export const updateThreadMetadata: (input: UpdateThreadMetadataInput) => Command
   return yield* dispatch({
     ...input,
     type: "thread.meta.update",
+    commandId: yield* commandId(input),
+  });
+});
+
+export const updateTaskMetadata: (input: UpdateTaskMetadataInput) => CommandEffect = Effect.fn(
+  "EnvironmentCommands.updateTaskMetadata",
+)(function* (input) {
+  return yield* dispatch({
+    ...input,
+    type: "task.meta.update",
     commandId: yield* commandId(input),
   });
 });

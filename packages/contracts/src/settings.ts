@@ -226,6 +226,23 @@ export const NotificationMode = Schema.Literals([
 ]);
 export type NotificationMode = typeof NotificationMode.Type;
 
+export const NotificationSound = Schema.Literals([
+  "off",
+  "classic",
+  "alert",
+  "ding",
+  "rise",
+  "whoosh",
+  "click",
+]);
+export type NotificationSound = typeof NotificationSound.Type;
+
+/** Notification sound volume as a percentage. */
+export const NotificationVolume = Schema.Number.check(
+  Schema.isBetween({ minimum: 0, maximum: 100 }),
+);
+export type NotificationVolume = typeof NotificationVolume.Type;
+
 export const QuitConfirmationMode = Schema.Literals(["direct", "hold", "double-click"]);
 export type QuitConfirmationMode = typeof QuitConfirmationMode.Type;
 const DEFAULT_QUIT_CONFIRMATION_MODE: QuitConfirmationMode = "hold";
@@ -299,6 +316,13 @@ export const ClientSettingsSchema = Schema.Struct({
   notificationMode: NotificationMode.pipe(
     Schema.withDecodingDefault(Effect.succeed("off" as const)),
   ),
+  completionSound: NotificationSound.pipe(
+    Schema.withDecodingDefault(Effect.succeed("classic" as const)),
+  ),
+  attentionSound: NotificationSound.pipe(
+    Schema.withDecodingDefault(Effect.succeed("alert" as const)),
+  ),
+  notificationVolume: NotificationVolume.pipe(Schema.withDecodingDefault(Effect.succeed(100))),
   inAppNotificationsEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   diffColorScheme: DiffColorScheme.pipe(
     Schema.withDecodingDefault(Effect.succeed("red-green" as const)),
@@ -1594,6 +1618,9 @@ export type ServerSettingsPatch = typeof ServerSettingsPatch.Type;
 
 export const ClientSettingsPatch = Schema.Struct({
   notificationMode: Schema.optionalKey(NotificationMode),
+  completionSound: Schema.optionalKey(NotificationSound),
+  attentionSound: Schema.optionalKey(NotificationSound),
+  notificationVolume: Schema.optionalKey(NotificationVolume),
   inAppNotificationsEnabled: Schema.optionalKey(Schema.Boolean),
   diffColorScheme: Schema.optionalKey(DiffColorScheme),
   chatWidth: Schema.optionalKey(ChatWidth),

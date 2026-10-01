@@ -285,6 +285,16 @@ import {
   SourceControlRepositoryLookupInput,
 } from "./sourceControl.ts";
 import { VcsError } from "./vcs.ts";
+import {
+  TaskArchiveCheckResult,
+  TaskArchiveInput,
+  TaskCreateInput,
+  TaskCreateResult,
+  TaskCreateThreadInput,
+  TaskCreateThreadResult,
+  TaskIdInput,
+  TaskOperationError,
+} from "./task.ts";
 
 export const WS_METHODS = {
   // Project registry methods
@@ -298,6 +308,13 @@ export const WS_METHODS = {
   projectsWriteFile: "projects.writeFile",
   projectsEnsureScratch: "projects.ensureScratch",
   projectsCreateNew: "projects.createNew",
+
+  // Task methods
+  taskCreate: "task.create",
+  taskRetrySetup: "task.retrySetup",
+  taskArchiveCheck: "task.archiveCheck",
+  taskArchive: "task.archive",
+  taskCreateThread: "task.createThread",
 
   // Shell methods
   shellOpenInEditor: "shell.openInEditor",
@@ -1013,6 +1030,42 @@ const WsProjectsCreateNewRpc = Rpc.make(WS_METHODS.projectsCreateNew, {
   error: Schema.Union([OrchestrationDispatchCommandError, EnvironmentAuthorizationError]),
 });
 
+const TaskRpcError = Schema.Union([
+  TaskOperationError,
+  OrchestrationDispatchCommandError,
+  EnvironmentAuthorizationError,
+]);
+
+// Creates a task on an existing remote branch and starts its workspace setup.
+const WsTaskCreateRpc = Rpc.make(WS_METHODS.taskCreate, {
+  payload: TaskCreateInput,
+  success: TaskCreateResult,
+  error: TaskRpcError,
+});
+
+const WsTaskRetrySetupRpc = Rpc.make(WS_METHODS.taskRetrySetup, {
+  payload: TaskIdInput,
+  error: TaskRpcError,
+});
+
+const WsTaskArchiveCheckRpc = Rpc.make(WS_METHODS.taskArchiveCheck, {
+  payload: TaskIdInput,
+  success: TaskArchiveCheckResult,
+  error: TaskRpcError,
+});
+
+// Removes the worktree (the remote branch is kept) and archives the task.
+const WsTaskArchiveRpc = Rpc.make(WS_METHODS.taskArchive, {
+  payload: TaskArchiveInput,
+  error: TaskRpcError,
+});
+
+const WsTaskCreateThreadRpc = Rpc.make(WS_METHODS.taskCreateThread, {
+  payload: TaskCreateThreadInput,
+  success: TaskCreateThreadResult,
+  error: TaskRpcError,
+});
+
 const WsShellOpenInEditorRpc = Rpc.make(WS_METHODS.shellOpenInEditor, {
   payload: LaunchEditorInput,
   error: Schema.Union([ExternalLauncherError, EnvironmentAuthorizationError]),
@@ -1533,6 +1586,11 @@ export const WsRpcGroup = RpcGroup.make(
   WsProjectsEnsureScratchRpc,
   WsProjectsCreateNewRpc,
   WsProjectsWriteFileRpc,
+  WsTaskCreateRpc,
+  WsTaskRetrySetupRpc,
+  WsTaskArchiveCheckRpc,
+  WsTaskArchiveRpc,
+  WsTaskCreateThreadRpc,
   WsShellOpenInEditorRpc,
   WsFilesystemBrowseRpc,
   WsAgentSessionsScanRpc,

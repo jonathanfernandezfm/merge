@@ -30,6 +30,19 @@ describe("T3ProjectFile", () => {
     expect(decoded.scripts?.[2]?.async).toBe(false);
   });
 
+  it("decodes workspace copy rules and rejects empty sources", () => {
+    const decoded = decode({
+      workspace: {
+        copy: [{ from: " .env.local " }, { from: "certs", to: "config/certs", required: true }],
+      },
+    });
+    expect(decoded.workspace?.copy).toEqual([
+      { from: ".env.local" },
+      { from: "certs", to: "config/certs", required: true },
+    ]);
+    expect(() => decode({ workspace: { copy: [{ from: "" }] } })).toThrow();
+  });
+
   it("decodes an empty object and ignores unknown fields", () => {
     expect(decode({})).toEqual({});
     expect(decode({ futureField: true })).toEqual({});

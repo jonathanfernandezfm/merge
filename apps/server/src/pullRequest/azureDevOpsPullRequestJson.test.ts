@@ -1,3 +1,6 @@
+// @effect-diagnostics nodeBuiltinImport:off - reads recorded az fixtures from disk.
+import * as NodeFS from "node:fs";
+
 import * as Result from "effect/Result";
 import { describe, expect, it } from "vite-plus/test";
 
@@ -5,6 +8,7 @@ import {
   decodeItemContentJson,
   decodeIterationChangesJson,
   decodeIterationsJson,
+  decodePolicyEvaluationsJson,
   decodePullRequestJson,
   decodePullRequestListJson,
   decodeThreadsJson,
@@ -239,7 +243,7 @@ describe("decodeViewerJson", () => {
 
 describe("decodeThreadsJson", () => {
   it("takes every real comment of every thread, oldest first", () => {
-    const comments = expectSuccess(
+    const { comments } = expectSuccess(
       decodeThreadsJson(
         asJson({
           value: [
@@ -280,7 +284,7 @@ describe("decodeThreadsJson", () => {
   });
 
   it("reads a thread pinned to a file as a review comment", () => {
-    const comments = expectSuccess(
+    const { comments } = expectSuccess(
       decodeThreadsJson(
         asJson({
           value: [
@@ -298,7 +302,7 @@ describe("decodeThreadsJson", () => {
   });
 
   it("keeps the replies under a thread, which are as much of the conversation", () => {
-    const comments = expectSuccess(
+    const { comments } = expectSuccess(
       decodeThreadsJson(
         asJson({
           value: [
@@ -320,7 +324,7 @@ describe("decodeThreadsJson", () => {
   });
 
   it("drops deleted threads and threads with nothing to show", () => {
-    const comments = expectSuccess(
+    const { comments } = expectSuccess(
       decodeThreadsJson(
         asJson({
           value: [
@@ -562,7 +566,7 @@ describe("what az devops invoke answers with", () => {
     // arrives as null rather than not at all. Nothing reads it, and it must not fail the decode.
     expect(
       expectSuccess(decodeThreadsJson(asJson({ value: [], count: 0, continuation_token: null }))),
-    ).toEqual([]);
+    ).toEqual({ comments: [], threads: [] });
 
     expect(
       expectSuccess(
@@ -648,5 +652,180 @@ describe("what az devops invoke answers with", () => {
         ),
       ),
     ).toEqual({ contents: "# T3Demo\n", isBinary: false });
+  });
+});
+
+/** Recorded `az` answers, trimmed of nothing the decoders read. */
+const fixture = (name: string) =>
+  NodeFS.readFileSync(new URL(`./testFixtures/${name}`, import.meta.url), "utf8");
+
+describe("reviewer votes", () => {
+  const withVotes = (reviewers: ReadonlyArray<Record<string, unknown>>) =>
+    expectSuccess(decodePullRequestJson(asJson(pullRequest({ reviewers }))))?.reviewDecision;
+
+  it("holds the change while anyone waits for the author, from recorded az output", () => {
+    const decoded = expectSuccess(
+      decodePullRequestJson(fixture("azureDevOpsPullRequestShow.json")),
+    );
+    // Julius approved as the required reviewer, but Sarah is waiting for the author.
+    expect(decoded?.reviewDecision).toBe("changes-requested");
+    expect(decoded?.headBranch).toBe("feature/permissions");
+  });
+
+  it("reads a rejection as changes requested", () => {
+    expect(
+      withVotes([
+        { uniqueName: "a@acme.dev", vote: 10 },
+        { uniqueName: "b@acme.dev", vote: -10 },
+      ]),
+    ).toBe("changes-requested");
+  });
+
+  it("approves once a reviewer approves and nobody objects", () => {
+    expect(
+      withVotes([
+        { uniqueName: "a@acme.dev", vote: 5 },
+        { uniqueName: "b@acme.dev", vote: 0 },
+      ]),
+    ).toBe("approved");
+  });
+
+  it("still owes a review while a required reviewer has not approved", () => {
+    expect(
+      withVotes([
+        { uniqueName: "a@acme.dev", vote: 10 },
+        { uniqueName: "b@acme.dev", vote: 0, isRequired: true },
+      ]),
+    ).toBe("review-required");
+    expect(withVotes([{ uniqueName: "a@acme.dev", vote: 0 }])).toBe("review-required");
+  });
+
+  it("has no decision when nobody was asked", () => {
+    expect(withVotes([])).toBeNull();
+  });
+});
+
+describe("decodePolicyEvaluationsJson", () => {
+  const PULL_REQUEST_URL = "https://dev.azure.com/acme/platform/_git/web/pullrequest/42";
+
+  it("reads build and status policies as checks, and nothing else", () => {
+    const checks = expectSuccess(
+      decodePolicyEvaluationsJson(fixture("azureDevOpsPolicyList.json"), PULL_REQUEST_URL),
+    );
+
+    expect(checks).toEqual([
+      {
+        name: "CI",
+        status: "failure",
+        description: null,
+        url: "https://dev.azure.com/acme/platform/_build/results?buildId=9071",
+      },
+      // An optional build that failed does not hold the merge.
+      {
+        name: "Nightly e2e",
+        status: "neutral",
+        description: "Optional",
+        url: "https://dev.azure.com/acme/platform/_build/results?buildId=9072",
+      },
+      { name: "sonarcloud/quality-gate", status: "pending", description: null, url: null },
+      { name: "Docs build", status: "skipped", description: null, url: null },
+    ]);
+  });
+
+  it("reads no policies at all as no checks", () => {
+    expect(expectSuccess(decodePolicyEvaluationsJson("", PULL_REQUEST_URL))).toEqual([]);
+    expect(expectSuccess(decodePolicyEvaluationsJson("[]", null))).toEqual([]);
+  });
+
+  it("skips a disabled policy and leaves out a link it cannot build", () => {
+    const checks = expectSuccess(
+      decodePolicyEvaluationsJson(
+        asJson({
+          value: [
+            {
+              status: "approved",
+              configuration: { isEnabled: false, type: { displayName: "Build" } },
+            },
+            {
+              status: "queued",
+              configuration: { settings: { displayName: "CI" }, type: { displayName: "Build" } },
+              context: { buildId: 1 },
+            },
+          ],
+        }),
+        null,
+      ),
+    );
+
+    expect(checks).toEqual([{ name: "CI", status: "pending", description: null, url: null }]);
+  });
+});
+
+describe("decodeThreadsJson from recorded az output", () => {
+  const decoded = () => expectSuccess(decodeThreadsJson(fixture("azureDevOpsThreads.json")));
+
+  it("drops Azure's own notes and deleted remarks from the timeline", () => {
+    expect(decoded().comments.map((comment) => comment.id)).toEqual([
+      "102:1",
+      "103:1",
+      "102:2",
+      "103:2",
+      "104:1",
+      "106:1",
+    ]);
+  });
+
+  it("marks every remark with whether its thread was resolved", () => {
+    const resolvedById = Object.fromEntries(
+      decoded().comments.map((comment) => [comment.id, comment.isResolved]),
+    );
+    expect(resolvedById).toEqual({
+      "102:1": false,
+      "103:1": true,
+      "102:2": false,
+      "103:2": true,
+      // A general thread closed as won't fix is resolved too.
+      "104:1": true,
+      "106:1": false,
+    });
+  });
+
+  it("pins file threads to their line and side, without Azure's leading slash", () => {
+    expect(
+      decoded().threads.map((thread) => ({
+        id: thread.id,
+        path: thread.path,
+        line: thread.line,
+        side: thread.side,
+        isResolved: thread.isResolved,
+        comments: thread.comments.map((comment) => comment.id),
+      })),
+    ).toEqual([
+      {
+        id: "102",
+        path: "src/PermissionService.ts",
+        line: 184,
+        side: "right",
+        isResolved: false,
+        comments: ["102:1", "102:2"],
+      },
+      {
+        id: "103",
+        path: "src/PermissionService.ts",
+        line: 3,
+        side: "right",
+        isResolved: true,
+        comments: ["103:1", "103:2"],
+      },
+      // A remark on a removed line sits on the left; a pending thread is still open.
+      {
+        id: "106",
+        path: "src/legacy.ts",
+        line: 31,
+        side: "left",
+        isResolved: false,
+        comments: ["106:1"],
+      },
+    ]);
   });
 });

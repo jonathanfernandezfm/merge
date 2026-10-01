@@ -1,9 +1,24 @@
-import type { ClientSettings } from "@t3tools/contracts/settings";
+import type { ClientSettings, NotificationSound } from "@t3tools/contracts/settings";
 
-import completionUrl from "./assets/notification-completion.mp3";
-import inputUrl from "./assets/notification-input.mp3";
+import clickUrl from "./assets/snap-shot-click.mp3";
+import whooshUrl from "./assets/snap-shot-whoosh.mp3";
+import classicUrl from "./assets/notification-completion.mp3";
+import dingUrl from "./assets/notification-ding.mp3";
+import alertUrl from "./assets/notification-input.mp3";
+import riseUrl from "./assets/notification-rise.mp3";
 
 type NotificationMode = ClientSettings["notificationMode"];
+
+export const NOTIFICATION_SOUNDS = {
+  classic: { label: "Classic", url: classicUrl },
+  alert: { label: "Alert", url: alertUrl },
+  ding: { label: "Ding", url: dingUrl },
+  rise: { label: "Rise", url: riseUrl },
+  whoosh: { label: "Whoosh", url: whooshUrl },
+  click: { label: "Click", url: clickUrl },
+} satisfies Record<Exclude<NotificationSound, "off">, { label: string; url: string }>;
+
+export const NOTIFICATION_VOLUMES = [25, 50, 75, 100] as const;
 export const NOTIFICATION_MODE_LABELS = {
   off: "Off",
   notifications: "Notifications only",
@@ -73,13 +88,22 @@ export function unlockNotificationAudio() {
   void audioContext.resume().catch(() => undefined);
 }
 
+/** Plays a sound from a settings gesture, unlocking audio first. */
+export async function previewNotificationSound(sound: NotificationSound, volume: number) {
+  audioContext ??= new AudioContext();
+  await audioContext.resume().catch(() => undefined);
+  await playNotificationSound(sound, volume, () => true);
+}
+
 export async function playNotificationSound(
-  kind: "completion" | "input",
+  sound: NotificationSound,
+  volume: number,
   shouldPlay: () => boolean,
 ) {
+  if (sound === "off" || volume <= 0) return;
   if (!audioContext || audioContext.state !== "running") return;
   const context = audioContext;
-  const url = kind === "completion" ? completionUrl : inputUrl;
+  const { url } = NOTIFICATION_SOUNDS[sound];
   try {
     let buffer = buffers.get(url);
     if (!buffer) {
@@ -92,7 +116,9 @@ export async function playNotificationSound(
     if (!shouldPlay() || context.state !== "running") return;
     const source = context.createBufferSource();
     source.buffer = decoded;
-    source.connect(context.destination);
+    const gain = context.createGain();
+    gain.gain.value = Math.min(volume, 100) / 100;
+    source.connect(gain).connect(context.destination);
     source.start();
   } catch {
     buffers.delete(url);

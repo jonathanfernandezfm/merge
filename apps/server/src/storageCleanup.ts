@@ -151,7 +151,20 @@ export const make = Effect.gen(function* () {
   const readThreads = Effect.fn("StorageCleanup.readThreads")(function* () {
     const active = yield* snapshots.getShellSnapshot();
     const archived = yield* snapshots.getArchivedShellSnapshot();
-    return { projects: active.projects, threads: [...active.threads, ...archived.threads] };
+    // An active task owns its worktree until the task is archived, even when
+    // no thread uses it anymore.
+    const taskWorkspacePaths = new Set(
+      (active.tasks ?? []).flatMap((task) =>
+        task.archivedAt !== null || task.workspace.path === null
+          ? []
+          : [path.resolve(task.workspace.path)],
+      ),
+    );
+    return {
+      projects: active.projects,
+      threads: [...active.threads, ...archived.threads],
+      taskWorkspacePaths,
+    };
   });
 
   // Local threads under another project need not have a worktreePath of their own.
@@ -209,6 +222,7 @@ export const make = Effect.gen(function* () {
         : snapshot.projects.find((entry) => entry.id === thread.projectId);
       if (
         project === undefined ||
+        snapshot.taskWorkspacePaths.has(worktreePath) ||
         (!deleted && !storageCleanupThreadIdle(thread, now)) ||
         hasTerminal(worktreePath)
       )
@@ -284,6 +298,7 @@ export const make = Effect.gen(function* () {
         // thread sharing this path cancels the removal.
         const latestSnapshot = yield* readThreads();
         if (yield* containsProjectRoot(worktreePath, [project, ...latestSnapshot.projects])) return;
+        if (latestSnapshot.taskWorkspacePaths.has(worktreePath)) return;
         const latest = latestSnapshot.threads.filter(
           (entry) =>
             entry.worktreePath !== null && path.resolve(entry.worktreePath) === worktreePath,

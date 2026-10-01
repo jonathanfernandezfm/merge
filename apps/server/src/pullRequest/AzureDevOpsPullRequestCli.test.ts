@@ -1235,7 +1235,7 @@ layer("AzureDevOpsPullRequestCli.layer", (it) => {
       );
       const cli = yield* AzureDevOpsPullRequestCli.AzureDevOpsPullRequestCli;
 
-      const comments = yield* cli.listThreads({
+      const { comments } = yield* cli.listThreads({
         cwd: "/w",
         location: { project: "platform", repository: "web" },
         number: 42,
@@ -1266,7 +1266,7 @@ layer("AzureDevOpsPullRequestCli.layer", (it) => {
       );
       const cli = yield* AzureDevOpsPullRequestCli.AzureDevOpsPullRequestCli;
 
-      const comments = yield* cli.listThreads({
+      const { comments } = yield* cli.listThreads({
         cwd: "/w",
         location: { project: "platform", repository: "web" },
         number: 42,

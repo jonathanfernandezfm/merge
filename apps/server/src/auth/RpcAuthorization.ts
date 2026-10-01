@@ -117,6 +117,12 @@ export const RPC_REQUIRED_SCOPES = {
   [WS_METHODS.projectsWriteFile]: AuthOrchestrationOperateScope,
   [WS_METHODS.projectsEnsureScratch]: AuthOrchestrationOperateScope,
   [WS_METHODS.projectsCreateNew]: AuthOrchestrationOperateScope,
+  [WS_METHODS.taskCreate]: AuthOrchestrationOperateScope,
+  [WS_METHODS.taskRetrySetup]: AuthOrchestrationOperateScope,
+  // Inspects the worktree (git status), so it needs more than shell read access.
+  [WS_METHODS.taskArchiveCheck]: AuthOrchestrationOperateScope,
+  [WS_METHODS.taskArchive]: AuthOrchestrationOperateScope,
+  [WS_METHODS.taskCreateThread]: AuthOrchestrationOperateScope,
   [WS_METHODS.shellOpenInEditor]: AuthOrchestrationOperateScope,
   [WS_METHODS.filesystemBrowse]: AuthOrchestrationReadScope,
   [WS_METHODS.agentSessionsScan]: AuthOrchestrationReadScope,

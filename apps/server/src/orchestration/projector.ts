@@ -2,6 +2,9 @@ import type {
   OrchestrationEvent,
   OrchestrationProject,
   OrchestrationReadModel,
+  OrchestrationTask,
+  TaskId,
+  TaskMetaUpdatedPayload as TaskMetaUpdatedPayloadType,
   ThreadId,
   ThreadLinkedPullRequest,
   ThreadPullRequestKey,
@@ -31,6 +34,9 @@ import {
   ProjectCreatedPayload,
   ProjectDeletedPayload,
   ProjectMetaUpdatedPayload,
+  TaskArchivedPayload,
+  TaskCreatedPayload,
+  TaskMetaUpdatedPayload,
   ThreadActivityAppendedPayload,
   ThreadArchivedPayload,
   ThreadCreatedPayload,
@@ -332,7 +338,41 @@ export function createEmptyReadModel(nowIso: string): OrchestrationReadModel {
     snapshotSequence: 0,
     projects: [],
     threads: [],
+    tasks: [],
     updatedAt: nowIso,
+  };
+}
+
+function updateTask(
+  tasks: ReadonlyArray<OrchestrationTask> | undefined,
+  taskId: TaskId,
+  update: (task: OrchestrationTask) => OrchestrationTask,
+): ReadonlyArray<OrchestrationTask> {
+  return (tasks ?? []).map((task) => (task.id === taskId ? update(task) : task));
+}
+
+/** Apply a task.meta-updated patch: absent fields are unchanged, null clears. */
+export function applyTaskMetaUpdate(
+  task: OrchestrationTask,
+  patch: TaskMetaUpdatedPayloadType,
+): OrchestrationTask {
+  return {
+    ...task,
+    ...(patch.title !== undefined ? { title: patch.title } : {}),
+    ...(patch.description !== undefined ? { description: patch.description } : {}),
+    ...(patch.autoHandleReviewFeedback !== undefined
+      ? { autoHandleReviewFeedback: patch.autoHandleReviewFeedback }
+      : {}),
+    ...(patch.autoHandleCIFailures !== undefined
+      ? { autoHandleCIFailures: patch.autoHandleCIFailures }
+      : {}),
+    ...(patch.waitingForUserReason !== undefined
+      ? { waitingForUserReason: patch.waitingForUserReason }
+      : {}),
+    ...(patch.workspace !== undefined ? { workspace: patch.workspace } : {}),
+    ...(patch.pullRequest !== undefined ? { pullRequest: patch.pullRequest } : {}),
+    ...(patch.mergedAt !== undefined ? { mergedAt: patch.mergedAt } : {}),
+    updatedAt: patch.updatedAt,
   };
 }
 
@@ -445,6 +485,8 @@ export function projectEvent(
             interactionMode: payload.interactionMode,
             branch: payload.branch,
             worktreePath: payload.worktreePath,
+            ...(payload.taskId != null ? { taskId: payload.taskId } : {}),
+            ...(payload.origin != null ? { origin: payload.origin } : {}),
             pullRequests: [],
             branchPullRequest: null,
             latestTurn: null,
@@ -1091,6 +1133,57 @@ export function projectEvent(
             }),
           };
         }),
+      );
+
+    case "task.created":
+      return decodeForEvent(TaskCreatedPayload, event.payload, event.type, "payload").pipe(
+        Effect.map((payload) => {
+          const task: OrchestrationTask = {
+            id: payload.taskId,
+            projectId: payload.projectId,
+            title: payload.title,
+            description: payload.description,
+            workspace: payload.workspace,
+            pullRequest: null,
+            autoHandleReviewFeedback: payload.autoHandleReviewFeedback,
+            autoHandleCIFailures: payload.autoHandleCIFailures,
+            waitingForUserReason: null,
+            createdAt: payload.createdAt,
+            updatedAt: payload.updatedAt,
+            mergedAt: null,
+            archivedAt: null,
+            deletedAt: null,
+          };
+          const tasks = nextBase.tasks ?? [];
+          return {
+            ...nextBase,
+            tasks: tasks.some((entry) => entry.id === task.id)
+              ? tasks.map((entry) => (entry.id === task.id ? task : entry))
+              : [...tasks, task],
+          };
+        }),
+      );
+
+    case "task.meta-updated":
+      return decodeForEvent(TaskMetaUpdatedPayload, event.payload, event.type, "payload").pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          tasks: updateTask(nextBase.tasks, payload.taskId, (task) =>
+            applyTaskMetaUpdate(task, payload),
+          ),
+        })),
+      );
+
+    case "task.archived":
+      return decodeForEvent(TaskArchivedPayload, event.payload, event.type, "payload").pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          tasks: updateTask(nextBase.tasks, payload.taskId, (task) => ({
+            ...task,
+            archivedAt: payload.archivedAt,
+            updatedAt: payload.updatedAt,
+          })),
+        })),
       );
 
     default:

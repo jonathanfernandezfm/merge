@@ -36,6 +36,8 @@ import {
   type ProjectionThreadProposedPlan,
   ProjectionThreadProposedPlanRepository,
 } from "../../persistence/Services/ProjectionThreadProposedPlans.ts";
+import * as ProjectionTasks from "../../persistence/ProjectionTasks.ts";
+import { applyTaskMetaUpdate } from "../projector.ts";
 import * as ProjectionThreadPullRequests from "../../persistence/ProjectionThreadPullRequests.ts";
 import { ProjectionThreadSessionRepository } from "../../persistence/Services/ProjectionThreadSessions.ts";
 import {
@@ -487,6 +489,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
     const projectionThreadProposedPlanRepository = yield* ProjectionThreadProposedPlanRepository;
     const projectionThreadPullRequestRepository =
       yield* ProjectionThreadPullRequests.ProjectionThreadPullRequestRepository;
+    const projectionTaskRepository = yield* ProjectionTasks.ProjectionTaskRepository;
     const projectionThreadActivityRepository = yield* ProjectionThreadActivityRepository;
     const projectionThreadSessionRepository = yield* ProjectionThreadSessionRepository;
     const projectionTurnRepository = yield* ProjectionTurnRepository;
@@ -619,6 +622,8 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             interactionMode: event.payload.interactionMode,
             branch: event.payload.branch,
             worktreePath: event.payload.worktreePath,
+            taskId: event.payload.taskId ?? null,
+            origin: event.payload.origin ?? null,
             linkedPullRequest: null,
             branchPullRequest: null,
             latestTurnId: null,
@@ -1950,10 +1955,71 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
       }
     });
 
+    const applyTasksProjection: ProjectorDefinition["apply"] = Effect.fn("applyTasksProjection")(
+      function* (event, _attachmentSideEffects) {
+        switch (event.type) {
+          case "task.created":
+            yield* projectionTaskRepository.upsert({
+              id: event.payload.taskId,
+              projectId: event.payload.projectId,
+              title: event.payload.title,
+              description: event.payload.description,
+              workspace: event.payload.workspace,
+              pullRequest: null,
+              autoHandleReviewFeedback: event.payload.autoHandleReviewFeedback,
+              autoHandleCIFailures: event.payload.autoHandleCIFailures,
+              waitingForUserReason: null,
+              createdAt: event.payload.createdAt,
+              updatedAt: event.payload.updatedAt,
+              mergedAt: null,
+              archivedAt: null,
+              deletedAt: null,
+            });
+            return;
+
+          case "task.meta-updated": {
+            const existing = yield* projectionTaskRepository.getById({
+              taskId: event.payload.taskId,
+            });
+            if (Option.isNone(existing)) {
+              return;
+            }
+            yield* projectionTaskRepository.upsert(
+              applyTaskMetaUpdate(existing.value, event.payload),
+            );
+            return;
+          }
+
+          case "task.archived": {
+            const existing = yield* projectionTaskRepository.getById({
+              taskId: event.payload.taskId,
+            });
+            if (Option.isNone(existing)) {
+              return;
+            }
+            yield* projectionTaskRepository.upsert({
+              ...existing.value,
+              archivedAt: event.payload.archivedAt,
+              updatedAt: event.payload.updatedAt,
+            });
+            return;
+          }
+
+          default:
+            return;
+        }
+      },
+    );
+
     const projectors: ReadonlyArray<ProjectorDefinition> = [
       {
         name: ORCHESTRATION_PROJECTOR_NAMES.projects,
-        apply: applyProjectsProjection,
+        // Tasks share the projects cursor: a new cursor would start at zero
+        // and replay the whole event log once for events that cannot exist.
+        apply: (event, attachmentSideEffects) =>
+          event.aggregateKind === "task"
+            ? applyTasksProjection(event, attachmentSideEffects)
+            : applyProjectsProjection(event, attachmentSideEffects),
       },
       {
         name: ORCHESTRATION_PROJECTOR_NAMES.threadMessages,
@@ -2214,6 +2280,7 @@ export const OrchestrationProjectionPipelineLive = Layer.effect(
   Layer.provideMerge(ProjectionThreadMessageRepositoryLive),
   Layer.provideMerge(ProjectionThreadProposedPlanRepositoryLive),
   Layer.provideMerge(ProjectionThreadPullRequests.layer),
+  Layer.provideMerge(ProjectionTasks.layer),
   Layer.provideMerge(ProjectionThreadActivityRepositoryLive),
   Layer.provideMerge(ProjectionThreadSessionRepositoryLive),
   Layer.provideMerge(ProjectionTurnRepositoryLive),

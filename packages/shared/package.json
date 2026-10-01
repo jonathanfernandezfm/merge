@@ -203,6 +203,10 @@
       "types": "./src/threadPullRequests.ts",
       "import": "./src/threadPullRequests.ts"
     },
+    "./taskStatus": {
+      "types": "./src/taskStatus.ts",
+      "import": "./src/taskStatus.ts"
+    },
     "./changeRequestUrl": {
       "types": "./src/changeRequestUrl.ts",
       "import": "./src/changeRequestUrl.ts"
