@@ -6,6 +6,7 @@ import { AsyncResult, Atom } from "effect/unstable/reactivity";
 import { useCallback, useMemo } from "react";
 import { Alert } from "react-native";
 
+import { hasCloudPublicConfig } from "../features/cloud/publicConfig";
 import { useConnectionController } from "../features/connection/useConnectionController";
 import { environmentPresentations } from "./presentation";
 import { useWorkspaceState } from "../state/workspace";
@@ -182,7 +183,7 @@ export function useRemoteConnections() {
       } as const;
       // Removing a T3 Connect environment here leaves its account registration
       // and host space, so point to where it can be deregistered.
-      if (environment.isRelayManaged) {
+      if (environment.isRelayManaged && hasCloudPublicConfig()) {
         Alert.alert(
           "Remove from this device?",
           `Forget ${environment.environmentLabel} and its cached threads on this device.\n\nIt stays on your T3 Connect account and keeps its host space. Deregister it under T3 Account → T3 Connect to free it.`,

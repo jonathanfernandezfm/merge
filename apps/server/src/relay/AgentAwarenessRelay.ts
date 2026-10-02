@@ -56,7 +56,7 @@ export class AgentAwarenessRelay extends Context.Service<
     readonly requestCatchUp: () => Effect.Effect<void>;
     readonly start: () => Effect.Effect<void, never, Scope.Scope>;
   }
->()("t3/relay/AgentAwarenessRelay") {}
+>()("merge-agent/relay/AgentAwarenessRelay") {}
 
 export function eventThreadId(event: OrchestrationEvent): ThreadId | null {
   const payload = event.payload as { readonly threadId?: unknown };
@@ -692,3 +692,13 @@ export const make = Effect.gen(function* () {
 });
 
 export const layer = Layer.effect(AgentAwarenessRelay, make);
+
+/** For builds without Connect public config: never reads relay secrets or publishes. */
+export const inertLayer = Layer.succeed(
+  AgentAwarenessRelay,
+  AgentAwarenessRelay.of({
+    publishThread: () => Effect.void,
+    requestCatchUp: () => Effect.void,
+    start: () => Effect.void,
+  }),
+);

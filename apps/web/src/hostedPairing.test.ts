@@ -32,7 +32,7 @@ describe("hostedPairing", () => {
         host: "https://backend.example.com:3773",
         token: "pairing-token",
         label: "Workstation",
-      }),
+      }) ?? "",
     );
 
     expect(url.origin).toBe("https://preview.t3.codes");
@@ -41,6 +41,15 @@ describe("hostedPairing", () => {
     expect(url.searchParams.get("label")).toBe("Workstation");
     expect(url.searchParams.has("token")).toBe(false);
     expect(url.hash).toBe("#token=pairing-token");
+  });
+
+  it("has no hosted app unless one is configured", () => {
+    vi.stubEnv("VITE_HOSTED_APP_URL", "");
+    vi.stubEnv("VITE_HTTP_URL", "");
+    vi.stubEnv("VITE_WS_URL", "");
+
+    expect(buildHostedPairingUrl({ host: "https://backend.example.com", token: "t" })).toBeNull();
+    expect(isHostedStaticApp(new URL("https://app.t3.codes/"))).toBe(false);
   });
 
   it("builds hosted channel selection URLs through the configured router origin", () => {

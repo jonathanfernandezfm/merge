@@ -93,13 +93,15 @@ describe("DesktopPreReadyPlatform", () => {
         let desktopEntry = previousEntry;
         let iconInstalled = false;
         copyFileSyncMock.mockImplementation((_source: string, destination: string) => {
-          iconInstalled = destination === "/xdg/icons/com.t3tools.T3Code.desktop.png";
+          iconInstalled =
+            destination === "/xdg/icons/io.github.jonathanfernandezfm.Merge.desktop.png";
         });
         setDesktopNameMock.mockImplementation((name: string) => {
           desktopName = name;
         });
         writeFileSyncMock.mockImplementation((path: string, contents: string) => {
-          if (path === "/xdg/applications/com.t3tools.T3Code.desktop") desktopEntry = contents;
+          if (path === "/xdg/applications/io.github.jonathanfernandezfm.Merge.desktop")
+            desktopEntry = contents;
         });
 
         return Effect.scoped(
@@ -115,13 +117,13 @@ describe("DesktopPreReadyPlatform", () => {
               ),
             );
             const identity = yield* Effect.promise(() => portalIdentity);
-            assert.equal(identity.desktopName, "com.t3tools.T3Code.desktop");
+            assert.equal(identity.desktopName, "io.github.jonathanfernandezfm.Merge.desktop");
             assert.include(identity.desktopEntry ?? "", 'Exec="/Applications/current.AppImage" %U');
             assert.include(identity.desktopEntry ?? "", "Name=Merge (Alpha)");
-            assert.include(identity.desktopEntry ?? "", "MimeType=x-scheme-handler/t3code;");
+            assert.include(identity.desktopEntry ?? "", "MimeType=x-scheme-handler/merge;");
             assert.include(
               identity.desktopEntry ?? "",
-              "Icon=/xdg/icons/com.t3tools.T3Code.desktop.png",
+              "Icon=/xdg/icons/io.github.jonathanfernandezfm.Merge.desktop.png",
             );
             assert.isTrue(identity.iconInstalled);
           }),
@@ -150,7 +152,7 @@ describe("DesktopPreReadyPlatform", () => {
     return Effect.gen(function* () {
       yield* DesktopPreReadyPlatform.make;
       const contents = writeFileSyncMock.mock.calls[0]?.[1];
-      assert.include(contents, "MimeType=x-scheme-handler/t3code;");
+      assert.include(contents, "MimeType=x-scheme-handler/merge;");
       assert.include(contents, "Icon=");
       assert.equal(setDesktopNameMock.mock.calls.length, 1);
     }).pipe(Effect.provideService(HostProcessPlatform, "linux"));

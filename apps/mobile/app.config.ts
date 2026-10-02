@@ -28,7 +28,7 @@ if (
     !IOS_BUNDLE_IDENTIFIER_PATTERN.test(personalTeamBundleIdentifier))
 ) {
   throw new Error(
-    "T3CODE_IOS_PERSONAL_TEAM_BUNDLE_ID must be a reverse-DNS identifier such as com.example.t3code when T3CODE_IOS_PERSONAL_TEAM=1.",
+    "T3CODE_IOS_PERSONAL_TEAM_BUNDLE_ID must be a reverse-DNS identifier such as com.example.merge when T3CODE_IOS_PERSONAL_TEAM=1.",
   );
 }
 
@@ -74,26 +74,23 @@ const RELEASE_ASSETS = {
 const VARIANT_CONFIG = {
   development: {
     appName: "Merge Dev",
-    scheme: "t3code-dev",
-    iosBundleIdentifier: "com.t3tools.t3code.dev",
-    androidPackage: "com.t3tools.t3code.dev",
-    relyingParty: "clerk.t3.codes",
+    scheme: "merge-dev",
+    iosBundleIdentifier: "io.github.jonathanfernandezfm.merge.dev",
+    androidPackage: "io.github.jonathanfernandezfm.merge.dev",
     assets: DEVELOPMENT_ASSETS,
   },
   preview: {
     appName: "Merge Preview",
-    scheme: "t3code-preview",
-    iosBundleIdentifier: "com.t3tools.t3code.preview",
-    androidPackage: "com.t3tools.t3code.preview",
-    relyingParty: "clerk.t3.codes",
+    scheme: "merge-preview",
+    iosBundleIdentifier: "io.github.jonathanfernandezfm.merge.preview",
+    androidPackage: "io.github.jonathanfernandezfm.merge.preview",
     assets: PREVIEW_ASSETS,
   },
   production: {
     appName: "Merge",
-    scheme: "t3code",
-    iosBundleIdentifier: "com.t3tools.t3code",
-    androidPackage: "com.t3tools.t3code",
-    relyingParty: "clerk.t3.codes",
+    scheme: "merge",
+    iosBundleIdentifier: "io.github.jonathanfernandezfm.merge",
+    androidPackage: "io.github.jonathanfernandezfm.merge",
     assets: RELEASE_ASSETS,
   },
 } as const;
@@ -110,6 +107,15 @@ function resolveAppVariant(value: string | undefined): AppVariant {
 }
 
 const variant = VARIANT_CONFIG[APP_VARIANT];
+// EAS identity and passkey domains belong to whoever builds the app, so they
+// come from the environment and are omitted when unset.
+const easOwner = process.env.EXPO_OWNER?.trim() || undefined;
+const easProjectId = process.env.EAS_PROJECT_ID?.trim() || undefined;
+const appleTeamId = process.env.APPLE_TEAM_ID?.trim() || undefined;
+const passkeyRpDomains = (repoEnv.T3CODE_CLERK_PASSKEY_RP_DOMAINS ?? "")
+  .split(",")
+  .map((domain) => domain.trim())
+  .filter((domain) => domain.length > 0);
 const iosBundleIdentifier = isIosPersonalTeamBuild
   ? personalTeamBundleIdentifier!
   : variant.iosBundleIdentifier;
@@ -211,7 +217,7 @@ const sharingPlugin: NonNullable<ExpoConfig["plugins"]>[number] = [
 
 const config: ExpoConfig = {
   name: variant.appName,
-  slug: "t3-code",
+  slug: "merge",
   platforms: ["ios", "android"],
   scheme: variant.scheme,
   version: "1.3.1",
@@ -226,7 +232,7 @@ const config: ExpoConfig = {
   userInterfaceStyle: "automatic",
   updates: {
     enabled: repoEnv.T3CODE_MOBILE_UPDATES_ENABLED !== "0",
-    url: "https://u.expo.dev/d763fcb8-d37c-41ea-a773-b54a0ab4a454",
+    ...(easProjectId ? { url: `https://u.expo.dev/${easProjectId}` } : {}),
     checkAutomatically: "ON_LOAD",
     fallbackToCacheTimeout: 0,
   },
@@ -237,14 +243,18 @@ const config: ExpoConfig = {
     // showcase capture build requires full screen (see infoPlist below).
     requireFullScreen: process.env.T3_SHOWCASE_CAPTURE_BUILD === "1",
     bundleIdentifier: iosBundleIdentifier,
-    // Pin code signing to the T3 Tools team so non-interactive `expo run:ios`
-    // does not fall back to a personal team (which cannot sign app groups,
-    // Sign in with Apple, or push notification entitlements).
-    appleTeamId: "ARK85ZXQ4Z",
-    associatedDomains: [
-      `applinks:${variant.relyingParty}`,
-      `webcredentials:${variant.relyingParty}`,
-    ],
+    // Set APPLE_TEAM_ID to pin code signing to your team so non-interactive
+    // `expo run:ios` does not fall back to a personal team (which cannot sign
+    // app groups, Sign in with Apple, or push notification entitlements).
+    ...(appleTeamId ? { appleTeamId } : {}),
+    ...(passkeyRpDomains.length > 0
+      ? {
+          associatedDomains: passkeyRpDomains.flatMap((domain) => [
+            `applinks:${domain}`,
+            `webcredentials:${domain}`,
+          ]),
+        }
+      : {}),
     entitlements: {
       "keychain-access-groups": [`$(AppIdentifierPrefix)${variant.iosBundleIdentifier}`],
     },
@@ -453,11 +463,9 @@ const config: ExpoConfig = {
       tracesDataset: repoEnv.EXPO_PUBLIC_OTLP_TRACES_DATASET ?? null,
       tracesToken: repoEnv.EXPO_PUBLIC_OTLP_TRACES_TOKEN ?? null,
     },
-    eas: {
-      projectId: "d763fcb8-d37c-41ea-a773-b54a0ab4a454",
-    },
+    ...(easProjectId ? { eas: { projectId: easProjectId } } : {}),
   },
-  owner: "pingdotgg",
+  ...(easOwner ? { owner: easOwner } : {}),
 };
 
 export default config;

@@ -275,7 +275,11 @@ const ReactorLayerLive = Layer.empty.pipe(
   Layer.provideMerge(PullRequestSyncReactor.layer),
   Layer.provideMerge(TaskSupervisorReactor.layer),
   Layer.provideMerge(ThreadPullRequestReactor.layer),
-  Layer.provideMerge(AgentAwarenessRelay.layer.pipe(Layer.provide(ServerSecretStore.layer))),
+  Layer.provideMerge(
+    hasCloudPublicConfig
+      ? AgentAwarenessRelay.layer.pipe(Layer.provide(ServerSecretStore.layer))
+      : AgentAwarenessRelay.inertLayer,
+  ),
   Layer.provideMerge(RuntimeReceiptBusLive),
 );
 
@@ -743,6 +747,12 @@ const makeServerLayer = Layer.unwrap(
       : Layer.empty;
     const cloudDesiredLinkReconcileLayer = Layer.effectDiscard(
       Effect.gen(function* () {
+        // Builds without Connect public config never start, recover, or
+        // release a managed tunnel, even if an earlier build stored one.
+        if (!hasCloudPublicConfig) {
+          yield* Deferred.succeed(cloudLinkParked, undefined).pipe(Effect.orDie);
+          return;
+        }
         const releaseManagedTunnel = releaseManagedTunnelOnShutdown().pipe(
           Effect.timeout("10 seconds"),
           Effect.tap((released) =>
@@ -824,15 +834,13 @@ const makeServerLayer = Layer.unwrap(
             // covers anything this sleep used to hedge against. Every
             // millisecond here is dead time on the path to remote
             // reachability after a restart.
-            const wantsCliLink = hasCloudPublicConfig
-              ? yield* CloudCliState.readCliDesiredCloudLink.pipe(
-                  Effect.catch((cause) =>
-                    Effect.logWarning("Failed to read the desired T3 Connect link", { cause }).pipe(
-                      Effect.as(false),
-                    ),
-                  ),
-                )
-              : false;
+            const wantsCliLink = yield* CloudCliState.readCliDesiredCloudLink.pipe(
+              Effect.catch((cause) =>
+                Effect.logWarning("Failed to read the desired T3 Connect link", { cause }).pipe(
+                  Effect.as(false),
+                ),
+              ),
+            );
             // A failed read must not end this fiber before it registers
             // recovery and starts consuming recovery requests. "managed" is
             // what a missing value means, so it is the safe fallback.

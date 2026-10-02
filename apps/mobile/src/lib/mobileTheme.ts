@@ -31,7 +31,7 @@ export const MOBILE_THEME_OPTIONS: ReadonlyArray<{
   readonly id: MobileThemeId;
   readonly label: string;
 }> = [
-  { id: STANDARD_MOBILE_THEME_ID, label: "T3 Code" },
+  { id: STANDARD_MOBILE_THEME_ID, label: "Default" },
   { id: "material-you", label: "Material You" },
   ...BUILT_IN_THEMES.map((theme) => ({ id: theme.id as MobileThemeId, label: theme.label })),
 ];

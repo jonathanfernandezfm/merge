@@ -47,7 +47,7 @@ export class ProjectionTaskRepository extends Context.Service<
       ProjectionRepositoryError
     >;
   }
->()("t3/persistence/ProjectionTasks/ProjectionTaskRepository") {}
+>()("merge-agent/persistence/ProjectionTasks/ProjectionTaskRepository") {}
 
 /** @public Service construction is part of the canonical Effect module API. */
 export const make = Effect.gen(function* () {

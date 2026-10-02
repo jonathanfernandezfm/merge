@@ -45,7 +45,7 @@ function recoveryHint(error: RelayProtectedError): string {
     case "RelayEnvironmentLinkLimitExceededError":
       return "Unlink an unused environment in T3 Connect, then restart Merge on this machine.";
     case "RelayAuthInvalidError":
-      return "Run `t3 connect login` to check this machine's authorization. If the stored credential was revoked, sign out with `t3 connect logout`, then run `t3 connect` again. Restart Merge after signing in.";
+      return "Run `merge-agent connect login` to check this machine's authorization. If the stored credential was revoked, sign out with `merge-agent connect logout`, then run `merge-agent connect` again. Restart Merge after signing in.";
     case "RelayEnvironmentLinkProofExpiredError":
     case "RelayEnvironmentLinkProofInvalidError":
       return "Check this machine's date and time, update Merge, then restart it.";

@@ -81,7 +81,7 @@ export class TaskSupervisorReactor extends Context.Service<
     /** Evaluate one task now, or every active task when `taskId` is omitted. */
     readonly requestEvaluation: (taskId?: TaskId) => Effect.Effect<void>;
   }
->()("t3/task/TaskSupervisorReactor") {}
+>()("merge-agent/task/TaskSupervisorReactor") {}
 
 type Request =
   | { readonly kind: "sweep" }

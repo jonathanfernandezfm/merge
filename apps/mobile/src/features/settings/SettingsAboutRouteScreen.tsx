@@ -15,6 +15,7 @@ import {
 import { SettingsRow } from "./components/SettingsRow";
 import { SettingsSection } from "./components/SettingsSection";
 import { SettingsScreen } from "./components/SettingsScreen";
+import { LEGAL_URL } from "./lib/legal-document-url";
 
 export function SettingsAboutRouteScreen() {
   const insets = useSafeAreaInsets();
@@ -127,7 +128,9 @@ function AppSettingsSection() {
         label="Open source licenses"
         target="SettingsOpenSourceLicenses"
       />
-      <SettingsRow icon="doc.text" label="Legal" fullScreenTarget="SettingsLegal" />
+      {LEGAL_URL !== null ? (
+        <SettingsRow icon="doc.text" label="Legal" fullScreenTarget="SettingsLegal" />
+      ) : null}
       {updateCheckAvailable ? (
         <Pressable
           accessibilityLabel={`Version ${versionLabel}`}

@@ -13,7 +13,7 @@ import {
 
 import { repointLauncher, resolveLauncherPath } from "./update.ts";
 
-it.layer(NodeServices.layer)("t3 update launcher", (it) => {
+it.layer(NodeServices.layer)("merge-agent update launcher", (it) => {
   it.effect("repoints a symlink that lives in a runtime versions tree", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
@@ -84,7 +84,7 @@ it.layer(NodeServices.layer)("t3 update launcher", (it) => {
       yield* fs.writeFileString(launcher, "");
 
       const bare = yield* resolveLauncherPath.pipe(
-        Effect.provideService(HostProcessInvokedAs, "t3"),
+        Effect.provideService(HostProcessInvokedAs, "merge-agent"),
         Effect.provideService(HostProcessEnvironment, {
           PATH: `${path.join(root, "missing")}:${path.join(root, "bin")}`,
         }),
@@ -96,7 +96,7 @@ it.layer(NodeServices.layer)("t3 update launcher", (it) => {
         Effect.provideService(HostProcessWorkingDirectory, root),
       );
       const absent = yield* resolveLauncherPath.pipe(
-        Effect.provideService(HostProcessInvokedAs, "t3"),
+        Effect.provideService(HostProcessInvokedAs, "merge-agent"),
         Effect.provideService(HostProcessEnvironment, { PATH: path.join(root, "missing") }),
         Effect.provideService(HostProcessWorkingDirectory, root),
       );

@@ -65,7 +65,7 @@ export function SettingsNotificationsRouteScreen() {
           contentContainerClassName="px-5 pt-4"
         >
           <Text className="text-base text-foreground-muted">
-            Notifications require T3 Connect in this app build.
+            Notifications are not available in this app build.
           </Text>
         </ScrollView>
       </SettingsScreen>

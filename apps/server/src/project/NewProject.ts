@@ -74,7 +74,7 @@ function newProjectReadme(name: string): string {
     "",
     `# ${name}`,
     "",
-    "Created in [T3 Code](https://t3.codes).",
+    "Created in [Merge](https://github.com/jonathanfernandezfm/merge).",
     "",
   ].join("\n");
 }

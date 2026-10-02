@@ -106,7 +106,7 @@ export class TaskWorkspaceService extends Context.Service<
     /** Wait for the background setup of a task, if one is running. */
     readonly awaitSetup: (taskId: TaskId) => Effect.Effect<void>;
   }
->()("t3/task/TaskWorkspaceService") {}
+>()("merge-agent/task/TaskWorkspaceService") {}
 
 const archivingError = () =>
   new TaskOperationError({
