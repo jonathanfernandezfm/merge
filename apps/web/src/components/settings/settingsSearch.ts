@@ -754,12 +754,6 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["commands scripts setup run dev server checkout worktree t3.json import"],
   },
   {
-    id: "project-workspace-files",
-    title: "Workspace files",
-    to: "/settings/projects",
-    searchTerms: ["copy files env local untracked task workspace worktree t3.json"],
-  },
-  {
     id: "environment-icon",
     title: "Environment icon",
     to: "/settings/connections",

@@ -1,11 +1,7 @@
 import * as Exit from "effect/Exit";
 import * as Schema from "effect/Schema";
 
-import {
-  T3ProjectFile,
-  T3_PROJECT_FILE_SCHEMA_URL,
-  type T3ProjectFileWorkspaceCopyRule,
-} from "@t3tools/contracts";
+import { T3ProjectFile, T3_PROJECT_FILE_SCHEMA_URL } from "@t3tools/contracts";
 
 import { fromLenientJson } from "./schemaJson.ts";
 
@@ -25,37 +21,6 @@ const decodeT3ProjectFile = Schema.decodeExit(T3ProjectFileFromJson);
 export function parseT3ProjectFile(contents: string): T3ProjectFile | null {
   const decoded = decodeT3ProjectFile(contents);
   return Exit.isSuccess(decoded) ? decoded.value : null;
-}
-
-const decodeJsonObject = Schema.decodeExit(
-  fromLenientJson(Schema.Record(Schema.String, Schema.Unknown)),
-);
-
-/**
- * Rewrite raw `t3.json` contents with a new `workspace.copy` list, keeping
- * every other key. `null` contents create a new file. Returns null when the
- * existing file is not a JSON object or the result would not decode, so a
- * broken file is never overwritten. Comments are not preserved.
- */
-export function setT3ProjectFileCopyRules(
-  contents: string | null,
-  rules: ReadonlyArray<T3ProjectFileWorkspaceCopyRule>,
-): string | null {
-  let document: Record<string, unknown> = { $schema: T3_PROJECT_FILE_SCHEMA_URL };
-  if (contents !== null && contents.trim().length > 0) {
-    const decoded = decodeJsonObject(contents);
-    if (!Exit.isSuccess(decoded)) return null;
-    document = { ...decoded.value };
-  }
-  const { copy: _previous, ...workspace } =
-    typeof document.workspace === "object" && document.workspace !== null
-      ? (document.workspace as Record<string, unknown>)
-      : {};
-  const nextWorkspace = rules.length > 0 ? { ...workspace, copy: rules } : workspace;
-  if (Object.keys(nextWorkspace).length > 0) document.workspace = nextWorkspace;
-  else delete document.workspace;
-  const next = `${JSON.stringify(document, null, 2)}\n`;
-  return parseT3ProjectFile(next) === null ? null : next;
 }
 
 /**
