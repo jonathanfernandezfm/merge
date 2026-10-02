@@ -83,10 +83,9 @@ export function deriveTaskStatus(input: {
     return "waiting-for-review";
   }
 
-  // No pull request and nothing running: once an agent has finished a turn the
-  // task idles until someone picks it up again; a task nobody has worked on
-  // yet is still just being worked on.
-  return threads.some((thread) => thread.state === "idle") ? "idle" : "working";
+  // No pull request and nothing running, including a task nobody has worked
+  // on yet: it idles until someone picks it up.
+  return "idle";
 }
 
 export type TaskStatusTone = "neutral" | "info" | "success" | "warning" | "danger";
