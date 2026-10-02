@@ -10,7 +10,7 @@ jobs:
     if: |
       contains(github.event.pull_request.labels.*.name, '🚀 Mobile Continuous Deployment') &&
       (github.event.action != 'labeled' || github.event.label.name == '🚀 Mobile Continuous Deployment')
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     concurrency:
       group: mobile-eas-preview-${{ github.event.pull_request.number }}
       cancel-in-progress: true
@@ -21,6 +21,9 @@ jobs:
       APP_VARIANT: preview
       NODE_OPTIONS: --max-old-space-size=8192
       MOBILE_VERSION_POLICY: fingerprint
+      # app.config.ts reads the Expo account and project from these.
+      EXPO_OWNER: ${{ vars.EXPO_OWNER }}
+      EAS_PROJECT_ID: ${{ vars.EAS_PROJECT_ID }}
     steps:
       - id: expo-token
         name: Check for EXPO_TOKEN

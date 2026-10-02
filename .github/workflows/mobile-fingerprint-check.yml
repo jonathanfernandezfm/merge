@@ -24,7 +24,7 @@ concurrency:
 jobs:
   fingerprint:
     name: Native fingerprint diff
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       issues: write
@@ -32,6 +32,9 @@ jobs:
     env:
       APP_VARIANT: production
       NODE_OPTIONS: --max-old-space-size=8192
+      # Same Expo config inputs as the production build, so fingerprints match.
+      EXPO_OWNER: ${{ vars.EXPO_OWNER }}
+      EAS_PROJECT_ID: ${{ vars.EAS_PROJECT_ID }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6

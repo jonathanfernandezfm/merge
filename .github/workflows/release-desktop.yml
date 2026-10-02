@@ -73,24 +73,6 @@ on:
       release_channel:
         required: true
         type: string
-      # Whether a `relay-client-tracing-config` artifact from the production
-      # relay state is expected. PR previews carry no tracing config.
-      relay_client_tracing:
-        required: false
-        default: true
-        type: boolean
-      clerk_publishable_key:
-        required: true
-        type: string
-      clerk_jwt_template:
-        required: true
-        type: string
-      clerk_cli_oauth_client_id:
-        required: true
-        type: string
-      relay_url:
-        required: true
-        type: string
 
 permissions:
   # Windows builds read this run's artifact list to wait for the Linux CLI archive.
@@ -104,11 +86,6 @@ jobs:
     # Windows waits for the Linux CLI archive inside its own budget (see
     # "Wait for Linux CLI archive"), so it gets that wait on top of the usual 30.
     timeout-minutes: ${{ inputs.platform == 'win' && 70 || 30 }}
-    env:
-      T3CODE_CLERK_PUBLISHABLE_KEY: ${{ inputs.clerk_publishable_key }}
-      T3CODE_CLERK_JWT_TEMPLATE: ${{ inputs.clerk_jwt_template }}
-      T3CODE_CLERK_CLI_OAUTH_CLIENT_ID: ${{ inputs.clerk_cli_oauth_client_id }}
-      T3CODE_RELAY_URL: ${{ inputs.relay_url }}
     steps:
       # This repository is public, so Git needs no credentials. checkout's
       # credential cleanup runs submodule foreach even with submodules disabled,
@@ -154,7 +131,7 @@ jobs:
       - name: Install desktop dependencies
         env:
           pnpm_config_cache_dir: ${{ runner.temp }}/pnpm-metadata
-        run: vp install --filter=@t3tools/desktop... --filter=t3... --filter=@t3tools/scripts...
+        run: vp install --filter=@t3tools/desktop... --filter=merge-agent... --filter=@t3tools/scripts...
 
       - name: Cache resource monitor
         id: resource_monitor_cache
@@ -179,22 +156,6 @@ jobs:
         with:
           toolchain: stable
           targets: ${{ inputs.rust_target }}
-
-      - name: Download relay client tracing config
-        if: inputs.relay_client_tracing
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: relay-client-tracing-config
-          path: ${{ runner.temp }}/relay-client-tracing
-
-      - name: Load relay client tracing config
-        if: inputs.relay_client_tracing
-        shell: bash
-        run: |
-          config_path="$RUNNER_TEMP/relay-client-tracing/relay-client-tracing.env"
-          tracing_token="$(sed -n 's/^T3CODE_RELAY_CLIENT_OTLP_TRACES_TOKEN=//p' "$config_path")"
-          echo "::add-mask::$tracing_token"
-          cat "$config_path" >> "$GITHUB_ENV"
 
       - name: Align package versions to release version
         run: node scripts/update-release-package-versions.ts "${{ inputs.version }}"
@@ -227,9 +188,6 @@ jobs:
             Write-Error "Visual Studio Installer failed with exit code $code"
             exit $code
           }
-
-      - uses: ./.github/actions/setup-apt-mirrors
-        if: inputs.platform == 'linux'
 
       - name: Install Linux desktop build libraries
         if: inputs.platform == 'linux'
@@ -383,7 +341,6 @@ jobs:
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
           MACOS_PROVISIONING_PROFILE: ${{ secrets.MACOS_PROVISIONING_PROFILE }}
-          T3CODE_CLERK_PASSKEY_RP_DOMAINS: ${{ vars.CLERK_PASSKEY_RP_DOMAINS }}
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
           AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
@@ -435,7 +392,7 @@ jobs:
           elif [[ "${{ inputs.platform }}" == "win" ]]; then
             # Embed the Linux CLI archive built by the same-arch Linux job as
             # the WSL runtime. Required for a working WSL backend on Windows.
-            args+=(--wsl-runtime "$GITHUB_WORKSPACE"/wsl-runtime/t3-*-linux-${{ inputs.arch }}.tar.gz)
+            args+=(--wsl-runtime "$GITHUB_WORKSPACE"/wsl-runtime/merge-agent-*-linux-${{ inputs.arch }}.tar.gz)
             if has_all \
               "$AZURE_TENANT_ID" \
               "$AZURE_CLIENT_ID" \

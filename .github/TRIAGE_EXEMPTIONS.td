@@ -1,6 +1,4 @@
-# Explicit contribution-triage exemptions; independent of VOUCHED.td.
+# Explicit contribution-triage exemptions.
 # Syntax: github:username (one entry per line; no denouncements).
-# Keep entries sorted alphabetically. Only the trusted upstream main copy applies.
-github:juliusmarminge
-github:maria-rcks
-github:t3dotgg
+# Keep entries sorted alphabetically. Only the trusted main copy applies.
+github:jonathanfernandezfm
