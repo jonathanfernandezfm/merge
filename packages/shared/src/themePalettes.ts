@@ -384,6 +384,7 @@ export const MERGE_THEME: ThemeDefinition = {
       terminalScrollbarHover: "oklch(0.31603 0.021428 262.549)",
     },
   },
+  sidebarArtwork: true,
 };
 
 export const T3_CHAT_THEME: ThemeDefinition = {

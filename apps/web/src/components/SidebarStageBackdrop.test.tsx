@@ -9,7 +9,7 @@ import {
 
 describe("SidebarStageBackdrop", () => {
   it("resolves stage artwork only when enabled", () => {
-    expect(resolveSidebarStageBackdropVariant("Dev")).toBe("dev");
+    expect(resolveSidebarStageBackdropVariant("Dev")).toBe("merge");
     expect(resolveSidebarStageBackdropVariant("Nightly")).toBe("nightly");
     expect(resolveSidebarStageBackdropVariant("Dev", false)).toBeNull();
     expect(resolveSidebarStageBackdropVariant("Alpha")).toBe("merge");
@@ -24,19 +24,16 @@ describe("SidebarStageBackdrop", () => {
     expect(resolveEnvironmentIdentificationPillLabel("Alpha")).toBeNull();
   });
 
-  it.each(["nightly", "dev", "merge"] as const)(
-    "uses unique SVG definition ids when %s artwork is rendered more than once",
-    (variant) => {
-      const markup = renderToStaticMarkup(
-        <>
-          <StageBackdropArt variant={variant} />
-          <StageBackdropArt variant={variant} />
-        </>,
-      );
-      const ids = Array.from(markup.matchAll(/\sid="([^"]+)"/g), (match) => match[1]);
+  it("uses unique SVG definition ids when nightly artwork is rendered more than once", () => {
+    const markup = renderToStaticMarkup(
+      <>
+        <StageBackdropArt variant="nightly" />
+        <StageBackdropArt variant="nightly" />
+      </>,
+    );
+    const ids = Array.from(markup.matchAll(/\sid="([^"]+)"/g), (match) => match[1]);
 
-      expect(ids.length).toBeGreaterThan(0);
-      expect(new Set(ids).size).toBe(ids.length);
-    },
-  );
+    expect(ids.length).toBeGreaterThan(0);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
 });

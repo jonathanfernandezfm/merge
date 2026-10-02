@@ -491,8 +491,8 @@ describe("theme files", () => {
     expect(getThemeDefinition(DEFAULT_THEME_ID)).toBe(MERGE_THEME);
     expect(BUILT_IN_THEMES[0]).toBe(MERGE_THEME);
     expect(getThemeModes(MERGE_THEME)).toEqual(["light", "dark"]);
-    // Plain sidebar: Merge ships no reviewed artwork.
-    expect(themeAllowsSidebarArtwork(MERGE_THEME.id)).toBe(false);
+    // Merge wears its brand texture in the sidebar header.
+    expect(themeAllowsSidebarArtwork(MERGE_THEME.id)).toBe(true);
     expect(resolveThemeAppearance(DEFAULT_THEME_ID, true, true)).toBe("dark");
     expect(resolveThemeAppearance(DEFAULT_THEME_ID, false, true)).toBe("light");
     expect(resolveDesktopTheme(DEFAULT_THEME_ID, true)).toBe("system");

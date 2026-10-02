@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 const stageArtworkState = vi.hoisted(() => ({
   mode: "none" as "artwork" | "none",
-  variant: null as "nightly" | "dev" | null,
+  variant: null as "nightly" | "merge" | null,
 }));
 
 vi.mock("~/hooks/useSettings", () => ({
