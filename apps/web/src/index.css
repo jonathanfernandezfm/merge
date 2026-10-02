@@ -641,6 +641,13 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
     --stage-night-glow-highlight: oklch(0.553749 0.176543 271.958);
     --stage-night-glow-secondary: oklch(0.345571 0.117466 273.568);
     --stage-night-sparkle: oklch(0.880867 0.057747 269.011);
+    /* Merge release art: the logo's lime on its near-black tile. Theme-independent
+       on purpose, it is the brand mark and stays dark under the white wordmark. */
+    --stage-merge-top: oklch(0.215 0.03 124);
+    --stage-merge-mid: oklch(0.17 0.012 124);
+    --stage-merge-bottom: oklch(0.145 0.003 286);
+    --stage-merge-accent: oklch(0.888 0.205 122.5);
+    --stage-merge-highlight: oklch(0.941 0.151 113.5);
 
     @variant dark {
       --stage-art-top: oklch(0.581473 0.149124 256.9);

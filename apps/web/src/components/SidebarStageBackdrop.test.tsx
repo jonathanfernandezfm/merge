@@ -12,7 +12,9 @@ describe("SidebarStageBackdrop", () => {
     expect(resolveSidebarStageBackdropVariant("Dev")).toBe("dev");
     expect(resolveSidebarStageBackdropVariant("Nightly")).toBe("nightly");
     expect(resolveSidebarStageBackdropVariant("Dev", false)).toBeNull();
-    expect(resolveSidebarStageBackdropVariant("Alpha")).toBeNull();
+    expect(resolveSidebarStageBackdropVariant("Alpha")).toBe("merge");
+    expect(resolveSidebarStageBackdropVariant("Latest")).toBe("merge");
+    expect(resolveSidebarStageBackdropVariant("Alpha", false)).toBeNull();
   });
 
   it("resolves supported environment pill labels", () => {
@@ -22,7 +24,7 @@ describe("SidebarStageBackdrop", () => {
     expect(resolveEnvironmentIdentificationPillLabel("Alpha")).toBeNull();
   });
 
-  it.each(["nightly", "dev"] as const)(
+  it.each(["nightly", "dev", "merge"] as const)(
     "uses unique SVG definition ids when %s artwork is rendered more than once",
     (variant) => {
       const markup = renderToStaticMarkup(

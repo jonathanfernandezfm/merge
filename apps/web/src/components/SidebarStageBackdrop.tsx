@@ -5,7 +5,7 @@ import { APP_STAGE_LABEL } from "../branding";
 import { resolveServerBackedAppStageLabel } from "../branding.logic";
 import { primaryServerConfigAtom } from "../state/server";
 
-export type SidebarStageBackdropVariant = "nightly" | "dev";
+export type SidebarStageBackdropVariant = "nightly" | "dev" | "merge";
 export type EnvironmentIdentificationPillLabel = "Dev" | "Nightly";
 
 // A wide viewBox keeps the 96-unit art height at a fixed scale while sidebar resizing reveals
@@ -20,7 +20,8 @@ export function resolveSidebarStageBackdropVariant(
   const normalized = stageLabel.trim().toLowerCase();
   if (normalized === "nightly") return "nightly";
   if (normalized === "dev") return "dev";
-  return null;
+  // Release builds carry the Merge brand art instead of a channel scene.
+  return "merge";
 }
 
 export function resolveEnvironmentIdentificationPillLabel(
@@ -59,11 +60,15 @@ export function SidebarStageBackdrop({ variant }: { variant: SidebarStageBackdro
 }
 
 export function StageBackdropArt({ variant }: { variant: SidebarStageBackdropVariant }) {
-  return variant === "nightly" ? <NightlySkyArt /> : <DevBlueprintArt />;
+  if (variant === "nightly") return <NightlySkyArt />;
+  if (variant === "merge") return <MergeLanesArt />;
+  return <DevBlueprintArt />;
 }
 
 export function StageBackdropButtonArt({ variant }: { variant: SidebarStageBackdropVariant }) {
-  return variant === "nightly" ? <NightlySkyArt compact /> : <DevBlueprintArt compact />;
+  if (variant === "nightly") return <NightlySkyArt compact />;
+  if (variant === "merge") return <MergeLanesArt compact />;
+  return <DevBlueprintArt compact />;
 }
 
 const NIGHTLY_STARS: ReadonlyArray<{
@@ -204,6 +209,140 @@ function NightlySkyArt({ compact = false }: { compact?: boolean }) {
           fill={`url(#${cloudId})`}
           fillOpacity="0.8"
         />
+      </g>
+    </svg>
+  );
+}
+
+// One 320-unit tile of a commit graph: two branches merge into the trunk, then it forks again,
+// so every tile edge meets its neighbour with all three lanes in place.
+const MERGE_LANES: ReadonlyArray<{ d: string; opacity: number }> = [
+  { d: "M0 22H320", opacity: 0.5 },
+  { d: "M0 10H60C88 10 96 22 124 22", opacity: 0.32 },
+  { d: "M0 34H36C68 34 78 22 110 22", opacity: 0.32 },
+  { d: "M196 22C224 22 232 10 260 10H320", opacity: 0.32 },
+  { d: "M214 22C244 22 252 34 284 34H320", opacity: 0.32 },
+];
+
+const MERGE_COMMITS: ReadonlyArray<{ cx: number; cy: number }> = [
+  { cx: 28, cy: 10 },
+  { cx: 16, cy: 34 },
+  { cx: 58, cy: 22 },
+  { cx: 248, cy: 22 },
+  { cx: 292, cy: 10 },
+  { cx: 306, cy: 34 },
+];
+
+const MERGE_NODE = { cx: 150, cy: 22 };
+
+function MergeLanesArt({ compact = false }: { compact?: boolean }) {
+  const idPrefix = useId().replaceAll(":", "");
+  const baseId = `${idPrefix}-stage-merge-base`;
+  const glowId = `${idPrefix}-stage-merge-glow`;
+  const haloId = `${idPrefix}-stage-merge-halo`;
+  const glowsId = `${idPrefix}-stage-merge-glows`;
+  const dotsId = `${idPrefix}-stage-merge-dots`;
+  const lanesId = `${idPrefix}-stage-merge-lanes`;
+  const fadeId = `${idPrefix}-stage-merge-fade`;
+  const fadeMaskId = `${idPrefix}-stage-merge-fade-mask`;
+
+  return (
+    <svg
+      data-stage-art="merge"
+      className="h-full w-full"
+      fill="none"
+      preserveAspectRatio="xMinYMin slice"
+      viewBox={compact ? "96 0 8192 96" : STAGE_BACKDROP_VIEW_BOX}
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <defs>
+        <linearGradient
+          id={baseId}
+          x1="0"
+          y1="0"
+          x2="240"
+          y2="96"
+          gradientUnits="userSpaceOnUse"
+          spreadMethod="reflect"
+        >
+          <stop style={{ stopColor: "var(--stage-merge-top)" }} />
+          <stop offset="0.55" style={{ stopColor: "var(--stage-merge-mid)" }} />
+          <stop offset="1" style={{ stopColor: "var(--stage-merge-bottom)" }} />
+        </linearGradient>
+        <radialGradient
+          id={glowId}
+          cx="0"
+          cy="0"
+          r="1"
+          gradientTransform="translate(150 22) rotate(90) scale(46 150)"
+          gradientUnits="userSpaceOnUse"
+        >
+          <stop style={{ stopColor: "var(--stage-merge-accent)" }} stopOpacity="0.2" />
+          <stop
+            offset="0.45"
+            style={{ stopColor: "var(--stage-merge-accent)" }}
+            stopOpacity="0.06"
+          />
+          <stop offset="1" style={{ stopColor: "var(--stage-merge-accent)" }} stopOpacity="0" />
+        </radialGradient>
+        <radialGradient id={haloId}>
+          <stop style={{ stopColor: "var(--stage-merge-highlight)" }} stopOpacity="0.55" />
+          <stop offset="1" style={{ stopColor: "var(--stage-merge-accent)" }} stopOpacity="0" />
+        </radialGradient>
+        <pattern id={glowsId} width="320" height="96" patternUnits="userSpaceOnUse">
+          <rect width="320" height="96" fill={`url(#${glowId})`} />
+        </pattern>
+        <pattern id={dotsId} width="6" height="6" patternUnits="userSpaceOnUse">
+          <circle
+            cx="3"
+            cy="3"
+            r="0.45"
+            style={{ fill: "var(--stage-merge-accent)" }}
+            fillOpacity="0.11"
+          />
+        </pattern>
+        <pattern id={lanesId} width="320" height="96" patternUnits="userSpaceOnUse">
+          <g
+            style={{ stroke: "var(--stage-merge-accent)" }}
+            strokeLinecap="round"
+            strokeWidth="0.8"
+          >
+            {MERGE_LANES.map((lane) => (
+              <path key={lane.d} d={lane.d} strokeOpacity={lane.opacity} />
+            ))}
+          </g>
+          <g
+            style={{ fill: "var(--stage-merge-mid)", stroke: "var(--stage-merge-accent)" }}
+            strokeOpacity="0.7"
+            strokeWidth="0.8"
+          >
+            {MERGE_COMMITS.map((commit) => (
+              <circle key={`${commit.cx}-${commit.cy}`} cx={commit.cx} cy={commit.cy} r="1.7" />
+            ))}
+          </g>
+          <circle cx={MERGE_NODE.cx} cy={MERGE_NODE.cy} r="8" fill={`url(#${haloId})`} />
+          <circle
+            cx={MERGE_NODE.cx}
+            cy={MERGE_NODE.cy}
+            r="2.4"
+            style={{ fill: "var(--stage-merge-highlight)" }}
+          />
+        </pattern>
+        {/* Quiet the texture behind the wordmark so the brand text stays the loudest thing. */}
+        <linearGradient id={fadeId} x1="0" y1="0" x2="200" y2="0" gradientUnits="userSpaceOnUse">
+          <stop stopColor="white" stopOpacity="0.3" />
+          <stop offset="1" stopColor="white" />
+        </linearGradient>
+        <mask id={fadeMaskId} maskUnits="userSpaceOnUse" x="0" y="0" width="8192" height="96">
+          <rect width="8192" height="96" fill={`url(#${fadeId})`} />
+        </mask>
+      </defs>
+
+      <rect width="100%" height="96" fill={`url(#${baseId})`} />
+      <rect width="100%" height="96" fill={`url(#${glowsId})`} />
+      <g mask={compact ? undefined : `url(#${fadeMaskId})`}>
+        <rect width="100%" height="96" fill={`url(#${dotsId})`} />
+        <rect width="100%" height="96" fill={`url(#${lanesId})`} />
       </g>
     </svg>
   );
