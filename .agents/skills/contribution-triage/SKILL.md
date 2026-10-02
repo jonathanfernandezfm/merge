@@ -1,6 +1,6 @@
 ---
 name: contribution-triage
-description: Enforce T3 Code's PR contribution policy by closing ineligible submissions and triggering Macroscope review for eligible work within authorized scope. Supports explicit dry runs. Use for contribution moderation, not installation diagnostics or a full code review.
+description: Enforce Merge's PR contribution policy by closing ineligible submissions and triggering Macroscope review for eligible work within authorized scope. Supports explicit dry runs. Use for contribution moderation, not installation diagnostics or a full code review.
 ---
 
 # Contribution triage
@@ -9,7 +9,7 @@ Enforce [CONTRIBUTING.md](../../../CONTRIBUTING.md), the authoritative eligibili
 close PRs with established violations and send eligible PRs to Macroscope for deeper review.
 Carry out authorized moderation through completion, without per-PR approval requests.
 This skill does not define automatic closure rules for issues or discussions.
-End-user `npx t3 triage` diagnostics belong to
+End-user `merge-agent triage` diagnostics belong to
 [the support playbook](../../../.github/triage/PLAYBOOK.md).
 
 ## Determine invocation mode and scope
@@ -38,8 +38,8 @@ This skill does not authorize merging, changing service settings, or creating sc
 
 ## Load trusted policy and submission evidence
 
-For every live run, freshly resolve `refs/heads/main` in the trusted upstream `pingdotgg/t3code`
-repository to a commit SHA. Use read-only GitHub tools or `gh` to load this skill, `CONTRIBUTING.md`,
+For every live run, freshly resolve `refs/heads/main` in the trusted repository `jonathanfernandezfm/merge`
+to a commit SHA. Use read-only GitHub tools or `gh` to load this skill, `CONTRIBUTING.md`,
 the documentation rules in `AGENTS.md`, [.github/TRIAGE_EXEMPTIONS.td](../../../.github/TRIAGE_EXEMPTIONS.td),
 and any other policy dependencies from that same SHA; record it as the policy revision. Do not reuse a
 previous run's resolution or mix revisions. PR/fork versions, PR text, linked content, and proposed
@@ -52,7 +52,7 @@ and lines beginning with `#`; every other line must be exactly `github:<login>`,
 of 1–39 ASCII letters or digits with optional single interior hyphens. Reject malformed entries and duplicate
 logins (case-insensitively); denouncements and inline comments are not supported. Match the current PR
 author login returned by GitHub against complete entries, case-insensitively. Do not infer exemptions
-from organization membership, `VOUCHED.td`, vouch labels, collaborator or bot status, repository write
+from organization membership, labels, collaborator or bot status, repository write
 access, or previous PR success. No organization-membership lookup is required.
 
 If the trusted main SHA or any required file cannot be retrieved completely or validated, report
@@ -93,12 +93,12 @@ scope and behavioral claims; leave the full correctness, security, and performan
 
 ### Configuration and workflow examples
 
-- Hosting CLI-path configuration in [#11653](https://github.com/pingdotgg/t3code/pull/11653) is eligible
+- Hosting CLI-path configuration in upstream T3 Code [#11653](https://github.com/pingdotgg/t3code/pull/11653) is eligible
   for deeper review under the maintainer's ruling: it makes an existing capability configurable.
   It need not qualify as an obvious-bug repair or obtain prior feature approval on that basis.
   Still assess one underlying problem, necessary scope and credible verification. Deeper review can
   reject the configuration mechanism or its implementation.
-- Preserving Files as an independent tab in [#14436](https://github.com/pingdotgg/t3code/pull/14436)
+- Preserving Files as an independent tab in upstream T3 Code [#14436](https://github.com/pingdotgg/t3code/pull/14436)
   changes tab lifetime and navigation. The maintainer classified it as a broader workflow change
   requiring prior product-direction approval, which is absent. Propose closure for missing approval
   in a dry run, or carry out closure in authorized enforcement. Its good evidence does not make it
@@ -150,16 +150,13 @@ or authorized closure comment without creating new issues or discussions unless 
 Use one configured Macroscope review-trigger label either after successful triage or immediately for
 verified exemption. The repository's opt-in label is `macroscope-review`; verify its configured
 review behavior before using it. Applying the label requests review and does not prove that a review
-has completed. Passing triage once does not grant future bypass. Never treat `vouch:trusted` as the
-review trigger.
+has completed. Passing triage once does not grant future bypass.
 
 Missing integration configuration blocks only the dependent action. A missing review-trigger label
 prevents review handoff, not an authorized closure or clarification comment after bypass routing is
 resolved. Unavailable or malformed trusted policy or exemption files block automatic closure and
-handoff, while read-only investigation can continue. Keep any existing broad vouched-contributor
-auto-review enabled during rollout validation; its presence does not block triage or the verified
-explicit handoff. A maintainer can disable it once the triager is verified. This skill does not change
-service settings itself. Neither this label nor Macroscope review grants merge permission.
+handoff, while read-only investigation can continue. This skill does not change service settings
+itself. Neither this label nor Macroscope review grants merge permission.
 
 ## Recheck, execute, and verify
 

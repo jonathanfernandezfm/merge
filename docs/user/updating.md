@@ -34,18 +34,14 @@ The offered action depends on how the server runs:
 On the host, run:
 
 ```sh
-t3 update <client-version>
+merge-agent update <client-version>
 ```
 
 Replace `<client-version>` with the version shown in the notice. The command
 asks before restarting the background service; if you decline, run
-`t3 service restart` when you are ready. For a server you started by hand,
+`merge-agent service restart` when you are ready. For a server you started by hand,
 stop it and start it again afterwards with your usual options such as `--host`
 or `--tailscale-serve`.
-
-If you run the server with `npx` rather than an installed `t3`, there is
-nothing to update on the host: stop the server and relaunch it as
-`npx t3@<client-version>` with the same subcommand and options.
 
 ## If an update fails
 
@@ -70,8 +66,8 @@ Provider update checks and restart continuation preferences are in
 **Settings → Maintenance**. If provider update checks are disabled, enable them
 there before refreshing to find newer versions.
 
-Install App Store or Google Play releases as usual. The mobile app can also
-download updates in the background and apply them when you next leave the app.
+Rebuild and reinstall the mobile app for native changes. Builds with over-the-air
+updates configured on your Expo account can also download updates in the background and apply them when you next leave the app.
 It saves drafts and queued messages before restarting. If you keep the app open
 for a long time, it may ask to install immediately; choosing **Later** leaves the
 update queued for the next suitable moment.

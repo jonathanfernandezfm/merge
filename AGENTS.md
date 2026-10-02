@@ -1,54 +1,35 @@
-# T3 Code
+# Merge
 
-T3 Code is a minimal GUI for coding agents. A Node WebSocket server wraps provider CLIs and agents (Codex, Claude Code, Cursor, Grok, OpenCode, Antigravity) and serves web, desktop, and mobile clients.
+Merge is a minimal GUI for coding agents, forked from [T3 Code](https://github.com/pingdotgg/t3code). A Node WebSocket server wraps provider CLIs and agents (Codex, Claude Code, Cursor, Grok, OpenCode, Antigravity) and serves web, desktop, and mobile clients. The CLI is `merge-agent`; releases ship on GitHub Releases at `jonathanfernandezfm/merge`.
 
-You can think of T3 Code as an open source "bring-your-own-subscription" alternative to apps like Claude Desktop, Codex App, Cursor Glass and Conductor.
+Internal names from upstream are kept on purpose: `@t3tools/*` packages, `T3CODE_*` env vars, the `~/.t3` home directory, and the `t3.json` project file. Do not rename them. User-facing copy says "Merge".
 
-## What makes T3 Code special?
+## What to protect
 
-We have over 200,000 users who love T3 Code. It's important we maintain the things they love as we continue to iterate on the product. Here's a brief list of the things we can never compromise on.
+1. **Open.** The code, roadmap, and reasoning are public. Keep it forkable.
+2. **Performance.** Audit for regressions: too much data over websockets, CSS animations spiking the GPU, lists that render poorly. Consider performance impact on every change.
+3. **Remote ready.** The websocket server (`merge-agent`) is reached locally, over a LAN, Tailscale, or SSH. New features must work over those connections. The hosted relay (Connect) exists in the code but is off in this fork.
+4. **Multi-surface.** Web (served by `merge-agent`), desktop (Electron, bundles the server and can host remote connections), and mobile (React Native, built with the maintainer's own EAS account). New features should support all of them where reasonable.
 
-### 1. Open at the core
+## Engineering principles
 
-T3 Code is truly open. We share our roadmap, we share how we think about things, and of course we share all our code. A large number of our users run forks. We work in the open, and should strive to stay that way.
+Prefer ambitious ideas, simple systems, and software that feels obvious. Do not preserve complexity just because it already exists. Do not introduce machinery because it looks architecturally impressive. Understand the real constraint, then fight for the smallest model that makes the correct behavior unsurprising.
 
-### 2. Performance without compromise
+Channel both "measure twice, cut once" and "yagni". Fight scope creep. Honor the developer's intent in both a minimal and realistic fashion.
 
-Lots of apps have gotten bogged down with bad tech decisions and "slop". We have not, and we're proud of the performance of T3 Code. We regularly audit for performance regressions, often caused by sending too much data over websockets, css animations causing gpu spikes, lists being hard to render, and more. Make sure all changes are considerate of performance impact.
+The rest of this document helps you navigate the codebase. Treat it as good defaults, not hard rules; the developer's preferences override anything here.
 
-### 3. Remote ready
-
-The architecture of T3 Code's websocket layer (npx t3) enables a lot of awesome remote features. These have become core to the product. Whether users are connecting directly over their local network, using Tailscale, or leaning in fully with T3 Connect (our tunnel solution, also in this repo), we need to make sure new features are properly supported.
-
-### 4. Multi-surface
-
-T3 Code has 3 key app surfaces: **web**, **desktop**, and **mobile**.
-
-**Web** is kind of two surfaces, as we have the public facing "app.t3.codes" as well as locally hosting the web app through the `npx t3` command. Both need to be supported by all new features where reasonable.
-
-**Desktop** is the main surface most users install first. It's a full Electron app that bundles the server runner as well. The desktop app can also be used as the host server, allowing remote connections from app.t3.codes or the mobile app.
-
-**Mobile** is a React Native app for both iOS and Android, available on the App Store and Google Play. The mobile app allows for connecting to any T3 Code server to control work remotely.
-
-## A note from Theo
-
-I like ambitious ideas, simple systems, and software that feels obvious. Do not preserve complexity just because it already exists. Do not introduce machinery because it looks architecturally impressive. Understand the real constraint, then fight for the smallest model that makes the correct behavior unsurprising.
-
-Channel both "measure twice, cut once" and "yagni". Fight scope creep. Try to honor the dev's intent in both a minimal and realistic fashion.
-
-The rest of this document is meant to help you navigate the codebase and make changes effectively. Think of these instructions less as "hard rules", more as "good defaults". The developer's preferences should be able to override anything here.
-
-Of note: Most T3 Code contributions will come from T3 Code itself, often controlled remotely. This means you should be careful about accessing data, killing dev servers, and other things that may damage the T3 Code instance that the contributor is using.
+Contributions are often made by agents running inside Merge itself, sometimes controlled remotely. Be careful about accessing data, killing dev servers, and anything else that could damage the Merge instance the contributor is using.
 
 ## A small glossary
 
 We need to be on the same page with terminology. When communicating, use this language:
 
-- **you** means the agent reading this file and changing T3 Code.
-- **we, us, and maintainers** mean Theo, Julius and the people building T3 Code. These are who you are talking to now.
-- **user** means the person using T3 Code to direct coding agents.
-- **agent** means the coding agent a user runs inside T3 Code. Depending on context, that may also include you.
-- **provider** means the agent runtime or harness T3 Code talks to, such as Codex, Claude, Cursor, or OpenCode.
+- **you** means the agent reading this file and changing Merge.
+- **we, us, and maintainers** mean the people maintaining this fork. These are who you are talking to now.
+- **user** means the person using Merge to direct coding agents.
+- **agent** means the coding agent a user runs inside Merge. Depending on context, that may also include you.
+- **provider** means the agent runtime or harness Merge talks to, such as Codex, Claude, Cursor, or OpenCode.
 - **client** means the web, desktop, or mobile UI.
 - **environment** means one running T3 server and the machine, filesystem, provider credentials, and state it owns.
 - **project** means an environment-local workspace record rooted at a directory.
@@ -59,7 +40,7 @@ We need to be on the same page with terminology. When communicating, use this la
 ## The three ways to hurt yourself
 
 1. **Killing by pattern.** Never `pkill -f`, `pgrep | kill`, or `kill` a PID you found by matching a name, path, or worktree string. Your own agent process has this worktree's path in its argv, and this machine runs several other dev servers at once. Kill only a PID you captured at spawn, or the owner of your port from `ss -H -ltnp` after confirming `/proc/<pid>/cwd` is your worktree.
-2. **Writing to the live install.** `~/.t3/userdata` is the developer's real T3 Code database, in use while you work. Reading it and copying from it are fine, and a good way to get real test data (see Test data). Never start a server against it, never open it read-write, never clean it up.
+2. **Writing to the live install.** `~/.t3/userdata` is the developer's real Merge database, in use while you work. Reading it and copying from it are fine, and a good way to get real test data (see Test data). Never start a server against it, never open it read-write, never clean it up.
 3. **Baking in origins.** Never set `VITE_HTTP_URL` or `VITE_WS_URL` for dev. Dev is single-origin and Vite proxies `/api`, `/ws`, `/oauth`, and `/.well-known`. Setting them bakes localhost into the bundle and silently breaks every remote browser.
 
 ## Hit every surface
@@ -71,7 +52,7 @@ The most common defect in this repo is a change that works on the path you teste
 - **Providers.** Codex, Claude, Cursor, Grok, OpenCode, and Antigravity each have an adapter. Provider-shaped features need a decision per adapter, even if the decision is "not supported here".
 - **Contracts.** Anything crossing the wire is typed in `packages/contracts`. Change the schema and the server, web, mobile, and desktop all follow.
 - **Reverse states.** If you added a way in, add the way out and the way to see it. Snooze needs unsnooze. Close needs reopen. A one-way door is a bug.
-- **Connection modes.** Local, remote/relay, and tunnel behave differently. Multi-device and multi-environment cases are real.
+- **Connection modes.** Local, LAN/Tailscale, and SSH behave differently (relay and tunnel code paths exist but are off by default). Multi-device and multi-environment cases are real.
 - **Docs.** Check whether the change makes existing guidance inaccurate. Apply the [documentation rules](#documentation) before adding anything.
 
 ## Dev servers
@@ -132,12 +113,12 @@ Most code changes do not need an internal documentation change. Agents can read 
 - When a documented decision or constraint changes, rewrite or remove the affected text. Do not append another account of the new behavior. A new internal page needs a distinct, durable reason to exist.
 - `docs/user/` helps users accomplish tasks. Give each major feature a concise section explaining what it does, how to start, and anything unintuitive. A settings path is useful; descriptions of visible buttons, icons, layouts, animations, or every UI state are not. Before adding text, ask what task or decision it helps the user with.
 - Keep user docs in the shipped product's voice, without implementation details or contributor tooling. Update the relevant feature section when how to use it changes. A UI tweak does not need a documentation entry, and a new control does not need its own page.
-- `docs/operations/` holds maintainer setup, release, and debugging procedures. Keep instructions for operating an installed T3 Code server in the user guides.
+- `docs/operations/` holds maintainer setup, release, and debugging procedures. Keep instructions for operating an installed Merge server in the user guides.
 
 ## Plans and work artifacts
 
 - Do not commit implementation plans, research notes, or agent scratch files. Keep temporary working material outside the worktree. `.plans/` is gitignored only as a safety net for legacy tooling.
-- Track active maintainer work in the GitHub issue or project item that owns it. External proposals follow `CONTRIBUTING.md` and belong in Ideas discussions.
+- Track active maintainer work in the GitHub issue or project item that owns it. External proposals follow `CONTRIBUTING.md` and belong in GitHub discussions.
 - A merged PR is the implementation record. Close or update its tracking item when the work lands; do not preserve a second checklist in the repository.
 
 ## How it works
@@ -149,7 +130,7 @@ Full glossary with file links: `docs/internals/glossary.md`
 ## Where code lives
 
 - `apps/server` - WebSocket, orchestration, providers, checkpointing. Effect-heavy: read `.repos/effect-smol/LLMS.md` before writing Effect code.
-- `apps/web` - React/Vite UI. `apps/desktop` wraps it, `apps/mobile` is React Native, `apps/marketing` is the site.
+- `apps/web` - React/Vite UI. `apps/desktop` wraps it, and `apps/mobile` is React Native.
 - `packages/contracts` - Effect/Schema contracts plus small derived helpers. No heavy runtime logic.
 - `packages/shared` - shared runtime utils, subpath exports, no barrel.
 - `packages/client-runtime` - client code shared by web and mobile.

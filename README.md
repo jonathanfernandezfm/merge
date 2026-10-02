@@ -1,133 +1,114 @@
 # Merge
 
-Merge is an "agent harness control surface". It enables control of the agents on your machine with a best-in-class mobile app ([iOS](https://apps.apple.com/us/app/t3-code-remote-claude-more/id6787819824), [Android](https://play.google.com/store/apps/details?id=com.t3tools.t3code)), [web app](https://app.t3.codes) and [Electron-based desktop app](https://t3.codes).
+Merge is a desktop, web, and mobile control surface for the coding agents on your machine. It
+works with your existing subscriptions to Claude Code, Codex, Cursor, Grok Build, OpenCode, and
+Google Antigravity: if they are set up on your computer, Merge can drive them.
 
-Works with your subscriptions on Claude Code, Codex, Cursor, Grok Build, OpenCode, and Google Antigravity. If they're set up on your computer, Merge can control them.
+> [!NOTE]
+> Merge is a fork of [T3 Code](https://github.com/pingdotgg/t3code) by T3 Tools, released under
+> the MIT License. Most of the code is theirs; this fork rebrands it and ships its own builds.
 
-## "Wait, what are you selling me?"
+## Prerequisites
 
-Nothing. We built Merge because we wanted the best possible development experience with agents. We were inspired by existing solutions like the Codex desktop app, Conductor, Claude Desktop and Cursor Glass, but none met our bar.
+Install and authenticate at least one provider on the machine that will run the agents:
 
-We wanted something performant, remote-ready, and truly open. If we ever go the wrong direction, we want you to have everything you need to fork and build the editor that you want.
+- Codex: install [Codex CLI](https://developers.openai.com/codex/cli) and run `codex login`
+- Claude: install [Claude Code](https://claude.com/product/claude-code) and run `claude auth login`
+- Cursor: install [Cursor CLI](https://cursor.com/cli) and run `agent login`
+- Grok Build: install [Grok Build CLI](https://x.ai/cli) and run `grok login`
+- OpenCode: install [OpenCode](https://opencode.ai) and run `opencode auth login`
+- Antigravity: enable it in Settings, then use **Install Antigravity** and **Sign in with Google**. No CLI is required.
 
-## Installation
+## Install
 
-> [!WARNING]
-> Merge currently supports Codex, Claude, Cursor, Grok Build, OpenCode, and Antigravity. Install and authenticate at least one provider before use:
->
-> - Codex: install [Codex CLI](https://developers.openai.com/codex/cli) and run `codex login`
-> - Claude: install [Claude Code](https://claude.com/product/claude-code) and run `claude auth login`
-> - Cursor: install [Cursor CLI](https://cursor.com/cli) and run `agent login`
-> - Grok Build: install [Grok Build CLI](https://x.ai/cli) and run `grok login`
-> - OpenCode: install [OpenCode](https://opencode.ai) and run `opencode auth login`
-> - Antigravity: enable it in Settings, then use **Install Antigravity** and **Sign in with Google**. No CLI is required.
+### Desktop app
 
-### Command line
+Download the installer for your platform from
+[GitHub Releases](https://github.com/jonathanfernandezfm/merge/releases):
+
+| Platform       | File                                                      |
+| -------------- | --------------------------------------------------------- |
+| Windows        | `Merge-<version>-x64.exe` or `Merge-<version>-arm64.exe`  |
+| macOS          | `Merge-<version>-arm64.dmg` (Apple Silicon) or `-x64.dmg` |
+| Linux          | `Merge-<version>-<arch>.AppImage`                         |
+| Debian, Ubuntu | `Merge-<version>-<arch>.deb`                              |
+
+Release builds may be unsigned:
+
+- **macOS:** if Gatekeeper refuses to open the app, right-click it and choose **Open**, or allow it
+  in **System Settings → Privacy & Security**.
+- **Windows:** if SmartScreen blocks the installer, choose **More info → Run anyway**.
+
+### Command line (server only)
+
+Use the `merge-agent` CLI on a machine without the desktop app, such as a remote host:
 
 ```bash
-curl -fsSL https://t3.codes/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/jonathanfernandezfm/merge/main/scripts/install.sh | sh
 ```
 
 On Windows, in PowerShell:
 
 ```powershell
-irm https://t3.codes/install.ps1 | iex
+irm https://raw.githubusercontent.com/jonathanfernandezfm/merge/main/scripts/install.ps1 | iex
 ```
 
-Then run `t3` to start the server and open the local web app. `t3 service install` keeps it running in the background, `t3 update` moves to a newer release, and `t3 --help` has the full reference.
+Then:
 
-To try it once without installing, run `npx t3@latest` instead.
+| Task                                  | Command                       |
+| ------------------------------------- | ----------------------------- |
+| Start the server and open the web app | `merge-agent`                 |
+| Start the server without a browser    | `merge-agent serve`           |
+| Pair another device                   | `merge-agent pair`            |
+| Run in the background (macOS, Linux)  | `merge-agent service install` |
+| Update to a newer release             | `merge-agent update`          |
+| Full reference                        | `merge-agent --help`          |
 
-### Desktop app
+There is no CLI build for Intel Macs; see [Install Merge](./docs/user/install.md#intel-macs).
 
-Install the latest version of the desktop app from [GitHub Releases](https://github.com/pingdotgg/t3code/releases), or from your favorite package registry:
+### Mobile app
 
-#### Windows (`winget`)
+The mobile app is not on the App Store or Google Play. Build it with your own Expo account; see
+the [mobile README](./apps/mobile/README.md).
 
-```bash
-winget install T3Tools.T3Code
-```
+## Remote access
 
-#### macOS (Homebrew)
+Merge connects clients directly to the machine running your agents. There is no hosted relay or
+hosted web app.
 
-```bash
-brew install --cask t3-code
-```
+- **LAN or private network:** `merge-agent serve --host <private-ip>`, then `merge-agent pair`.
+- **Tailscale:** `merge-agent serve --tailscale-serve`, or `merge-agent pair --tailscale` on a
+  running server.
+- **SSH:** in the desktop app, **Settings → Connections → Add environment → SSH**.
 
-#### Debian, Ubuntu (`.deb`)
+Details: [Remote access](./docs/user/remote-access.md).
 
-Download the `.deb` from [GitHub Releases](https://github.com/pingdotgg/t3code/releases), then:
+## Build from source
 
-```bash
-sudo apt install ./T3-Code-*.deb
-```
+1. Install [Vite+](https://viteplus.dev/guide/), which provides the `vp` command:
+   - macOS / Linux: `curl -fsSL https://vite.plus | bash`
+   - Windows: `irm https://vite.plus/ps1 | iex`
+2. Install dependencies: `vp i`
+3. Start the server and web app: `vp run dev` (or `vp run dev:desktop` for the desktop app)
 
-#### Arch Linux (AUR)
-
-Stable:
-
-```bash
-yay -S t3code-bin
-```
-
-Nightly:
-
-```bash
-yay -S t3code-nightly-bin
-```
-
-The AUR packaging is maintained in this repository under [`packaging/aur`](./packaging/aur).
-
-## Some notes
-
-We are very very early in this project. Expect bugs.
-
-We are (mostly) not accepting contributions yet. Small fixes may be considered. Big features will not be.
+The [development runbook](./docs/operations/development.md) covers ports, test data, and
+packaging.
 
 ## Documentation
 
-Full docs live in [docs/](./docs). There's no docs site yet.
-
 - [Install and first run](./docs/user/install.md)
-- [Permission modes](./docs/user/permission-modes.md)
-- [Keyboard shortcuts](./docs/user/keybindings.md)
-- [Project settings](./docs/user/project-settings.md)
-- [Remote access from a phone or another machine](./docs/user/remote-access.md)
-- [Keeping app and server in sync](./docs/user/updating.md)
-- [Source control integrations](./docs/user/source-control.md)
-- Multiple accounts: [Codex](./docs/user/providers-codex.md) · [Claude](./docs/user/providers-claude.md)
-- [Run Merge as a background service](./docs/user/background-service.md)
+- [Remote access](./docs/user/remote-access.md)
+- [Running in the background](./docs/user/background-service.md)
+- [Updating Merge](./docs/user/updating.md)
+- [All user guides](./docs/README.md)
+- [Architecture overview](./docs/internals/overview.md)
 
-Building from source? Start at [docs/internals/overview.md](./docs/internals/overview.md).
+## Contributing
 
-## If you REALLY want to contribute still.... read this first
+Merge is early and expects bugs. Read [CONTRIBUTING.md](./CONTRIBUTING.md) before opening an issue
+or PR. Report bugs in [issues](https://github.com/jonathanfernandezfm/merge/issues) and propose
+ideas in [discussions](https://github.com/jonathanfernandezfm/merge/discussions).
 
-### Install `vp`
+## License
 
-Merge uses Vite+ so you'll need to install the global `vp` command-line tool.
-
-#### macOS / Linux
-
-```bash
-curl -fsSL https://vite.plus | bash
-```
-
-#### Windows
-
-```bash
-irm https://vite.plus/ps1 | iex
-```
-
-Checkout their getting started guide for more information: https://viteplus.dev/guide/
-
-### Install dependencies
-
-```bash
-vp i
-```
-
-Read [CONTRIBUTING.md](./CONTRIBUTING.md) before reporting a bug or opening a PR.
-
-Have a feature request? Start an [Ideas discussion](https://github.com/pingdotgg/t3code/discussions/categories/ideas).
-
-Need support? Join the [Discord](https://discord.gg/jn4EGJjrvv).
+[MIT](./LICENSE). Based on [T3 Code](https://github.com/pingdotgg/t3code), copyright T3 Tools Inc.

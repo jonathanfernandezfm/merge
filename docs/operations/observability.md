@@ -1,8 +1,8 @@
 # Observability
 
-> For maintainers. Using T3 Code? See [docs/user](../user/).
+> For maintainers. Using Merge? See [docs/user](../user/).
 
-T3 Code has one server-side observability model:
+Merge has one server-side observability model:
 
 - pretty logs go to stdout for humans
 - completed spans go to a local NDJSON trace file
@@ -64,12 +64,12 @@ request.
 
 #### Summarize the trace file
 
-`t3 trace summary` reads the trace file and its rotated backups directly, so it works while the
+`merge-agent trace summary` reads the trace file and its rotated backups directly, so it works while the
 server is stalled or stopped. It prints counts, rates, and latency percentiles per span name. Use
 it to measure background work or to compare two builds.
 
 ```bash
-t3 trace summary --since 30m --limit 40
+merge-agent trace summary --since 30m --limit 40
 ```
 
 It reads `T3CODE_TRACE_FILE` if set, else `<home>/userdata/logs/server.trace.ndjson` for
@@ -139,7 +139,7 @@ You do not need any extra env vars. Just run the app normally and inspect `serve
 Examples:
 
 ```bash
-npx t3
+merge-agent
 ```
 
 ```bash
@@ -191,7 +191,7 @@ export T3CODE_TRACE_TIMING_ENABLED=true
 CLI:
 
 ```bash
-npx t3
+merge-agent
 ```
 
 Monorepo web/server dev:
@@ -216,7 +216,7 @@ macOS app bundle example:
 T3CODE_OTLP_TRACES_URL=http://localhost:4318/v1/traces \
 T3CODE_OTLP_METRICS_URL=http://localhost:4318/v1/metrics \
 T3CODE_OTLP_LOGS_URL=http://localhost:4318/v1/logs \
-"/Applications/T3 Code.app/Contents/MacOS/T3 Code"
+"/Applications/Merge (Alpha).app/Contents/MacOS/Merge (Alpha)"
 ```
 
 Direct binary example:
@@ -660,7 +660,7 @@ Current high-value span and metric boundaries include:
 ## Heap Snapshots
 
 To see what a long-running server holds in memory, send it `SIGUSR2`. The server writes a V8 heap
-snapshot to its logs dir and logs the path. This works for desktop, `npx t3`, and service installs
+snapshot to its logs dir and logs the path. This works for desktop, `merge-agent`, and service installs
 on macOS and Linux. Windows has no `SIGUSR2`.
 
 Send the signal to the server pid in `server-runtime.json`, which sits in the server's state dir
@@ -674,7 +674,7 @@ pid="$(jq .pid "${T3CODE_HOME:-$HOME/.t3}/userdata/server-runtime.json")"
 ps -p "$pid" -o command=
 ```
 
-If `ps` shows the T3 Code server, send the signal:
+If `ps` shows the Merge server, send the signal:
 
 ```bash
 kill -USR2 "$pid"

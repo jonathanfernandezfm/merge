@@ -1,13 +1,13 @@
 # T3 Connect Relay
 
 > [!NOTE]
-> Sign in to T3 Connect from the app under Settings > Connections.
+> Merge does not deploy this relay. Connect is off in Merge release builds; this code is kept from upstream T3 Code for anyone who runs their own relay.
 
 The relay is the hosted control plane for T3 Connect. It helps clients discover and connect to
 remote environments, manages the cloud-side records needed for those connections, and delivers
 optional mobile notifications and Live Activities.
 
-The relay is intentionally not in the hot path for normal T3 Code traffic. After a client connects,
+The relay is intentionally not in the hot path for normal Merge traffic. After a client connects,
 regular API and WebSocket traffic goes directly between that client and the selected environment.
 See the [T3 Connect architecture note](../../docs/internals/t3-connect.md) for the larger system
 design.
@@ -16,7 +16,7 @@ design.
 
 The relay currently owns:
 
-- Linking T3 Code environments to a cloud account.
+- Linking Merge environments to a cloud account.
 - Provisioning and tracking managed environment endpoints.
 - Issuing short-lived credentials used to connect clients to linked environments.
 - Listing linked environments and registered mobile devices for an account.

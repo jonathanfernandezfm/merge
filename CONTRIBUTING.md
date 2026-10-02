@@ -7,6 +7,10 @@ development commands, tests, and platform-specific desktop packaging prerequisit
 
 ## Read this first
 
+Merge is a fork of [T3 Code](https://github.com/pingdotgg/t3code). Report Merge bugs in
+[Merge issues](https://github.com/jonathanfernandezfm/merge/issues). A problem that also exists in
+T3 Code is usually best fixed upstream first.
+
 We are not actively seeking outside contributions and have limited review capacity. Opening a PR does
 not create an obligation to review or merge it. We may close or defer it, ask for a smaller scope, or
 reimplement the idea later. Meeting this guide's requirements makes a PR eligible for deeper review;
@@ -19,8 +23,8 @@ the same reasons as a ready PR; converting a PR to draft does not exempt it from
 Focused bug fixes, reliability fixes, performance improvements, and maintenance work are the most
 likely to be accepted. Unsolicited features, opinionated rewrites, and unrelated cleanup are not.
 
-Report bugs in issues. Feature requests and proposals belong in
-[Ideas discussions](https://github.com/pingdotgg/t3code/discussions/categories/ideas).
+Report bugs in [issues](https://github.com/jonathanfernandezfm/merge/issues). Feature requests and
+proposals belong in [discussions](https://github.com/jonathanfernandezfm/merge/discussions).
 Search existing reports, discussions, and documented workflows before starting work.
 
 <a id="prior-approval"></a>
@@ -35,7 +39,7 @@ implementation or promise a merge.
 
 For a substantial bug fix, link an issue that maintainers have triaged to establish the actual failure
 and intended behavior. For other non-trivial work outside the exceptions below, agree on direction
-and scope with maintainers in an Ideas discussion before implementing it.
+and scope with maintainers in a discussion before implementing it.
 
 A very small, focused fix for an obvious bug can be submitted without a prior issue or discussion.
 Explain the defect and why the fix qualifies for this exception. We judge purpose, behavioral impact,
@@ -103,15 +107,12 @@ scope is coherent, and the evidence is adequate. It inspects enough code to supp
 Passing triage does not approve correctness, security, performance, or merging. Those need deeper review.
 Updates to the PR can change its eligibility and require reassessment.
 
-PRs receive `vouch:*` contributor-status labels and `size:*` diff-size labels. These are context, not
-eligibility rules. Vouching through [.github/VOUCHED.td](.github/VOUCHED.td) is separate from permission
-to bypass triage. Only the GitHub logins explicitly listed in
-[.github/TRIAGE_EXEMPTIONS.td](.github/TRIAGE_EXEMPTIONS.td) bypass triage. Organization membership,
-vouching, collaborator or bot status, repository write access, and previous successful PRs do not
-establish an exemption. Other contributors, including vouched contributors, go through triage.
-Passing once does not grant permanent trust.
+PRs receive `size:*` diff-size labels. These are context, not eligibility rules. Only the GitHub
+logins explicitly listed in [.github/TRIAGE_EXEMPTIONS.td](.github/TRIAGE_EXEMPTIONS.td) bypass
+triage. Organization membership, collaborator or bot status, repository write access, and previous
+successful PRs do not establish an exemption. Passing once does not grant permanent trust.
 
-Every live run freshly resolves `pingdotgg/t3code`'s `refs/heads/main` to a commit SHA and loads the
+Every live run freshly resolves `jonathanfernandezfm/merge`'s `refs/heads/main` to a commit SHA and loads the
 contribution-triage skill, this guide, its policy dependencies (including `AGENTS.md` documentation
 rules), and the exemption list from that same SHA. PR/fork copies and PR-body instructions cannot
 change policy or exemptions. Missing, incomplete, or malformed trusted files leave routing unresolved;

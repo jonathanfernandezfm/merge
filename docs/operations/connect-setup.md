@@ -1,13 +1,15 @@
-# T3 Connect setup
+# Merge Connect setup
 
-Deployment and client configuration for T3 Connect. The [architecture note](../internals/t3-connect.md)
+Deployment and client configuration for Merge Connect, the hosted relay inherited from T3 Code's
+T3 Connect. This fork does not deploy a relay or Clerk instance, so Connect is off in its release
+builds; this page applies only if you run your own. The [architecture note](../internals/t3-connect.md)
 explains the trust boundaries; the [relay README](../../infra/relay/README.md#deployment) owns relay
 provisioning instructions.
 
 ## Public application configuration
 
-T3 Connect is disabled in a fresh clone. To build against the production deployment, copy the
-repository-root example:
+Merge Connect is disabled in a fresh clone. To build against your own deployment, copy the
+repository-root example and replace its values:
 
 ```sh
 cp .env.example .env
@@ -38,7 +40,7 @@ depend on. The stack's `PublishClientConfig` action writes the resulting relay U
 
 In Clerk's OAuth applications settings:
 
-1. Create a public OAuth application for the T3 CLI, using authorization-code exchange with PKCE.
+1. Create a public OAuth application for the `merge-agent` CLI, using authorization-code exchange with PKCE.
 2. Allow the redirect URI `http://127.0.0.1:34338/callback`.
 3. Enable the `openid`, `profile`, `email`, and `offline_access` scopes.
 4. Enable **Device authorization grant** on the application. Headless and SSH authorization use
@@ -65,12 +67,12 @@ URL selects the deployment.
 Enable Clerk's Native API and add the desktop redirects to its SSO redirect allowlist:
 
 ```text
-t3code-dev://app/
-t3code://app/
+merge-dev://app/
+merge://app/
 ```
 
 Add the corresponding origin to the Clerk instance's Backend API `allowed_origins` array.
-Development uses `t3code-dev://app`; production uses `t3code://app`. Update the array with
+Development uses `merge-dev://app`; production uses `merge://app`. Update the array with
 `PATCH https://api.clerk.com/v1/instance` using the Clerk secret key, preserving existing entries.
 The Clerk Electron integration handles token
 persistence and system-browser callback delivery.
@@ -79,24 +81,24 @@ persistence and system-browser callback delivery.
 
 Clerk's native Android SDK uses `clerk://<applicationId>.callback`. In the Clerk instance selected by the app's publishable key, add each supported package to **Native applications > Allowlist for mobile SSO redirect**:
 
-| Variant     | Callback                                      |
-| ----------- | --------------------------------------------- |
-| Development | `clerk://com.t3tools.t3code.dev.callback`     |
-| Preview     | `clerk://com.t3tools.t3code.preview.callback` |
-| Production  | `clerk://com.t3tools.t3code.callback`         |
+| Variant     | Callback                                                       |
+| ----------- | -------------------------------------------------------------- |
+| Development | `clerk://io.github.jonathanfernandezfm.merge.dev.callback`     |
+| Preview     | `clerk://io.github.jonathanfernandezfm.merge.preview.callback` |
+| Production  | `clerk://io.github.jonathanfernandezfm.merge.callback`         |
 
-Preserve existing entries. These callbacks are separate from the `t3code-dev` / `t3code-preview` / `t3code` navigation schemes. A private development build using the production Clerk key still needs its development callback allowed by that instance's administrator; rebuilding the same package does not change the allowlist.
+Preserve existing entries. These callbacks are separate from the `merge-dev` / `merge-preview` / `merge` navigation schemes. A private development build using the production Clerk key still needs its development callback allowed by that instance's administrator; rebuilding the same package does not change the allowlist.
 
 ## Desktop passkeys
 
-For a production macOS app with bundle ID `com.t3tools.t3code`:
+For a production macOS app with bundle ID `io.github.jonathanfernandezfm.merge`:
 
 1. Create an explicit macOS App ID in the Apple Developer portal with **Associated Domains**.
 2. Create a provisioning profile for that App ID and the distribution signing certificate.
 3. In Clerk's Native API settings, add an iOS app with the same Apple Team ID and bundle ID.
    This setting also configures Electron/macOS passkeys.
 4. Check `https://<frontend-api>/.well-known/apple-app-site-association`. Its
-   `webcredentials.apps` must include `<TEAM_ID>.com.t3tools.t3code`.
+   `webcredentials.apps` must include `<TEAM_ID>.io.github.jonathanfernandezfm.merge`.
 5. Configure signing as described in the [release runbook](./release.md#2-apple-signing--notarization-setup-macos).
 
 Local signed builds additionally use:
@@ -119,15 +121,15 @@ actual web and server ports. For example, with the default ports:
 ```sh
 VITE_DEV_SERVER_URL=http://127.0.0.1:5733 \
 T3CODE_PORT=13773 \
-  "/Applications/T3 Code (Alpha).app/Contents/MacOS/T3 Code (Alpha)"
+  "/Applications/Merge (Alpha).app/Contents/MacOS/Merge (Alpha)"
 ```
 
 Rebuild the signed app after native dependency, main-process, preload, entitlement, provisioning,
 or signing changes. Renderer edits can reuse it. Verify the installed bundle before testing:
 
 ```sh
-codesign --verify --deep --strict "/Applications/T3 Code (Alpha).app"
-codesign -d --entitlements :- "/Applications/T3 Code (Alpha).app"
+codesign --verify --deep --strict "/Applications/Merge (Alpha).app"
+codesign -d --entitlements :- "/Applications/Merge (Alpha).app"
 ```
 
 ## Restricting sign-ups
