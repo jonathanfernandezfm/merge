@@ -20,9 +20,9 @@ set to run when a worktree is created). Each step keeps its log. When a step fai
 you can retry; finished steps are not repeated, so fix the cause (for example the `t3.json` rule
 or the script) and retry.
 
-Untracked files your branch needs, such as local env files, are not in the checkout. List them
-under `workspace.copy` in the repository's `t3.json` to copy them from the project's main
-checkout:
+Untracked files your branch needs, such as local env files, are not in the checkout. Add them in
+**Settings → Projects → Workspace files** to copy them from the project's main checkout. They are
+saved under `workspace.copy` in that checkout's `t3.json`, which you can also edit directly:
 
 ```json
 {
