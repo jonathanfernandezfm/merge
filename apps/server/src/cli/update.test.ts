@@ -79,7 +79,7 @@ it.layer(NodeServices.layer)("merge-agent update launcher", (it) => {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-update-" });
-      const launcher = path.join(root, "bin/t3");
+      const launcher = path.join(root, "bin/merge-agent");
       yield* fs.makeDirectory(path.dirname(launcher), { recursive: true });
       yield* fs.writeFileString(launcher, "");
 
@@ -91,7 +91,7 @@ it.layer(NodeServices.layer)("merge-agent update launcher", (it) => {
         Effect.provideService(HostProcessWorkingDirectory, root),
       );
       const relative = yield* resolveLauncherPath.pipe(
-        Effect.provideService(HostProcessInvokedAs, "./bin/t3"),
+        Effect.provideService(HostProcessInvokedAs, "./bin/merge-agent"),
         Effect.provideService(HostProcessEnvironment, { PATH: "" }),
         Effect.provideService(HostProcessWorkingDirectory, root),
       );

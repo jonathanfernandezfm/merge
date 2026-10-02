@@ -438,7 +438,7 @@ describe.skipIf(posixShellRunner === null)("WSL runtime install script (executed
         `printf '%s' ${sh(SERVER_ENTRY_SOURCE)} > "$stage/merge-agent"`,
         'chmod +x "$stage/merge-agent"',
         `printf '%s' 'pty-native-payload' > "$stage/node_modules/node-pty/build/Release/pty.node"`,
-        `tar -czf "$work/wsl-runtime.tar.gz" -C "$work/stage" t3-0.0.0-linux-x64`,
+        `tar -czf "$work/wsl-runtime.tar.gz" -C "$work/stage" merge-agent-0.0.0-linux-x64`,
         `printf 'work:%s\\n' "$work"`,
         `printf 'archiveSha:%s\\n' "$(sha256sum "$work/wsl-runtime.tar.gz" | cut -d ' ' -f 1)"`,
       ].join("\n"),

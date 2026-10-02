@@ -217,7 +217,7 @@ describe("merge-agent pair", () => {
     ).pipe(Effect.provide(NodeServices.layer)),
   );
 
-  it.effect("directs to merge-agent serve or merge-agent connect when no server is running", () =>
+  it.effect("directs to merge-agent serve when no server is running", () =>
     Effect.gen(function* () {
       const baseDir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "t3-pair-none-test-"));
 
@@ -230,7 +230,6 @@ describe("merge-agent pair", () => {
       );
       assert.include(rendered, "No running Merge server found.");
       assert.include(rendered, "npx merge-agent serve");
-      assert.include(rendered, "npx merge-agent connect");
     }).pipe(Effect.provide(NodeServices.layer)),
   );
 

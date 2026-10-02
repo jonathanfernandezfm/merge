@@ -87,7 +87,8 @@ jobs:
     # "Wait for Linux CLI archive"), so it gets that wait on top of the usual 30.
     timeout-minutes: ${{ inputs.platform == 'win' && 70 || 30 }}
     steps:
-      # This repository is public, so Git needs no credentials. checkout's
+      # This repository is private, so the fetch sends the job token as a
+      # one-off header instead of persisting credentials. checkout's
       # credential cleanup runs submodule foreach even with submodules disabled,
       # which fails on the orphaned gitlinks in our vendored .repos tree.
       # checkout.workers=0 writes the files on every core. Alternating both ways
@@ -98,11 +99,14 @@ jobs:
         env:
           CHECKOUT_REF: ${{ inputs.ref }}
           GIT_TERMINAL_PROMPT: "0"
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           git init .
           git remote add origin "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
-          git fetch --no-tags --depth=1 origin "$CHECKOUT_REF"
+          auth="$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 | tr -d '\n')"
+          git -c http.extraheader="AUTHORIZATION: basic ${auth}" \
+            fetch --no-tags --depth=1 origin "$CHECKOUT_REF"
           git sparse-checkout set --no-cone '/*' '!/.repos/'
           git -c checkout.workers=0 checkout --detach FETCH_HEAD
 
