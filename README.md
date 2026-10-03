@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="./assets/readme/banner.webp" alt="Merge: one home for every coding agent you already pay for" width="100%">
+</p>
+
 # Merge
 
 Merge is a desktop, web, and mobile control surface for the coding agents on your machine. It
@@ -7,6 +11,25 @@ Google Antigravity: if they are set up on your computer, Merge can drive them.
 > [!NOTE]
 > Merge is a fork of [T3 Code](https://github.com/pingdotgg/t3code) by T3 Tools, released under
 > the MIT License. Most of the code is theirs; this fork rebrands it and ships its own builds.
+
+## A quick look
+
+Agents work in threads, grouped by project. Each turn ends with a summary of what changed.
+
+![A finished Codex turn in a Merge thread, with the changed files listed under the summary](./assets/readme/hero.webp)
+
+Review every turn's diff next to the conversation, then commit from the same window.
+
+![The diff panel showing a turn's changes beside the thread](./assets/readme/diff.webp)
+
+Switch providers and models per thread. Codex and Claude threads sit side by side in the
+sidebar.
+
+![The model picker listing Claude models, with Codex in the provider rail](./assets/readme/models.webp)
+
+Turn providers on or off, and point each at its own binary, home directory, and environment.
+
+![Provider settings with Codex and Claude authenticated and the other providers available](./assets/readme/providers.webp)
 
 ## Prerequisites
 
