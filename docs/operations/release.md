@@ -133,7 +133,7 @@ Windows packages the bundled server and only its runtime-external/native depende
 must be present at the matching paths below `resources/server.asar.unpacked`. Packaged Windows
 builds also ship `resources/wsl-runtime.tar.gz` plus its SHA-256 sidecar: the same-arch Linux CLI
 archive, copied in verbatim so WSL runs the exact bytes a Linux user downloads. WSL verifies and
-extracts it into `~/.t3/wsl-runtime/sha256-<archive-digest>` inside the selected distro.
+extracts it into `~/.merge/wsl-runtime/sha256-<archive-digest>` inside the selected distro.
 
 Windows keeps JavaScript and package metadata inside `app.asar` and unpacks only native libraries
 and helper executables. Avoid whole-package smart unpacking: each loose file adds NSIS install work

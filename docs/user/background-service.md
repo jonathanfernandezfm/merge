@@ -37,7 +37,7 @@ installing one.
 
 `merge-agent uninstall` removes the background service, the `merge-agent` launcher, and the
 downloaded versions after showing you the list and asking once. Your projects,
-threads, and settings under `~/.t3/userdata` are kept. Pass `--yes` from a
+threads, and settings under `~/.merge/userdata` are kept. Pass `--yes` from a
 script.
 
 ## Platform support
