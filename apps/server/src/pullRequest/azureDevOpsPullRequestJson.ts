@@ -204,7 +204,7 @@ function toActor(
  * rejection or wait for the author holds the change, a required reviewer who has not approved
  * still owes a review, and otherwise one approval is enough.
  */
-export function azureDevOpsReviewDecision(
+function azureDevOpsReviewDecision(
   reviewers: ReadonlyArray<Schema.Schema.Type<typeof RawReviewerSchema>>,
 ): PullRequestReviewDecision | null {
   if (reviewers.length === 0) return null;

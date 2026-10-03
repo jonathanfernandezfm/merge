@@ -65,7 +65,7 @@ import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
 import { withWorkspaceLease } from "../workspace/workspaceLease.ts";
 
 /** Each step keeps only the tail of its output; installs can print megabytes. */
-export const TASK_SETUP_STEP_LOG_MAX_CHARS = 8_000;
+const TASK_SETUP_STEP_LOG_MAX_CHARS = 8_000;
 
 export const SETUP_INTERRUPTED_ERROR = "Setup was interrupted (server restarted).";
 
@@ -134,11 +134,11 @@ const errorDetail = (error: unknown): string => {
 };
 
 /** Keeps the last `max` characters of a log. */
-export const tailLog = (log: string, max = TASK_SETUP_STEP_LOG_MAX_CHARS): string =>
+const tailLog = (log: string, max = TASK_SETUP_STEP_LOG_MAX_CHARS): string =>
   log.length <= max ? log : `…${log.slice(log.length - max + 1)}`;
 
-export const copyStepId = (rule: T3ProjectFileWorkspaceCopyRule) => `copy:${rule.from}`;
-export const scriptStepId = (script: ProjectScript) => `script:${script.name}`;
+const copyStepId = (rule: T3ProjectFileWorkspaceCopyRule) => `copy:${rule.from}`;
+const scriptStepId = (script: ProjectScript) => `script:${script.name}`;
 
 interface SetupPlan {
   readonly copyRules: ReadonlyArray<T3ProjectFileWorkspaceCopyRule>;
@@ -156,10 +156,7 @@ const pendingStep = (id: string, label: string): OrchestrationTaskSetupStep => (
  * Steps in run order: `fetch`, `worktree`, one `copy:<from>` per copy rule and
  * one `script:<name>` per `runOnWorktreeCreate` script.
  */
-export const planSetupSteps = (
-  remoteRef: string,
-  plan: SetupPlan,
-): Array<OrchestrationTaskSetupStep> => [
+const planSetupSteps = (remoteRef: string, plan: SetupPlan): Array<OrchestrationTaskSetupStep> => [
   pendingStep("fetch", `Fetch ${remoteRef}`),
   pendingStep("worktree", "Create worktree"),
   ...plan.copyRules.map((rule) =>
@@ -175,7 +172,7 @@ type StepOutcome =
   | { readonly status: "done" | "skipped"; readonly log: string | null }
   | { readonly status: "failed"; readonly log: string | null; readonly error: string };
 
-export const make = Effect.gen(function* () {
+const make = Effect.gen(function* () {
   const engine = yield* OrchestrationEngine.OrchestrationEngineService;
   const snapshots = yield* ProjectionSnapshotQuery.ProjectionSnapshotQuery;
   const git = yield* GitVcsDriver.GitVcsDriver;

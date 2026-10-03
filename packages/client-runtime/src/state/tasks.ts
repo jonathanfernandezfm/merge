@@ -29,7 +29,7 @@ export interface ScopedTaskRef {
   readonly taskId: TaskId;
 }
 
-export function scopedTaskKey(ref: ScopedTaskRef): string {
+function scopedTaskKey(ref: ScopedTaskRef): string {
   return `${ref.environmentId}\u0000${ref.taskId}`;
 }
 

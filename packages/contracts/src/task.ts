@@ -19,7 +19,7 @@ export const ThreadOrigin = Schema.Literals(["user", "review-feedback", "ci-fail
 export type ThreadOrigin = typeof ThreadOrigin.Type;
 
 /** Setup logs are a capped tail so a noisy install never bloats events or the shell. */
-export const TASK_SETUP_LOG_MAX_CHARS = 16_000;
+const TASK_SETUP_LOG_MAX_CHARS = 16_000;
 
 export const OrchestrationTaskSetupStatus = Schema.Literals([
   "pending",

@@ -240,7 +240,7 @@ function StateGlyph({ label, Icon, className }: StatusPresentation) {
 }
 
 /** The workspace setup steps, shown until setup is ready. Failed steps keep their log. */
-export function TaskSetupProgress({ task }: { task: EnvironmentTask }) {
+function TaskSetupProgress({ task }: { task: EnvironmentTask }) {
   const setup = task.workspace.setup;
   const retrySetup = useAtomCommand(taskEnvironment.retrySetup, "task setup retry");
   const [retrying, setRetrying] = useState(false);

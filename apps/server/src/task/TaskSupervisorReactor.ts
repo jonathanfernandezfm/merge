@@ -90,7 +90,7 @@ type Request =
   | { readonly kind: "thread"; readonly threadId: ThreadId };
 
 /** Not archived, not merged, set up, and with a worktree to point threads at. */
-export const isSupervisedTask = (task: OrchestrationTask): boolean =>
+const isSupervisedTask = (task: OrchestrationTask): boolean =>
   task.archivedAt === null &&
   task.deletedAt === null &&
   task.mergedAt === null &&

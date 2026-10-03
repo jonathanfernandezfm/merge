@@ -48,7 +48,7 @@ const MARK_STROKE = {
  * One status ring, drawn in `currentColor` on a 16px grid. Marks on a filled
  * ring are knocked out, so the glyph sits on any surface.
  */
-export function StatusGlyph({ glyph, className }: { glyph: StatusGlyphSpec; className?: string }) {
+function StatusGlyph({ glyph, className }: { glyph: StatusGlyphSpec; className?: string }) {
   const maskId = useId();
   const markPath = glyph.mark === "none" ? null : MARK_PATHS[glyph.mark];
   return (

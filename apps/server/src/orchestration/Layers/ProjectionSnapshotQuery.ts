@@ -89,7 +89,7 @@ import {
  * clients only show the log of a failed step, and every other log is a capped
  * install transcript nobody reads off the shell.
  */
-export const toTaskShell = (task: OrchestrationTask): OrchestrationTaskShell =>
+const toTaskShell = (task: OrchestrationTask): OrchestrationTaskShell =>
   task.workspace.setup.steps.some((step) => step.log !== null && step.status !== "failed")
     ? {
         ...task,

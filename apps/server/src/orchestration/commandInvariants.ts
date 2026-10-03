@@ -169,7 +169,7 @@ export function requireThreadAbsent(input: {
   );
 }
 
-export function requireTask(input: {
+function requireTask(input: {
   readonly readModel: OrchestrationReadModel;
   readonly command: OrchestrationCommand;
   readonly taskId: TaskId;

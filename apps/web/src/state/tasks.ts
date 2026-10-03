@@ -13,12 +13,11 @@ import { Atom } from "effect/unstable/reactivity";
 
 import { environmentCatalog } from "../connection/catalog";
 import { connectionAtomRuntime } from "../connection/runtime";
-import { appAtomRegistry } from "../rpc/atomRegistry";
 import { environmentSnapshotAtom } from "./shell";
 import { environmentThreadShells } from "./threads";
 
 export const taskEnvironment = createTaskEnvironmentAtoms(connectionAtomRuntime);
-export const environmentTasks = createEnvironmentTaskAtoms({
+const environmentTasks = createEnvironmentTaskAtoms({
   catalogValueAtom: environmentCatalog.catalogValueAtom,
   snapshotAtom: environmentSnapshotAtom,
 });
@@ -104,8 +103,4 @@ export function useTaskThreadsByTask(): ReadonlyMap<string, ReadonlyArray<Enviro
 
 export function taskThreadsKey(environmentId: EnvironmentId, taskId: TaskId): string {
   return taskRefKey({ environmentId, taskId });
-}
-
-export function readTask(ref: ScopedTaskRef): EnvironmentTask | null {
-  return appAtomRegistry.get(environmentTasks.taskAtom(ref));
 }

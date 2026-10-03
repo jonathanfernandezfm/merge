@@ -91,7 +91,7 @@ export interface TaskPullRequestNormalization {
   readonly events: ReadonlyArray<TaskWorkspaceEvent>;
 }
 
-export const taskPullRequestState = (
+const taskPullRequestState = (
   summary: Pick<PullRequestSummary, "state" | "isDraft">,
 ): OrchestrationTaskPullRequestState =>
   summary.state === "open" && summary.isDraft === true ? "draft" : summary.state;
@@ -153,7 +153,7 @@ export const taskReviewState = (
   return "none";
 };
 
-export const pullRequestEventKeyBase = (input: {
+const pullRequestEventKeyBase = (input: {
   readonly provider: string;
   readonly repository: string;
   readonly number: number;

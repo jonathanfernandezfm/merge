@@ -120,7 +120,7 @@ export function TaskDialogsHost() {
 }
 
 /** Navigates to a task's new thread, or to the task itself when it has none yet. */
-export function useOpenCreatedTask() {
+function useOpenCreatedTask() {
   const navigate = useNavigate();
   return useCallback(
     async (environmentId: EnvironmentId, result: TaskCreateResult) => {

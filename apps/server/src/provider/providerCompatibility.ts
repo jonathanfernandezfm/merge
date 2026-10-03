@@ -11,7 +11,7 @@ import * as Schema from "effect/Schema";
 // Manifest `t3CodeRange`s target upstream T3 Code releases, while Merge versions
 // independently. Match them against the upstream release this fork tracks and
 // bump this when syncing upstream; the bundled-manifest tests fail if it drifts.
-export const T3_CODE_BASELINE_VERSION = "0.0.44";
+const T3_CODE_BASELINE_VERSION = "0.0.44";
 
 // Deliberately uses the shared CLI gate syntax: comparator groups joined by ||.
 // Prereleases and unrecognized release tags remain unknown.
