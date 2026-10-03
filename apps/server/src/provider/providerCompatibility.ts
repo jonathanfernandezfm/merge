@@ -7,7 +7,11 @@ import {
 } from "@t3tools/contracts";
 import { satisfiesSemverRange } from "@t3tools/shared/semver";
 import * as Schema from "effect/Schema";
-import packageJson from "../../package.json" with { type: "json" };
+
+// Manifest `t3CodeRange`s target upstream T3 Code releases, while Merge versions
+// independently. Match them against the upstream release this fork tracks and
+// bump this when syncing upstream; the bundled-manifest tests fail if it drifts.
+export const T3_CODE_BASELINE_VERSION = "0.0.44";
 
 // Deliberately uses the shared CLI gate syntax: comparator groups joined by ||.
 // Prereleases and unrecognized release tags remain unknown.
@@ -60,7 +64,7 @@ export function resolveProviderCompatibility(
   policies: ReadonlyArray<ProviderCompatibilityPolicy> | undefined,
   driver: ProviderDriverKind,
   version: string | null,
-  t3CodeVersion = packageJson.version,
+  t3CodeVersion = T3_CODE_BASELINE_VERSION,
 ): ServerProviderCompatibilityAdvisory | undefined {
   const policy = policies?.find(
     (entry) => entry.driver === driver && satisfiesSemverRange(t3CodeVersion, entry.t3CodeRange),
