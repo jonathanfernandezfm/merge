@@ -10,8 +10,10 @@ import { useNavigate, useParams } from "@tanstack/react-router";
 import * as Schema from "effect/Schema";
 import {
   ChevronDownIcon,
+  EyeOffIcon,
   FolderClosedIcon,
   FolderOpenIcon,
+  ListFilterIcon,
   PlusIcon,
   SquareKanbanIcon,
 } from "lucide-react";
@@ -23,6 +25,14 @@ import { useProjects, useThreadShell } from "~/state/entities";
 import { taskThreadsKey, useTasks, useTaskThreadsByTask } from "~/state/tasks";
 import { Button } from "../ui/button";
 import { SidebarHeaderIconButton } from "../sidebar/SidebarThreadHeader";
+import {
+  Menu,
+  MenuCheckboxItem,
+  MenuGroup,
+  MenuGroupLabel,
+  MenuPopup,
+  MenuTrigger,
+} from "../ui/menu";
 import { SidebarGroup, useSidebar } from "../ui/sidebar";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { openNewTaskDialog } from "./TaskDialogs";
@@ -33,7 +43,10 @@ import { useOpenTask, useTaskContextMenu } from "./useTaskActions";
 const EMPTY_THREADS: ReadonlyArray<EnvironmentThreadShell> = [];
 const TASKS_EXPANDED_KEY = "t3code:sidebar:tasks-expanded";
 const PROJECTS_EXPANDED_KEY = "t3code:sidebar:task-projects-expanded";
+const HIDDEN_PROJECTS_KEY = "t3code:sidebar:task-projects-hidden";
 const ProjectsExpandedSchema = Schema.Record(Schema.String, Schema.Boolean);
+const HiddenProjectsSchema = Schema.Array(Schema.String);
+const NO_HIDDEN_PROJECTS: ReadonlyArray<string> = [];
 
 function taskMatchesQuery(task: EnvironmentTask, query: string): boolean {
   return (
@@ -74,6 +87,8 @@ function useActiveTaskKey(): string | null {
 
 /**
  * Every project with its active tasks; projects without tasks start collapsed.
+ * Projects can be hidden from the header's project filter or a project row;
+ * search still reaches their tasks so a match never disappears.
  * Archived tasks leave the sidebar; their history stays on the Taskboard.
  * While the sidebar searches, only projects with a task whose title or branch
  * matches `searchQuery` render. Renders nothing when nothing is left to show;
@@ -95,6 +110,25 @@ export const SidebarTasks = memo(function SidebarTasks({
   const searching = query.length > 0;
   // Matches would hide behind a collapsed section.
   const expanded = searching || storedExpanded;
+  const [hiddenProjects, setHiddenProjects] = useLocalStorage(
+    HIDDEN_PROJECTS_KEY,
+    NO_HIDDEN_PROJECTS,
+    HiddenProjectsSchema,
+  );
+  const hiddenProjectKeys = useMemo(() => new Set(hiddenProjects), [hiddenProjects]);
+  const setProjectHidden = useCallback(
+    (key: string, hidden: boolean) =>
+      setHiddenProjects((value) =>
+        hidden
+          ? [...value.filter((entry) => entry !== key), key]
+          : value.filter((entry) => entry !== key),
+      ),
+    [setHiddenProjects],
+  );
+  // Only projects that still exist count, so stale keys never keep the section alive.
+  const hiddenCount = projects.filter((project) =>
+    hiddenProjectKeys.has(`${project.environmentId}:${project.id}`),
+  ).length;
 
   const groups = useMemo((): ReadonlyArray<TaskProjectGroup> => {
     const byProject = new Map<string, EnvironmentTask[]>();
@@ -109,8 +143,8 @@ export const SidebarTasks = memo(function SidebarTasks({
     return projects.flatMap((project) => {
       const key = `${project.environmentId}:${project.id}`;
       const projectTasks = byProject.get(key) ?? [];
-      // Searching narrows to projects with a matching task.
-      if (searching && projectTasks.length === 0) return [];
+      // Searching narrows to projects with a matching task, hidden or not.
+      if (searching ? projectTasks.length === 0 : hiddenProjectKeys.has(key)) return [];
       return [
         {
           key,
@@ -123,7 +157,7 @@ export const SidebarTasks = memo(function SidebarTasks({
         },
       ];
     });
-  }, [projects, query, searching, tasks]);
+  }, [hiddenProjectKeys, projects, query, searching, tasks]);
 
   // Explicit toggles per project; untouched projects open only when they have tasks.
   const [projectExpanded, setProjectExpanded] = useLocalStorage(
@@ -151,7 +185,8 @@ export const SidebarTasks = memo(function SidebarTasks({
 
   const openTaskContextMenu = useTaskContextMenu(closeMobileSidebar);
 
-  if (groups.length === 0) return null;
+  // Keep the header while projects are hidden; it holds the way back.
+  if (groups.length === 0 && (searching || hiddenCount === 0)) return null;
 
   return (
     <SidebarGroup className="shrink-0">
@@ -173,6 +208,35 @@ export const SidebarTasks = memo(function SidebarTasks({
           />
         </button>
         <div className="flex shrink-0 items-center">
+          <Menu>
+            <MenuTrigger
+              render={
+                <SidebarHeaderIconButton
+                  label={hiddenCount > 0 ? `Projects (${hiddenCount} hidden)` : "Projects"}
+                />
+              }
+            >
+              <ListFilterIcon />
+            </MenuTrigger>
+            <MenuPopup align="end">
+              <MenuGroup>
+                <MenuGroupLabel>Show in Tasks</MenuGroupLabel>
+                {projects.map((project) => {
+                  const key = `${project.environmentId}:${project.id}`;
+                  return (
+                    <MenuCheckboxItem
+                      key={key}
+                      checked={!hiddenProjectKeys.has(key)}
+                      closeOnClick={false}
+                      onCheckedChange={(checked) => setProjectHidden(key, !checked)}
+                    >
+                      <span className="block max-w-56 truncate">{project.title}</span>
+                    </MenuCheckboxItem>
+                  );
+                })}
+              </MenuGroup>
+            </MenuPopup>
+          </Menu>
           <SidebarHeaderIconButton
             label="Taskboard"
             onClick={() => {
@@ -187,7 +251,11 @@ export const SidebarTasks = memo(function SidebarTasks({
           </SidebarHeaderIconButton>
         </div>
       </div>
-      {expanded ? (
+      {expanded && groups.length === 0 ? (
+        <p className="h-8 ps-2 pe-2 text-sm leading-8 text-sidebar-muted-foreground/70">
+          All projects hidden
+        </p>
+      ) : expanded ? (
         <ul className="flex flex-col gap-1.5 pb-2">
           {groups.map((group) => {
             const projectOpen = isProjectExpanded(group);
@@ -219,6 +287,12 @@ export const SidebarTasks = memo(function SidebarTasks({
                       }
                     >
                       <PlusIcon />
+                    </TaskIconAction>
+                    <TaskIconAction
+                      label={`Hide ${group.title} from Tasks`}
+                      onClick={() => setProjectHidden(group.key, true)}
+                    >
+                      <EyeOffIcon />
                     </TaskIconAction>
                   </span>
                 </div>
