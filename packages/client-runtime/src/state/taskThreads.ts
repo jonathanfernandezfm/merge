@@ -68,6 +68,17 @@ function threadActivityAt(thread: TaskThreadShell): string {
   return thread.latestUserMessageAt ?? thread.updatedAt;
 }
 
+/** The newer of a task's update and its latest thread's activity. */
+export function taskActivityAt(
+  task: Pick<OrchestrationTaskShell, "updatedAt">,
+  latestThread: TaskThreadShell | null,
+): string {
+  const threadActivity = latestThread === null ? null : threadActivityAt(latestThread);
+  return threadActivity !== null && threadActivity > task.updatedAt
+    ? threadActivity
+    : task.updatedAt;
+}
+
 /** The thread opening a task lands on: its most recently active live thread. */
 export function latestTaskThread<T extends TaskThreadShell>(threads: ReadonlyArray<T>): T | null {
   let latest: T | null = null;
@@ -180,9 +191,7 @@ export function groupTaskboardTasks<K extends OrchestrationTaskShell, T extends 
     const threads = threadsOf(task);
     const status = resolveTaskStatus(task, threads);
     const latestThread = latestTaskThread(threads);
-    const threadActivity = latestThread === null ? null : threadActivityAt(latestThread);
-    const activityAt =
-      threadActivity !== null && threadActivity > task.updatedAt ? threadActivity : task.updatedAt;
+    const activityAt = taskActivityAt(task, latestThread);
     columns.get(taskboardColumnForStatus(status))!.push({ task, status, latestThread, activityAt });
   }
   for (const column of columns.values()) {

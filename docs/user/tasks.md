@@ -80,9 +80,10 @@ task across projects in four columns: working, needs you, in review, and ready t
 and archived tasks collect in the Archive section at the bottom. Click a card to open its latest
 thread; right-click it for the same actions as in the sidebar.
 
-To keep the sidebar's Tasks section focused, hide projects you don't work on: hover a project and
-choose the hide button, or use the project filter in the Tasks header to pick which projects show.
-Hidden projects keep their tasks, still appear on the Taskboard, and show up again while you search.
+To keep the sidebar's Tasks section focused, use the filter menu in the Tasks header to pick which
+projects show. Hidden projects keep their tasks, still appear on the Taskboard, and show up again
+while you search. The same menu sorts tasks within each project by newest, recent activity, or
+status.
 
 ## Known limits
 

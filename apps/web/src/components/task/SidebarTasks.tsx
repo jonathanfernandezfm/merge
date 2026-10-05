@@ -1,16 +1,16 @@
 import {
   latestTaskThread,
   resolveTaskStatus,
+  taskActivityAt,
   type EnvironmentTask,
 } from "@t3tools/client-runtime/state/tasks";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
 import type { EnvironmentId, TaskId } from "@t3tools/contracts";
-import { TASK_STATUS_PRESENTATION } from "@t3tools/shared/taskStatus";
+import { TASK_STATUS_PRESENTATION, TASK_STATUSES } from "@t3tools/shared/taskStatus";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import * as Schema from "effect/Schema";
 import {
   ChevronDownIcon,
-  EyeOffIcon,
   FolderClosedIcon,
   FolderOpenIcon,
   ListFilterIcon,
@@ -31,6 +31,9 @@ import {
   MenuGroup,
   MenuGroupLabel,
   MenuPopup,
+  MenuRadioGroup,
+  MenuRadioItem,
+  MenuSeparator,
   MenuTrigger,
 } from "../ui/menu";
 import { SidebarGroup, useSidebar } from "../ui/sidebar";
@@ -44,9 +47,52 @@ const EMPTY_THREADS: ReadonlyArray<EnvironmentThreadShell> = [];
 const TASKS_EXPANDED_KEY = "t3code:sidebar:tasks-expanded";
 const PROJECTS_EXPANDED_KEY = "t3code:sidebar:task-projects-expanded";
 const HIDDEN_PROJECTS_KEY = "t3code:sidebar:task-projects-hidden";
+const TASK_SORT_KEY = "t3code:sidebar:task-sort";
 const ProjectsExpandedSchema = Schema.Record(Schema.String, Schema.Boolean);
 const HiddenProjectsSchema = Schema.Array(Schema.String);
 const NO_HIDDEN_PROJECTS: ReadonlyArray<string> = [];
+
+const TASK_SORTS = [
+  { value: "newest", label: "Newest" },
+  { value: "activity", label: "Recent activity" },
+  { value: "status", label: "Status" },
+] as const;
+type TaskSort = (typeof TASK_SORTS)[number]["value"];
+const TaskSortSchema = Schema.Literals(TASK_SORTS.map((sort) => sort.value));
+
+function isTaskSort(value: unknown): value is TaskSort {
+  return TASK_SORTS.some((sort) => sort.value === value);
+}
+
+/**
+ * A project's tasks in the chosen order. Status follows the task lifecycle;
+ * activity breaks ties so the task you touched last leads its status.
+ */
+function sortProjectTasks(
+  tasks: ReadonlyArray<EnvironmentTask>,
+  sort: TaskSort,
+  threadsOf: (task: EnvironmentTask) => ReadonlyArray<EnvironmentThreadShell>,
+): ReadonlyArray<EnvironmentTask> {
+  if (sort === "newest") {
+    return tasks.toSorted((left, right) => right.createdAt.localeCompare(left.createdAt));
+  }
+  return tasks
+    .map((task) => {
+      const threads = threadsOf(task);
+      return {
+        task,
+        rank: sort === "status" ? TASK_STATUSES.indexOf(resolveTaskStatus(task, threads)) : 0,
+        activityAt: taskActivityAt(task, latestTaskThread(threads)),
+      };
+    })
+    .sort(
+      (left, right) =>
+        left.rank - right.rank ||
+        right.activityAt.localeCompare(left.activityAt) ||
+        left.task.id.localeCompare(right.task.id),
+    )
+    .map((entry) => entry.task);
+}
 
 function taskMatchesQuery(task: EnvironmentTask, query: string): boolean {
   return (
@@ -87,8 +133,8 @@ function useActiveTaskKey(): string | null {
 
 /**
  * Every project with its active tasks; projects without tasks start collapsed.
- * Projects can be hidden from the header's project filter or a project row;
- * search still reaches their tasks so a match never disappears.
+ * The header menu hides projects and orders tasks within each project;
+ * search still reaches hidden projects' tasks so a match never disappears.
  * Archived tasks leave the sidebar; their history stays on the Taskboard.
  * While the sidebar searches, only projects with a task whose title or branch
  * matches `searchQuery` render. Renders nothing when nothing is left to show;
@@ -115,6 +161,7 @@ export const SidebarTasks = memo(function SidebarTasks({
     NO_HIDDEN_PROJECTS,
     HiddenProjectsSchema,
   );
+  const [taskSort, setTaskSort] = useLocalStorage(TASK_SORT_KEY, "newest", TaskSortSchema);
   const hiddenProjectKeys = useMemo(() => new Set(hiddenProjects), [hiddenProjects]);
   const setProjectHidden = useCallback(
     (key: string, hidden: boolean) =>
@@ -151,13 +198,16 @@ export const SidebarTasks = memo(function SidebarTasks({
           environmentId: project.environmentId,
           projectId: project.id,
           title: project.title,
-          tasks: projectTasks.toSorted((left, right) =>
-            right.createdAt.localeCompare(left.createdAt),
+          tasks: sortProjectTasks(
+            projectTasks,
+            taskSort,
+            (task) =>
+              threadsByTask.get(taskThreadsKey(task.environmentId, task.id)) ?? EMPTY_THREADS,
           ),
         },
       ];
     });
-  }, [hiddenProjectKeys, projects, query, searching, tasks]);
+  }, [hiddenProjectKeys, projects, query, searching, taskSort, tasks, threadsByTask]);
 
   // Explicit toggles per project; untouched projects open only when they have tasks.
   const [projectExpanded, setProjectExpanded] = useLocalStorage(
@@ -212,7 +262,9 @@ export const SidebarTasks = memo(function SidebarTasks({
             <MenuTrigger
               render={
                 <SidebarHeaderIconButton
-                  label={hiddenCount > 0 ? `Projects (${hiddenCount} hidden)` : "Projects"}
+                  label={
+                    hiddenCount > 0 ? `Filter and sort (${hiddenCount} hidden)` : "Filter and sort"
+                  }
                 />
               }
             >
@@ -234,6 +286,22 @@ export const SidebarTasks = memo(function SidebarTasks({
                     </MenuCheckboxItem>
                   );
                 })}
+              </MenuGroup>
+              <MenuSeparator />
+              <MenuGroup>
+                <MenuGroupLabel>Sort tasks by</MenuGroupLabel>
+                <MenuRadioGroup
+                  value={taskSort}
+                  onValueChange={(value) => {
+                    if (isTaskSort(value)) setTaskSort(value);
+                  }}
+                >
+                  {TASK_SORTS.map((sort) => (
+                    <MenuRadioItem key={sort.value} value={sort.value} closeOnClick={false}>
+                      {sort.label}
+                    </MenuRadioItem>
+                  ))}
+                </MenuRadioGroup>
               </MenuGroup>
             </MenuPopup>
           </Menu>
@@ -287,12 +355,6 @@ export const SidebarTasks = memo(function SidebarTasks({
                       }
                     >
                       <PlusIcon />
-                    </TaskIconAction>
-                    <TaskIconAction
-                      label={`Hide ${group.title} from Tasks`}
-                      onClick={() => setProjectHidden(group.key, true)}
-                    >
-                      <EyeOffIcon />
                     </TaskIconAction>
                   </span>
                 </div>
