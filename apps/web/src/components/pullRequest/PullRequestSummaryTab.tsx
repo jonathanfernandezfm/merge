@@ -261,7 +261,7 @@ function CollapsedComment({
   );
 }
 
-function MetaRow({
+export function MetaRow({
   icon,
   label,
   children,
@@ -281,7 +281,7 @@ function MetaRow({
   );
 }
 
-function Section({
+export function Section({
   title,
   defaultOpen = true,
   keepMounted = false,

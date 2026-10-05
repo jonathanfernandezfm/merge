@@ -2635,6 +2635,27 @@ it.layer(TestLayer)("GitVcsDriver core integration", (it) => {
       }),
     );
 
+    it.effect("derives a URL-safe default worktree directory from the branch name", () =>
+      Effect.gen(function* () {
+        const cwd = yield* makeTmpDir();
+        const { initialBranch } = yield* initRepoWithCommit(cwd);
+        const pathService = yield* Path.Path;
+        const driver = yield* GitVcsDriver.GitVcsDriver;
+
+        const created = yield* driver.createWorktree({
+          cwd,
+          path: null,
+          refName: initialBranch,
+          newRefName: "bugfix/#604676-fix%20it",
+        });
+
+        assert.equal(pathService.basename(created.worktree.path), "bugfix-604676-fix-20it");
+        assert.equal(created.worktree.refName, "bugfix/#604676-fix%20it");
+
+        yield* driver.removeWorktree({ cwd, path: created.worktree.path });
+      }),
+    );
+
     it.effect("allows worktree removal to run longer than the default command timeout", () =>
       Effect.gen(function* () {
         const delegate = yield* ChildProcessSpawner.ChildProcessSpawner;

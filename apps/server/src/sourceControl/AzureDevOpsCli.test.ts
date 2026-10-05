@@ -157,7 +157,7 @@ describe("AzureDevOpsCli.layer", () => {
       const az = yield* AzureDevOpsCli.AzureDevOpsCli;
       const result = yield* az.listPullRequests({
         cwd: "/repo",
-        headSelector: "origin:feature/merged",
+        headSelector: "origin:feature/#7-merged",
         state: "merged",
         limit: 10,
       });
@@ -175,7 +175,7 @@ describe("AzureDevOpsCli.layer", () => {
           "--detect",
           "true",
           "--source-branch",
-          "feature/merged",
+          "feature%2F%237-merged",
           "--status",
           "completed",
           "--top",
@@ -187,6 +187,166 @@ describe("AzureDevOpsCli.layer", () => {
         cwd: "/repo",
         timeoutMs: 30_000,
       });
+    }).pipe(Effect.provide(layer)),
+  );
+
+  it.effect("lists a work item with its children", () =>
+    Effect.gen(function* () {
+      mockRun.mockReturnValueOnce(
+        Effect.succeed(
+          processOutput(
+            // @effect-diagnostics-next-line preferSchemaOverJson:off
+            JSON.stringify([
+              {
+                id: 7,
+                fields: {
+                  "System.Title": "Story",
+                  "System.WorkItemType": "PBI",
+                  "Microsoft.VSTS.TCM.ReproSteps": "<p>Open it</p>",
+                  "System.IterationPath": "WorkHub\\Sprints\\Sprint 91",
+                  "System.Tags": "2026.Q3; groomed",
+                },
+              },
+              {
+                id: 8,
+                fields: { "System.Title": "Implementation", "System.Parent": 7 },
+              },
+            ]),
+          ),
+        ),
+      );
+
+      const az = yield* AzureDevOpsCli.AzureDevOpsCli;
+      const items = yield* az.listWorkItemFamily({ cwd: "/repo", id: 7 });
+
+      assert.deepStrictEqual(items, [
+        {
+          id: 7,
+          title: "Story",
+          type: "PBI",
+          state: null,
+          parentId: null,
+          assignedTo: null,
+          project: null,
+          url: null,
+          details: {
+            descriptionHtml: null,
+            criteriaHtml: "<p>Open it</p>",
+            criteriaLabel: "Repro steps",
+            sprint: "Sprint 91",
+            priority: null,
+            tags: ["2026.Q3", "groomed"],
+            createdAt: null,
+            updatedAt: null,
+            stateChangedAt: null,
+          },
+        },
+        {
+          id: 8,
+          title: "Implementation",
+          type: null,
+          state: null,
+          parentId: 7,
+          assignedTo: null,
+          project: null,
+          url: null,
+        },
+      ]);
+    }).pipe(Effect.provide(layer)),
+  );
+
+  it("maps work item REST URLs to their web page", () => {
+    assert.strictEqual(
+      AzureDevOpsCli.workItemWebUrl(
+        "https://acme.visualstudio.com/abc-123/_apis/wit/workItems/582642",
+      ),
+      "https://acme.visualstudio.com/abc-123/_workitems/edit/582642",
+    );
+    assert.strictEqual(AzureDevOpsCli.workItemWebUrl("https://acme.visualstudio.com/other"), null);
+  });
+
+  it.effect("reads a work item type's states without removed ones", () =>
+    Effect.gen(function* () {
+      mockRun.mockReturnValueOnce(
+        Effect.succeed(
+          processOutput(
+            // @effect-diagnostics-next-line preferSchemaOverJson:off
+            JSON.stringify({
+              value: [
+                { name: "To Do", category: "Proposed" },
+                { name: "In Progress", category: "InProgress" },
+                { name: "Done", category: "Completed" },
+                { name: "Removed", category: "Removed" },
+              ],
+            }),
+          ),
+        ),
+      );
+
+      const az = yield* AzureDevOpsCli.AzureDevOpsCli;
+      const states = yield* az.listWorkItemStates({ cwd: "/repo", project: "P", type: "Task" });
+
+      assert.deepStrictEqual(states, [
+        { name: "To Do", category: "proposed" },
+        { name: "In Progress", category: "in-progress" },
+        { name: "Done", category: "completed" },
+      ]);
+    }).pipe(Effect.provide(layer)),
+  );
+
+  it.effect("creates a child in its parent's area and iteration", () =>
+    Effect.gen(function* () {
+      mockRun
+        .mockReturnValueOnce(
+          Effect.succeed(
+            processOutput(
+              // @effect-diagnostics-next-line preferSchemaOverJson:off
+              JSON.stringify({
+                fields: {
+                  "System.TeamProject": "P",
+                  "System.AreaPath": "P\\Team",
+                  "System.IterationPath": "P\\Sprint 1",
+                },
+              }),
+            ),
+          ),
+        )
+        // @effect-diagnostics-next-line preferSchemaOverJson:off
+        .mockReturnValueOnce(Effect.succeed(processOutput(JSON.stringify({ id: 12 }))))
+        .mockReturnValueOnce(Effect.succeed(processOutput("{}")));
+
+      const az = yield* AzureDevOpsCli.AzureDevOpsCli;
+      const created = yield* az.createChildWorkItem({
+        cwd: "/repo",
+        parentId: 7,
+        type: "Task",
+        title: "Tests",
+      });
+
+      assert.deepStrictEqual(created, { id: 12 });
+      const [, create, relate] = mockRun.mock.calls.map((call) => call[0].args);
+      expect(create).toEqual(
+        expect.arrayContaining([
+          "--project",
+          "P",
+          "--area",
+          "P\\Team",
+          "--iteration",
+          "P\\Sprint 1",
+        ]),
+      );
+      expect(relate).toEqual(
+        expect.arrayContaining([
+          "relation",
+          "add",
+          "--id",
+          "12",
+          "--relation-type",
+          "parent",
+          "--target-id",
+          "7",
+        ]),
+      );
     }).pipe(Effect.provide(layer)),
   );
 

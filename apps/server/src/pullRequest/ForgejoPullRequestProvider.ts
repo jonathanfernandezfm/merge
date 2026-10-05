@@ -412,13 +412,20 @@ export const make = Effect.gen(function* () {
     ),
     runAction: (input) => {
       switch (input.action) {
-        case "merge":
+        case "merge": {
+          const [title = "", ...rest] = (input.mergeMessage ?? "").split("\n");
           return write({
             ...input,
             path: `${pullPath(input)}/merge`,
             method: "POST",
-            body: { Do: input.mergeMethod ?? "merge" },
+            body: {
+              Do: input.mergeMethod ?? "merge",
+              ...(input.mergeMessage
+                ? { MergeTitleField: title.trim(), MergeMessageField: rest.join("\n").trim() }
+                : {}),
+            },
           });
+        }
         case "close":
         case "reopen":
           return write({

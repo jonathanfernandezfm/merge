@@ -239,6 +239,7 @@ export const make = Effect.gen(function* () {
       threadTitleRegeneration: true,
       threadPullRequests: true,
       pullRequestStackActions: true,
+      workItems: true,
       threadPullRequestLinking: true,
       environmentIcon: true,
       projectCloneTracking: true,

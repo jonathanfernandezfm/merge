@@ -42,7 +42,8 @@ const EMPTY_COLUMN_COPY: Readonly<Record<TaskboardColumnId, string>> = {
   "needs-you": "Nothing needs you",
   "in-review": "Nothing in review",
   "ready-to-merge": "Nothing ready to merge",
-  archive: "Merged and archived tasks show up here.",
+  merged: "Nothing merged yet",
+  archive: "Archived tasks show up here.",
 };
 
 /** Every task across projects and environments, one card each, by what it needs next. */
@@ -124,7 +125,7 @@ function TaskboardRouteView() {
           </Empty>
         ) : (
           <>
-            <div className="grid min-h-0 flex-1 grid-cols-[repeat(4,minmax(15rem,1fr))] gap-3 overflow-x-auto p-3">
+            <div className="grid min-h-0 flex-1 grid-cols-[repeat(5,minmax(15rem,1fr))] gap-3 overflow-x-auto p-3">
               {BOARD_COLUMNS.map((column) => {
                 const cards = columns.get(column.id) ?? EMPTY_CARDS;
                 const headingId = `taskboard-${column.id}`;

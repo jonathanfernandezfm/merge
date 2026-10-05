@@ -53,6 +53,24 @@ export function allowsSinglePullRequestMerge(input: {
   );
 }
 
+/**
+ * The merge commit message the confirm dialog starts from, in the same `#<id>: subject` shape
+ * commits use. The id is the one the title already leads with, else the branch's work item (the
+ * rule `workItemIdFromBranch` applies on the server). A host's `Merged PR <n>: ` is dropped.
+ */
+export function defaultPullRequestMergeMessage(title: string, headBranch: string): string {
+  let subject = title.trim();
+  for (let previous = ""; previous !== subject;) {
+    previous = subject;
+    subject = subject.replace(/^Merged PR \d+:\s*/iu, "");
+  }
+  const leading = /^#(\d+)\s*:?\s*/u.exec(subject);
+  const branchId = /(?:^|[/#_-])(?<!\d[_-])(\d{4,7})(?=$|[/_-])(?![_-]\d)/u.exec(headBranch)?.[1];
+  const id = leading?.[1] ?? branchId;
+  const rest = leading ? subject.slice(leading[0].length).trim() : subject;
+  return id === undefined ? rest : `#${id}: ${rest}`;
+}
+
 export function resolvePullRequestMergeMethod(
   allowed: ReadonlyArray<PullRequestMergeMethod>,
   current: PullRequestMergeMethod | null,

@@ -160,6 +160,7 @@ function bindProviderContext(
     return provider;
   }
 
+  const listWorkItemFamily = provider.listWorkItemFamily;
   return SourceControlProvider.SourceControlProvider.of({
     kind: provider.kind,
     ...(provider.resolveLink ? { resolveLink: provider.resolveLink } : {}),
@@ -178,6 +179,15 @@ function bindProviderContext(
         ...input,
         context: input.context ?? context,
       }),
+    ...(listWorkItemFamily
+      ? {
+          listWorkItemFamily: (input) =>
+            listWorkItemFamily({ ...input, context: input.context ?? context }),
+        }
+      : {}),
+    ...(provider.listWorkItemStates ? { listWorkItemStates: provider.listWorkItemStates } : {}),
+    ...(provider.updateWorkItem ? { updateWorkItem: provider.updateWorkItem } : {}),
+    ...(provider.createChildWorkItem ? { createChildWorkItem: provider.createChildWorkItem } : {}),
     getRepositoryCloneUrls: (input) =>
       provider.getRepositoryCloneUrls({
         ...input,

@@ -173,6 +173,10 @@ const AzureDevOpsRepositoryDecodeOperation = Schema.Literals([
   "getRepositoryCloneUrls",
   "getDefaultBranch",
   "createRepository",
+  "listWorkItemFamily",
+  "listWorkItemStates",
+  "updateWorkItem",
+  "createChildWorkItem",
 ]);
 
 export class AzureDevOpsRepositoryDecodeError extends Schema.TaggedError<AzureDevOpsRepositoryDecodeError>()(
@@ -251,7 +255,41 @@ export class AzureDevOpsCli extends Context.Service<
       readonly target?: SourceControlProvider.SourceControlRefSelector;
       readonly title: string;
       readonly bodyFile: string;
+      readonly workItemIds?: ReadonlyArray<number>;
     }) => Effect.Effect<void, AzureDevOpsCliError>;
+
+    /** The work item and its direct children, without removed ones. */
+    readonly listWorkItemFamily: (input: {
+      readonly cwd: string;
+      readonly id: number;
+    }) => Effect.Effect<
+      ReadonlyArray<SourceControlProvider.SourceControlWorkItem>,
+      AzureDevOpsCliError
+    >;
+
+    readonly listWorkItemStates: (input: {
+      readonly cwd: string;
+      readonly project: string;
+      readonly type: string;
+    }) => Effect.Effect<
+      ReadonlyArray<SourceControlProvider.SourceControlWorkItemState>,
+      AzureDevOpsCliError
+    >;
+
+    readonly updateWorkItem: (input: {
+      readonly cwd: string;
+      readonly id: number;
+      readonly state?: string;
+      readonly assignToMe?: boolean;
+    }) => Effect.Effect<void, AzureDevOpsCliError>;
+
+    /** Creates the item in the parent's project, area and iteration, then links it as a child. */
+    readonly createChildWorkItem: (input: {
+      readonly cwd: string;
+      readonly parentId: number;
+      readonly type: string;
+      readonly title: string;
+    }) => Effect.Effect<{ readonly id: number }, AzureDevOpsCliError>;
 
     readonly getDefaultBranch: (input: {
       readonly cwd: string;
@@ -296,6 +334,89 @@ const RawAzureDevOpsRepositorySchema = Schema.Struct({
   ),
   defaultBranch: Schema.optional(Schema.NullOr(Schema.String)),
 });
+
+const RawAzureDevOpsWorkItemsSchema = Schema.Array(
+  Schema.Struct({
+    id: Schema.Number,
+    fields: Schema.Struct({
+      "System.Title": Schema.optional(Schema.String),
+      "System.WorkItemType": Schema.optional(Schema.String),
+      "System.State": Schema.optional(Schema.String),
+      "System.Parent": Schema.optional(Schema.Number),
+      "System.AssignedTo": Schema.optional(Schema.Struct({ displayName: Schema.String })),
+      "System.TeamProject": Schema.optional(Schema.String),
+      "System.Description": Schema.optional(Schema.String),
+      "Microsoft.VSTS.Common.AcceptanceCriteria": Schema.optional(Schema.String),
+      "Microsoft.VSTS.TCM.ReproSteps": Schema.optional(Schema.String),
+      "System.IterationPath": Schema.optional(Schema.String),
+      "Microsoft.VSTS.Common.Priority": Schema.optional(Schema.Number),
+      "System.Tags": Schema.optional(Schema.String),
+      "System.CreatedDate": Schema.optional(Schema.String),
+      "System.ChangedDate": Schema.optional(Schema.String),
+      "Microsoft.VSTS.Common.StateChangeDate": Schema.optional(Schema.String),
+    }),
+    url: Schema.optional(Schema.String),
+  }),
+);
+
+const RawAzureDevOpsWorkItemTypeStatesSchema = Schema.Struct({
+  value: Schema.Array(Schema.Struct({ name: TrimmedNonEmptyString, category: Schema.String })),
+});
+
+const RawAzureDevOpsCreatedWorkItemSchema = Schema.Struct({ id: Schema.Number });
+
+const RawAzureDevOpsWorkItemPlacementSchema = Schema.Struct({
+  fields: Schema.Struct({
+    "System.TeamProject": TrimmedNonEmptyString,
+    "System.AreaPath": Schema.optional(Schema.String),
+    "System.IterationPath": Schema.optional(Schema.String),
+  }),
+});
+
+const AZURE_STATE_CATEGORIES: Readonly<
+  Record<string, SourceControlProvider.SourceControlWorkItemState["category"]>
+> = {
+  Proposed: "proposed",
+  InProgress: "in-progress",
+  Resolved: "resolved",
+  Completed: "completed",
+  Removed: "removed",
+};
+
+function nonEmpty(value: string | undefined): string | null {
+  return value !== undefined && value.trim().length > 0 ? value : null;
+}
+
+function workItemDetails(
+  fields: (typeof RawAzureDevOpsWorkItemsSchema.Type)[number]["fields"],
+): SourceControlProvider.SourceControlWorkItemDetails {
+  const criteria = nonEmpty(fields["Microsoft.VSTS.Common.AcceptanceCriteria"]);
+  const repro = nonEmpty(fields["Microsoft.VSTS.TCM.ReproSteps"]);
+  const iteration = nonEmpty(fields["System.IterationPath"]);
+  // An iteration at the project root is "no sprint", not a sprint named after the project.
+  const sprint = iteration?.includes("\\") ? (iteration.split("\\").at(-1) ?? null) : null;
+  return {
+    descriptionHtml: nonEmpty(fields["System.Description"]),
+    criteriaHtml: criteria ?? repro,
+    criteriaLabel: criteria === null && repro !== null ? "Repro steps" : "Acceptance criteria",
+    sprint,
+    priority: fields["Microsoft.VSTS.Common.Priority"] ?? null,
+    tags: (fields["System.Tags"] ?? "")
+      .split(";")
+      .map((tag) => tag.trim())
+      .filter((tag) => tag.length > 0),
+    createdAt: fields["System.CreatedDate"] ?? null,
+    updatedAt: fields["System.ChangedDate"] ?? null,
+    stateChangedAt: fields["Microsoft.VSTS.Common.StateChangeDate"] ?? null,
+  };
+}
+
+/** `…/{project}/_apis/wit/workItems/{id}` is the REST resource; the web page lives beside it. */
+export function workItemWebUrl(apiUrl: string | undefined): string | null {
+  if (apiUrl === undefined) return null;
+  const webUrl = apiUrl.replace(/\/_apis\/wit\/workItems\/(\d+)$/iu, "/_workitems/edit/$1");
+  return webUrl === apiUrl ? null : webUrl;
+}
 
 function normalizeDefaultBranch(value: string | null | undefined): string | null {
   const trimmed = value?.trim().replace(/^refs\/heads\//, "") ?? "";
@@ -396,7 +517,9 @@ export const make = Effect.gen(function* () {
           "--detect",
           "true",
           "--source-branch",
-          SourceControlProvider.sourceBranch(input),
+          // `az` puts this in the query string unencoded, so a `#` in the
+          // branch (`feature/#123-x`) truncates the filter and matches nothing.
+          encodeURIComponent(SourceControlProvider.sourceBranch(input)),
           "--status",
           toAzureStatus(input.state),
           "--top",
@@ -519,8 +642,171 @@ export const make = Effect.gen(function* () {
           input.title,
           "--description",
           `@${input.bodyFile}`,
+          ...(input.workItemIds && input.workItemIds.length > 0
+            ? ["--work-items", ...input.workItemIds.map(String)]
+            : []),
         ],
       }).pipe(Effect.asVoid),
+    listWorkItemFamily: (input) =>
+      executeJson({
+        cwd: input.cwd,
+        args: [
+          "boards",
+          "query",
+          "--detect",
+          "true",
+          "--wiql",
+          `SELECT [System.Id], [System.Title], [System.WorkItemType], [System.State], [System.Parent], [System.AssignedTo], [System.TeamProject], [System.Description], [Microsoft.VSTS.Common.AcceptanceCriteria], [Microsoft.VSTS.TCM.ReproSteps], [System.IterationPath], [Microsoft.VSTS.Common.Priority], [System.Tags], [System.CreatedDate], [System.ChangedDate], [Microsoft.VSTS.Common.StateChangeDate] FROM WorkItems WHERE ([System.Id] = ${input.id} OR [System.Parent] = ${input.id}) AND [System.State] <> 'Removed'`,
+        ],
+      }).pipe(
+        Effect.map((result) => result.stdout.trim()),
+        Effect.flatMap((raw) =>
+          raw.length === 0
+            ? Effect.succeed([])
+            : decodeAzureDevOpsJson(
+                raw,
+                RawAzureDevOpsWorkItemsSchema,
+                "listWorkItemFamily",
+                input.cwd,
+              ),
+        ),
+        Effect.map((items) =>
+          items.map((item) => ({
+            id: item.id,
+            title: item.fields["System.Title"] ?? "",
+            type: item.fields["System.WorkItemType"] ?? null,
+            state: item.fields["System.State"] ?? null,
+            parentId: item.fields["System.Parent"] ?? null,
+            assignedTo: item.fields["System.AssignedTo"]?.displayName ?? null,
+            project: item.fields["System.TeamProject"] ?? null,
+            url: workItemWebUrl(item.url),
+            // Children's long text would only inflate every panel read.
+            ...(item.id === input.id ? { details: workItemDetails(item.fields) } : {}),
+          })),
+        ),
+      ),
+    listWorkItemStates: (input) =>
+      executeJson({
+        cwd: input.cwd,
+        args: [
+          "devops",
+          "invoke",
+          "--detect",
+          "true",
+          "--area",
+          "wit",
+          "--resource",
+          "workItemTypeStates",
+          "--route-parameters",
+          `project=${input.project}`,
+          `type=${input.type}`,
+        ],
+      }).pipe(
+        Effect.flatMap((result) =>
+          decodeAzureDevOpsJson(
+            result.stdout.trim(),
+            RawAzureDevOpsWorkItemTypeStatesSchema,
+            "listWorkItemStates",
+            input.cwd,
+          ),
+        ),
+        Effect.map((raw) =>
+          raw.value.flatMap((state) => {
+            const category = AZURE_STATE_CATEGORIES[state.category];
+            return category === undefined || category === "removed"
+              ? []
+              : [{ name: state.name, category }];
+          }),
+        ),
+      ),
+    updateWorkItem: (input) =>
+      executeJson({
+        cwd: input.cwd,
+        args: [
+          "boards",
+          "work-item",
+          "update",
+          "--detect",
+          "true",
+          "--id",
+          String(input.id),
+          ...(input.state === undefined ? [] : [`--state=${input.state}`]),
+          ...(input.assignToMe === true ? ["--assigned-to", "me"] : []),
+        ],
+      }).pipe(Effect.asVoid),
+    createChildWorkItem: (input) =>
+      Effect.gen(function* () {
+        const parent = yield* executeJson({
+          cwd: input.cwd,
+          args: [
+            "boards",
+            "work-item",
+            "show",
+            "--detect",
+            "true",
+            "--id",
+            // No `--fields`: the CLI always sends `$expand`, which the API rejects with it.
+            String(input.parentId),
+          ],
+        }).pipe(
+          Effect.flatMap((result) =>
+            decodeAzureDevOpsJson(
+              result.stdout.trim(),
+              RawAzureDevOpsWorkItemPlacementSchema,
+              "createChildWorkItem",
+              input.cwd,
+            ),
+          ),
+        );
+        const { fields } = parent;
+        const created = yield* executeJson({
+          cwd: input.cwd,
+          args: [
+            "boards",
+            "work-item",
+            "create",
+            "--detect",
+            "true",
+            "--project",
+            fields["System.TeamProject"],
+            "--type",
+            input.type,
+            // `=` keeps a title starting with `-` from being read as a flag.
+            `--title=${input.title}`,
+            ...(fields["System.AreaPath"] ? ["--area", fields["System.AreaPath"]] : []),
+            ...(fields["System.IterationPath"]
+              ? ["--iteration", fields["System.IterationPath"]]
+              : []),
+          ],
+        }).pipe(
+          Effect.flatMap((result) =>
+            decodeAzureDevOpsJson(
+              result.stdout.trim(),
+              RawAzureDevOpsCreatedWorkItemSchema,
+              "createChildWorkItem",
+              input.cwd,
+            ),
+          ),
+        );
+        yield* executeJson({
+          cwd: input.cwd,
+          args: [
+            "boards",
+            "work-item",
+            "relation",
+            "add",
+            "--detect",
+            "true",
+            "--id",
+            String(created.id),
+            "--relation-type",
+            "parent",
+            "--target-id",
+            String(input.parentId),
+          ],
+        });
+        return { id: created.id };
+      }),
     getDefaultBranch: (input) =>
       executeJson({
         cwd: input.cwd,

@@ -10,9 +10,11 @@ import {
   type ProjectId,
   type TaskArchiveBlocker,
   type TaskCreateResult,
+  TaskOperationError,
   type VcsRef,
 } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
+import * as Schema from "effect/Schema";
 import { Atom } from "effect/unstable/reactivity";
 import { GitBranchIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
@@ -84,6 +86,8 @@ export function openWaitingReasonDialog(ref: ScopedTaskRef): void {
   appAtomRegistry.set(waitingReasonDialogAtom, ref);
 }
 
+const isTaskOperationError = Schema.is(TaskOperationError);
+
 function commandErrorMessage(result: AtomCommandResult<unknown, unknown>, fallback: string) {
   if (result._tag !== "Failure" || isAtomCommandInterrupted(result)) return null;
   const error = squashAtomCommandFailure(result);
@@ -141,7 +145,10 @@ function useOpenCreatedTask() {
   );
 }
 
-const REMOTE_REF_LIMIT = 100;
+const REF_LIMIT = 100;
+
+/** `remoteName` is absent for a local branch; the server uses the project's default remote. */
+type BranchChoice = { remoteName?: string; branch: string };
 
 /** A remote ref as the task picker offers it: `origin/feature` checks out `feature`. */
 function remoteBranchOf(ref: VcsRef): { remoteName: string; branch: string } | null {
@@ -187,6 +194,8 @@ function NewTaskDialog({ target, onClose }: { target: NewTaskDialogTarget; onClo
   const [selectedRefName, setSelectedRefName] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Another worktree holds the chosen branch; the user can detach it.
+  const [heldAt, setHeldAt] = useState<{ branch: string; path: string } | null>(null);
   const createTask = useAtomCommand(taskEnvironment.create, { reportFailure: false });
   const openCreatedTask = useOpenCreatedTask();
 
@@ -199,7 +208,21 @@ function NewTaskDialog({ target, onClose }: { target: NewTaskDialogTarget; onClo
   // that fetch brought in instead of fetching on every keystroke.
   const query =
     selectedRefName !== null && debouncedQuery === selectedRefName ? "" : debouncedQuery;
-  const refs = useEnvironmentQuery(
+  // Local branches list without a refresh, so they show while remotes load.
+  const localRefs = useEnvironmentQuery(
+    project === null
+      ? null
+      : vcsEnvironment.listRefs({
+          environmentId: project.environmentId,
+          input: {
+            cwd: project.workspaceRoot,
+            refKind: "local",
+            limit: REF_LIMIT,
+            ...(query.length > 0 ? { query } : {}),
+          },
+        }),
+  );
+  const remoteRefs = useEnvironmentQuery(
     project === null
       ? null
       : vcsEnvironment.listRefs({
@@ -210,48 +233,65 @@ function NewTaskDialog({ target, onClose }: { target: NewTaskDialogTarget; onClo
             // A remote branch is still a valid task source when a local branch
             // of the same name exists (e.g. left behind by an archived task).
             includeMatchingRemoteRefs: true,
-            limit: REMOTE_REF_LIMIT,
+            limit: REF_LIMIT,
             ...(query.length > 0 ? { query } : { refresh: true }),
           },
         }),
   );
-  const remoteRefs = useMemo(
+  const branchChoices = useMemo(
     () =>
-      (refs.data?.refs ?? []).flatMap((ref) => {
-        const remote = remoteBranchOf(ref);
-        return remote === null ? [] : [{ name: ref.name, ...remote }];
-      }),
-    [refs.data],
+      new Map<string, BranchChoice>([
+        ...(localRefs.data?.refs ?? []).flatMap((ref) =>
+          ref.isRemote ? [] : [[ref.name, { branch: ref.name }] as const],
+        ),
+        ...(remoteRefs.data?.refs ?? []).flatMap((ref) => {
+          const remote = remoteBranchOf(ref);
+          return remote === null ? [] : [[ref.name, remote] as const];
+        }),
+      ]),
+    [localRefs.data, remoteRefs.data],
   );
+  const refsPending = localRefs.isPending || remoteRefs.isPending;
+  const refsError = localRefs.error ?? remoteRefs.error;
   // Kept apart from the list so a later filtered fetch cannot drop the choice.
-  const [chosenRemote, setChosenRemote] = useState<{ remoteName: string; branch: string } | null>(
-    null,
-  );
-  const chooseRemote = (remote: { remoteName: string; branch: string } | null) => {
-    setChosenRemote(remote);
-    if (!titleEdited) setTitle(remote === null ? "" : taskTitleFromBranch(remote.branch));
+  const [chosenBranch, setChosenBranch] = useState<BranchChoice | null>(null);
+  const chooseBranch = (choice: BranchChoice | null) => {
+    setChosenBranch(choice);
+    setHeldAt(null);
+    if (!titleEdited) setTitle(choice === null ? "" : taskTitleFromBranch(choice.branch));
   };
 
   const canSubmit =
-    !pending && project !== null && title.trim().length > 0 && chosenRemote !== null;
+    !pending && project !== null && title.trim().length > 0 && chosenBranch !== null;
 
-  const submit = async () => {
-    if (!canSubmit || project === null || chosenRemote === null) return;
+  const submit = async (detachCheckoutAt?: string) => {
+    if (!canSubmit || project === null || chosenBranch === null) return;
     setPending(true);
     setError(null);
+    setHeldAt(null);
     const result = await createTask({
       environmentId: project.environmentId,
       input: {
         projectId: project.id,
         title: title.trim(),
         ...(description.trim().length > 0 ? { description: description.trim() } : {}),
-        remoteName: chosenRemote.remoteName,
-        branch: chosenRemote.branch,
+        ...(chosenBranch.remoteName === undefined ? {} : { remoteName: chosenBranch.remoteName }),
+        branch: chosenBranch.branch,
         autoHandleReviewFeedback,
+        ...(detachCheckoutAt === undefined ? {} : { detachCheckoutAt }),
       },
     });
     if (result._tag === "Failure") {
       setPending(false);
+      const failure = isAtomCommandInterrupted(result) ? null : squashAtomCommandFailure(result);
+      if (
+        isTaskOperationError(failure) &&
+        failure.reason === "branch-checked-out" &&
+        failure.checkoutPath !== undefined
+      ) {
+        setHeldAt({ branch: chosenBranch.branch, path: failure.checkoutPath });
+        return;
+      }
       setError(commandErrorMessage(result, "Could not create the task."));
       return;
     }
@@ -265,8 +305,8 @@ function NewTaskDialog({ target, onClose }: { target: NewTaskDialogTarget; onClo
         <DialogHeader>
           <DialogTitle>New task</DialogTitle>
           <DialogDescription>
-            A task works on an existing remote branch in its own worktree. It checks the branch out
-            and never creates one.
+            A task works on an existing branch in its own worktree. It checks the branch out and
+            never creates one.
           </DialogDescription>
         </DialogHeader>
         <DialogPanel>
@@ -286,7 +326,7 @@ function NewTaskDialog({ target, onClose }: { target: NewTaskDialogTarget; onClo
                 onValueChange={(value) => {
                   setProjectKey(value);
                   setSelectedRefName(null);
-                  chooseRemote(null);
+                  chooseBranch(null);
                   setBranchQuery("");
                 }}
               >
@@ -316,18 +356,13 @@ function NewTaskDialog({ target, onClose }: { target: NewTaskDialogTarget; onClo
               />
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor={`${formId}-branch`}>Remote branch</Label>
+              <Label htmlFor={`${formId}-branch`}>Branch</Label>
               <Combobox
-                items={remoteRefs.map((ref) => ref.name)}
+                items={[...branchChoices.keys()]}
                 value={selectedRefName}
                 onValueChange={(value) => {
                   setSelectedRefName(value);
-                  const remote = remoteRefs.find((ref) => ref.name === value) ?? null;
-                  chooseRemote(
-                    remote === null
-                      ? null
-                      : { remoteName: remote.remoteName, branch: remote.branch },
-                  );
+                  chooseBranch(value === null ? null : (branchChoices.get(value) ?? null));
                   if (value !== null) setBranchQuery(value);
                 }}
                 inputValue={branchQuery}
@@ -337,7 +372,7 @@ function NewTaskDialog({ target, onClose }: { target: NewTaskDialogTarget; onClo
                   // branch other than the one the field shows.
                   if (selectedRefName !== null && value !== selectedRefName) {
                     setSelectedRefName(null);
-                    chooseRemote(null);
+                    chooseBranch(null);
                   }
                 }}
                 disabled={project === null}
@@ -345,15 +380,15 @@ function NewTaskDialog({ target, onClose }: { target: NewTaskDialogTarget; onClo
                 <ComboboxInput
                   id={`${formId}-branch`}
                   placeholder={
-                    project === null ? "Choose a project first" : "origin/feature-branch"
+                    project === null
+                      ? "Choose a project first"
+                      : "feature-branch or origin/feature-branch"
                   }
                   startAddon={<GitBranchIcon />}
                 />
                 <ComboboxPopup>
                   <ComboboxEmpty>
-                    {refs.isPending
-                      ? "Fetching remote branches..."
-                      : (refs.error ?? "No matching remote branch.")}
+                    {refsPending ? "Loading branches..." : (refsError ?? "No matching branch.")}
                   </ComboboxEmpty>
                   <ComboboxList>
                     {(name: string) => (
@@ -365,9 +400,11 @@ function NewTaskDialog({ target, onClose }: { target: NewTaskDialogTarget; onClo
                 </ComboboxPopup>
               </Combobox>
               <p className="text-muted-foreground text-xs">
-                {chosenRemote !== null
-                  ? `Checks out ${chosenRemote.branch} tracking ${chosenRemote.remoteName}/${chosenRemote.branch}.`
-                  : "Pick a branch that already exists on the remote."}
+                {chosenBranch === null
+                  ? "Pick an existing local or remote branch."
+                  : chosenBranch.remoteName === undefined
+                    ? `Checks out local branch ${chosenBranch.branch}.`
+                    : `Checks out ${chosenBranch.branch} tracking ${chosenBranch.remoteName}/${chosenBranch.branch}.`}
               </p>
             </div>
             <div className="flex flex-col gap-1.5">
@@ -385,6 +422,23 @@ function NewTaskDialog({ target, onClose }: { target: NewTaskDialogTarget; onClo
               />
               Auto-handle review feedback
             </Label>
+            {heldAt !== null ? (
+              <div className="flex items-center gap-2">
+                <p className="min-w-0 flex-1 text-warning-foreground text-xs">
+                  {heldAt.branch} is checked out at {heldAt.path}. Detaching switches that worktree
+                  to a detached HEAD; its files and uncommitted changes stay there.
+                </p>
+                <Button
+                  type="button"
+                  size="xs"
+                  variant="outline"
+                  disabled={pending}
+                  onClick={() => void submit(heldAt.path)}
+                >
+                  Detach and continue
+                </Button>
+              </div>
+            ) : null}
             {error !== null ? <p className="text-destructive text-xs">{error}</p> : null}
           </form>
         </DialogPanel>

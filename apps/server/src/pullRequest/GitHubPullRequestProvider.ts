@@ -571,6 +571,7 @@ export const make = Effect.gen(function* () {
             ? {}
             : { expectedStackHeads: input.expectedStackHeads }),
           ...(input.mergeMethod === undefined ? {} : { mergeMethod: input.mergeMethod }),
+          ...(input.mergeMessage === undefined ? {} : { mergeMessage: input.mergeMessage }),
           ...(input.updateMethod === undefined ? {} : { updateMethod: input.updateMethod }),
         })
         .pipe(Effect.mapError(fail("runAction"))),

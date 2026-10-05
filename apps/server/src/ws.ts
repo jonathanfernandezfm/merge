@@ -3329,6 +3329,30 @@ const makeWsRpcLayer = (
               "rpc.aggregate": "source-control",
             },
           ),
+        [WS_METHODS.sourceControlBranchWorkItems]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.sourceControlBranchWorkItems,
+            sourceControlRepositories.branchWorkItems(input),
+            { "rpc.aggregate": "source-control" },
+          ),
+        [WS_METHODS.sourceControlLinkBranchWorkItem]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.sourceControlLinkBranchWorkItem,
+            sourceControlRepositories.linkBranchWorkItem(input),
+            { "rpc.aggregate": "source-control" },
+          ),
+        [WS_METHODS.sourceControlUpdateWorkItem]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.sourceControlUpdateWorkItem,
+            sourceControlRepositories.updateWorkItem(input),
+            { "rpc.aggregate": "source-control" },
+          ),
+        [WS_METHODS.sourceControlCreateChildWorkItem]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.sourceControlCreateChildWorkItem,
+            sourceControlRepositories.createChildWorkItem(input),
+            { "rpc.aggregate": "source-control" },
+          ),
         [WS_METHODS.sourceControlCloneRepository]: (input) =>
           observeRpcEffect(
             WS_METHODS.sourceControlCloneRepository,

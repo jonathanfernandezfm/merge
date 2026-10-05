@@ -1699,6 +1699,16 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
   });
 
   it.each([
+    ["Remove Turkish", "#605892: Remove Turkish"],
+    ["#605887: Remove Turkish", "#605887: Remove Turkish"],
+    ["#605887 Remove Turkish", "#605887: Remove Turkish"],
+    // A work item outside the branch's family is replaced, not trusted.
+    ["#999999: Remove Turkish", "#605892: Remove Turkish"],
+  ] as const)("prefixes the work item on %s", (subject, expected) => {
+    expect(GitManager.withWorkItemPrefix(subject, [605892, 605887], 605892)).toBe(expected);
+  });
+
+  it.each([
     [
       "https://github.example.com/team/repository/pull/42?tab=files",
       "github.example.com/team/repository",

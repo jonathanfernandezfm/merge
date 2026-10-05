@@ -1,13 +1,13 @@
 /**
  * TaskSupervisorReactor - watches the pull request of every active task.
  *
- * Each minute, and right after a task is created, finishes setup or opts into
- * review automation, it finds the task branch's pull request, keeps the task's PR
- * snapshot (state, checks, review, merge) current and records normalized
- * workspace events in the `task_scm_events` ledger. New review comments are
- * batched into one automated `review-feedback` thread, but only while no
- * thread of the task is running; otherwise they wait in the ledger until a
- * task thread's session stops.
+ * Each minute, and right after a task is created, finishes setup, opts into
+ * review automation or has its pull request merged in the app, it finds the
+ * task branch's pull request, keeps the task's PR snapshot (state, checks,
+ * review, merge) current and records normalized workspace events in the
+ * `task_scm_events` ledger. New review comments are batched into one automated
+ * `review-feedback` thread, but only while no thread of the task is running;
+ * otherwise they wait in the ledger until a task thread's session stops.
  *
  * All durable state lives in the ledger and the task read model, so the
  * supervisor can restart at any point without losing or repeating work.
@@ -412,7 +412,30 @@ export const make = Effect.gen(function* () {
       // Nothing is mid-dispatch before the worker runs, so every claim is stale.
       yield* recoverStuckClaims(null);
       const events = yield* engine.subscribeDomainEvents;
+      const merges = yield* pullRequests.subscribeMerges;
       yield* forkParked(Stream.runForEach(events, processEvent));
+      // A merge made in the app lands on its task now instead of on the next sweep.
+      yield* forkParked(
+        Stream.runForEach(merges, (merge) =>
+          tasks.listActive().pipe(
+            Effect.flatMap((active) =>
+              Effect.forEach(
+                active.filter(
+                  (task) =>
+                    task.projectId === merge.projectId &&
+                    task.pullRequest?.number === merge.number &&
+                    isSupervisedTask(task),
+                ),
+                (task) => worker.enqueue({ kind: "task", taskId: task.id }),
+                { discard: true },
+              ),
+            ),
+            Effect.catch((error) =>
+              Effect.logWarning("task merge lookup failed", { cause: error }),
+            ),
+          ),
+        ),
+      );
       yield* forkParked(
         Effect.gen(function* () {
           yield* worker.enqueue({ kind: "sweep" });

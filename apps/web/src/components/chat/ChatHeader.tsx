@@ -34,6 +34,7 @@ import ProjectScriptsControl, {
   type ProjectScriptActionResult,
 } from "../ProjectScriptsControl";
 import { OpenInPicker } from "./OpenInPicker";
+import { WorkItemHeaderButton } from "../workItems/WorkItemHeaderButton";
 import { useRemoteOpenState, type RemoteOpenMode } from "../../remoteOpen";
 import { usePrimaryEnvironmentId } from "../../state/environments";
 import { useT3ProjectFileScripts } from "~/hooks/useT3ProjectFileScripts";
@@ -72,6 +73,8 @@ interface ChatHeaderProps {
   availableEditors: ReadonlyArray<EditorId>;
   rightPanelOpen: boolean;
   gitCwd: string | null;
+  /** The thread's repository has Azure Boards work items to show. */
+  workItemsAvailable?: boolean;
   readonly onOpenPullRequest?: ((number: number) => void) | undefined;
   onNewThreadInProject: () => void;
   onOpenProjectSettings?: (() => void) | undefined;
@@ -142,6 +145,7 @@ export const ChatHeader = memo(function ChatHeader({
   availableEditors,
   rightPanelOpen,
   gitCwd,
+  workItemsAvailable = false,
   onOpenPullRequest,
   onNewThreadInProject,
   onOpenProjectSettings,
@@ -385,6 +389,14 @@ export const ChatHeader = memo(function ChatHeader({
             openInCwd={openInCwd}
           />
         </>
+      )}
+      {workItemsAvailable && gitCwd && (
+        <WorkItemHeaderButton
+          environmentId={activeThreadEnvironmentId}
+          cwd={gitCwd}
+          threadRef={scopeThreadRef(activeThreadEnvironmentId, activeThreadId)}
+          presentation={actionsCollapsed ? "menu" : "toolbar"}
+        />
       )}
       {activeProjectName && gitCwd && (
         <>

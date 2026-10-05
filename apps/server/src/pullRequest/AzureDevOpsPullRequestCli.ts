@@ -248,6 +248,7 @@ export class AzureDevOpsPullRequestCli extends Context.Service<
       readonly number: number;
       readonly action: PullRequestAction;
       readonly mergeMethod?: PullRequestMergeMethod;
+      readonly mergeMessage?: string;
     }) => Effect.Effect<void, AzureDevOpsPullRequestCliError>;
 
     /** Rewrites the pull request's own words, through the same command that moves it. */
@@ -307,10 +308,18 @@ function involvementArgs(input: {
 function actionArgs(
   action: PullRequestAction,
   mergeMethod: PullRequestMergeMethod | undefined,
+  mergeMessage: string | undefined,
 ): ReadonlyArray<string> {
+  const messageArgs = mergeMessage ? ["--merge-commit-message", mergeMessage] : [];
   switch (action) {
     case "merge":
-      return ["--status", "completed", "--squash", mergeMethod === "squash" ? "true" : "false"];
+      return [
+        "--status",
+        "completed",
+        "--squash",
+        mergeMethod === "squash" ? "true" : "false",
+        ...messageArgs,
+      ];
     // Auto-complete is Azure's own name for it: the pull request stays active and Azure completes
     // it once its policies pass. The squash choice is stored with it, as it is for a merge now.
     case "enable-auto-merge":
@@ -320,6 +329,7 @@ function actionArgs(
         ...(mergeMethod === undefined
           ? []
           : ["--squash", mergeMethod === "squash" ? "true" : "false"]),
+        ...messageArgs,
       ];
     case "disable-auto-merge":
       return ["--auto-complete", "false"];
@@ -744,7 +754,7 @@ export const make = Effect.gen(function* () {
             ...detectArgs,
             "--id",
             String(input.number),
-            ...actionArgs(input.action, input.mergeMethod),
+            ...actionArgs(input.action, input.mergeMethod, input.mergeMessage),
             "--only-show-errors",
             "--output",
             "json",

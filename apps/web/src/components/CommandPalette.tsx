@@ -68,6 +68,7 @@ import {
   SquarePenIcon,
   SunIcon,
   TextSearchIcon,
+  ListTodoIcon,
 } from "lucide-react";
 import {
   useCallback,
@@ -2036,6 +2037,23 @@ function OpenCommandPaletteDialog(props: {
         },
       });
     }
+  }
+
+  if (
+    activeThread !== null &&
+    activeThreadServerConfig?.environment.capabilities.workItems === true
+  ) {
+    const threadRef = scopeThreadRef(activeThread.environmentId, activeThread.id);
+    actionItems.push({
+      kind: "action",
+      value: "action:open-work-items",
+      searchTerms: ["work item", "task", "subtask", "azure boards", "ado", "link work item"],
+      title: "Show work items",
+      icon: <ListTodoIcon className={ITEM_ICON_CLASS} />,
+      run: async () => {
+        useRightPanelStore.getState().open(threadRef, "work-items");
+      },
+    });
   }
 
   if (activeThread !== null) {

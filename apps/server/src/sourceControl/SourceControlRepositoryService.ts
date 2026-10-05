@@ -1,5 +1,8 @@
+import * as Cache from "effect/Cache";
 import * as Context from "effect/Context";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
@@ -8,6 +11,12 @@ import * as Schema from "effect/Schema";
 
 import {
   SourceControlRepositoryError,
+  type BranchWorkItems,
+  type BranchWorkItemsInput,
+  type CreateChildWorkItemInput,
+  type LinkBranchWorkItemInput,
+  type UpdateWorkItemInput,
+  type WorkItem,
   type SourceControlCloneRepositoryInput,
   type SourceControlCloneRepositoryResult,
   type SourceControlCloneProtocol,
@@ -26,6 +35,7 @@ import {
   type GitCloneProgressLine,
 } from "../project/gitCloneProgress.ts";
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
+import * as SourceControlProvider from "./SourceControlProvider.ts";
 import * as SourceControlProviderRegistry from "./SourceControlProviderRegistry.ts";
 const isSourceControlRepositoryError = Schema.is(SourceControlRepositoryError);
 
@@ -54,6 +64,20 @@ export class SourceControlRepositoryService extends Context.Service<
     readonly publishRepository: (
       input: SourceControlPublishRepositoryInput,
     ) => Effect.Effect<SourceControlPublishRepositoryResult, SourceControlRepositoryError>;
+    /** The checked-out branch's work item and its children. */
+    readonly branchWorkItems: (
+      input: BranchWorkItemsInput,
+    ) => Effect.Effect<BranchWorkItems, SourceControlRepositoryError>;
+    /** Ties the checked-out branch to a work item, or clears that link. */
+    readonly linkBranchWorkItem: (
+      input: LinkBranchWorkItemInput,
+    ) => Effect.Effect<void, SourceControlRepositoryError>;
+    readonly updateWorkItem: (
+      input: UpdateWorkItemInput,
+    ) => Effect.Effect<void, SourceControlRepositoryError>;
+    readonly createChildWorkItem: (
+      input: CreateChildWorkItemInput,
+    ) => Effect.Effect<{ readonly id: number }, SourceControlRepositoryError>;
   }
 >()("merge-agent/sourceControl/SourceControlRepositoryService") {}
 
@@ -84,6 +108,44 @@ const CLONE_ENV = {
   GIT_TERMINAL_PROMPT: "0",
   LC_ALL: "C",
 } satisfies NodeJS.ProcessEnv;
+
+// NUL cannot appear in a path, a project name, or a work item type.
+const STATE_KEY_SEPARATOR = "\u0000";
+
+/** Git config key holding a work item linked to a branch by hand. */
+const branchWorkItemConfigKey = (branch: string) => `branch.${branch}.work-item`;
+
+/**
+ * The work item a branch is tied to: a hand-made link wins over the id in the
+ * branch name. Shared with commit and PR generation so both agree.
+ */
+export const resolveBranchWorkItemId = Effect.fn("resolveBranchWorkItemId")(function* (
+  git: GitVcsDriver.GitVcsDriver["Service"],
+  cwd: string,
+  branch: string,
+) {
+  const linked = yield* git
+    .readConfigValue(cwd, branchWorkItemConfigKey(branch))
+    .pipe(Effect.orElseSucceed(() => null));
+  const linkedId = linked === null ? Number.NaN : Number(linked.trim());
+  if (Number.isSafeInteger(linkedId) && linkedId > 0) {
+    return { id: linkedId, source: "linked" as const };
+  }
+  const named = SourceControlProvider.workItemIdFromBranch(branch);
+  return named === null ? null : { id: named, source: "branch-name" as const };
+});
+
+function toWorkItem(item: SourceControlProvider.SourceControlWorkItem): WorkItem {
+  return {
+    id: item.id,
+    title: item.title,
+    type: item.type,
+    state: item.state,
+    parentId: item.parentId,
+    assignedTo: item.assignedTo ?? null,
+    url: item.url ?? null,
+  };
+}
 
 function mapRepositoryError(operation: string, provider: SourceControlProviderKind) {
   return Effect.mapError((cause: unknown) =>
@@ -442,6 +504,167 @@ export const make = Effect.gen(function* () {
     },
   );
 
+  const readCurrentBranch = (cwd: string) =>
+    git
+      .execute({
+        operation: "SourceControlRepositoryService.readCurrentBranch",
+        cwd,
+        args: ["symbolic-ref", "--short", "-q", "HEAD"],
+        allowNonZeroExit: true,
+      })
+      .pipe(
+        Effect.map((result) => {
+          const branch = result.stdout.trim();
+          return result.exitCode === 0 && branch.length > 0 ? branch : null;
+        }),
+      );
+
+  const requireCurrentBranch = (cwd: string, operation: string) =>
+    readCurrentBranch(cwd).pipe(
+      Effect.filterOrFail(
+        (branch): branch is string => branch !== null,
+        () =>
+          new SourceControlRepositoryError({
+            operation,
+            provider: "unknown",
+            detail: "Check out a branch to link a work item.",
+          }),
+      ),
+    );
+
+  const workItemsUnsupported = (operation: string, provider: SourceControlProviderKind) =>
+    new SourceControlRepositoryError({
+      operation,
+      provider,
+      detail: "This repository's source control provider has no work items.",
+    });
+
+  // A type's states change only when an admin edits the process, and every
+  // lookup boots `az`, so they are kept for an hour.
+  const workItemStates = yield* Cache.makeWith(
+    (key: string) => {
+      const [cwd = "", project = "", type = ""] = key.split(STATE_KEY_SEPARATOR);
+      return providers
+        .resolve({ cwd })
+        .pipe(
+          Effect.flatMap((provider) =>
+            provider.listWorkItemStates
+              ? provider.listWorkItemStates({ cwd, project, type })
+              : Effect.succeed([]),
+          ),
+        );
+    },
+    {
+      capacity: 64,
+      timeToLive: (exit) => (Exit.isSuccess(exit) ? Duration.hours(1) : Duration.zero),
+    },
+  );
+
+  const branchWorkItems = Effect.fn("SourceControlRepositoryService.branchWorkItems")(function* (
+    input: BranchWorkItemsInput,
+  ) {
+    const branch = yield* readCurrentBranch(input.cwd);
+    const provider = yield* providers.resolve({ cwd: input.cwd });
+    const empty = {
+      branch,
+      supported: provider.listWorkItemFamily !== undefined,
+      source: null,
+      workItemId: null,
+      root: null,
+      children: [],
+      states: {},
+    } satisfies BranchWorkItems;
+    if (branch === null || !provider.listWorkItemFamily) return empty;
+    const resolved = yield* resolveBranchWorkItemId(git, input.cwd, branch);
+    if (resolved === null) return empty;
+    const items = yield* provider.listWorkItemFamily({ cwd: input.cwd, id: resolved.id });
+    const root = items.find((item) => item.id === resolved.id) ?? null;
+    const typeKeys = new Map<string, string>();
+    for (const item of items) {
+      if (item.type && item.project) {
+        typeKeys.set(item.type, [input.cwd, item.project, item.type].join(STATE_KEY_SEPARATOR));
+      }
+    }
+    // States only feed the edit menu; a failed lookup must not hide the items.
+    const stateEntries = yield* Effect.forEach(
+      [...typeKeys],
+      ([type, key]) =>
+        Cache.get(workItemStates, key).pipe(
+          Effect.map((states) => [type, states] as const),
+          Effect.orElseSucceed(() => [type, []] as const),
+        ),
+      { concurrency: "unbounded" },
+    );
+    return {
+      ...empty,
+      source: resolved.source,
+      workItemId: resolved.id,
+      root: root === null ? null : toWorkItem(root),
+      rootDetails: root?.details ?? null,
+      children: items.filter((item) => item.id !== resolved.id).map(toWorkItem),
+      states: Object.fromEntries(stateEntries),
+    } satisfies BranchWorkItems;
+  });
+
+  const linkBranchWorkItem = Effect.fn("SourceControlRepositoryService.linkBranchWorkItem")(
+    function* (input: LinkBranchWorkItemInput) {
+      const branch = yield* requireCurrentBranch(input.cwd, "linkBranchWorkItem");
+      const key = branchWorkItemConfigKey(branch);
+      yield* git.execute({
+        operation: "SourceControlRepositoryService.linkBranchWorkItem",
+        cwd: input.cwd,
+        // `--unset` exits 5 when nothing was linked, which is already the goal.
+        args: input.id === null ? ["config", "--unset", key] : ["config", key, String(input.id)],
+        allowNonZeroExit: input.id === null,
+      });
+    },
+  );
+
+  const updateWorkItem = Effect.fn("SourceControlRepositoryService.updateWorkItem")(function* (
+    input: UpdateWorkItemInput,
+  ) {
+    const provider = yield* providers.resolve({ cwd: input.cwd });
+    if (!provider.updateWorkItem) {
+      return yield* workItemsUnsupported("updateWorkItem", provider.kind);
+    }
+    yield* provider.updateWorkItem({
+      cwd: input.cwd,
+      id: input.id,
+      ...(input.state === undefined ? {} : { state: input.state }),
+      ...(input.assignToMe === undefined ? {} : { assignToMe: input.assignToMe }),
+    });
+  });
+
+  const createChildWorkItem = Effect.fn("SourceControlRepositoryService.createChildWorkItem")(
+    function* (input: CreateChildWorkItemInput) {
+      const provider = yield* providers.resolve({ cwd: input.cwd });
+      if (!provider.createChildWorkItem) {
+        return yield* workItemsUnsupported("createChildWorkItem", provider.kind);
+      }
+      return yield* provider.createChildWorkItem(input);
+    },
+  );
+
+  // Work item failures carry the provider's own reason (a rejected state
+  // transition, a missing type) instead of a generic message.
+  const mapWorkItemError = (operation: string) =>
+    Effect.mapError((cause: unknown) =>
+      isSourceControlRepositoryError(cause)
+        ? cause
+        : new SourceControlRepositoryError({
+            operation,
+            provider:
+              typeof cause === "object" && cause !== null && "provider" in cause
+                ? (cause.provider as SourceControlProviderKind)
+                : "unknown",
+            detail:
+              typeof cause === "object" && cause !== null && "detail" in cause
+                ? String(cause.detail)
+                : "The work item operation could not be completed.",
+            cause,
+          }),
+    );
+
   return SourceControlRepositoryService.of({
     lookupRepository: (input) =>
       lookupRepository(input).pipe(mapRepositoryError("lookupRepository", input.provider)),
@@ -455,6 +678,12 @@ export const make = Effect.gen(function* () {
       discardClone(destinationPath).pipe(mapRepositoryError("discardClone", "unknown")),
     publishRepository: (input) =>
       publishRepository(input).pipe(mapRepositoryError("publishRepository", input.provider)),
+    branchWorkItems: (input) => branchWorkItems(input).pipe(mapWorkItemError("branchWorkItems")),
+    linkBranchWorkItem: (input) =>
+      linkBranchWorkItem(input).pipe(mapWorkItemError("linkBranchWorkItem")),
+    updateWorkItem: (input) => updateWorkItem(input).pipe(mapWorkItemError("updateWorkItem")),
+    createChildWorkItem: (input) =>
+      createChildWorkItem(input).pipe(mapWorkItemError("createChildWorkItem")),
   });
 });
 

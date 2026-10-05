@@ -221,6 +221,7 @@ import { AgentsPanel } from "./AgentsPanel";
 import { TaskWorkspaceChrome, useThreadTask } from "./task/TaskWorkspaceBar";
 import { LinkPullRequestDialogHost } from "./pullRequest/LinkPullRequestDialog";
 import { ThreadPullRequestsPanel } from "./pullRequest/ThreadPullRequestsPanel";
+import { WorkItemsPanel } from "./workItems/WorkItemsPanel";
 import { useDeviceState } from "~/state/device";
 import { DeviceSetup } from "./device/DeviceSetup";
 import { Dialog } from "./ui/dialog";
@@ -4584,6 +4585,15 @@ export default function ChatView(props: ChatViewProps) {
     if (!activeThreadRef || !pullRequestsSurfaceAvailable) return;
     useRightPanelStore.getState().open(activeThreadRef, "pull-requests");
   }, [activeThreadRef, pullRequestsSurfaceAvailable]);
+  const workItemsSurfaceAvailable =
+    isServerThread &&
+    gitStatusCwd !== null &&
+    serverConfig?.environment.capabilities.workItems === true &&
+    gitStatusQuery.data?.sourceControlProvider?.kind === "azure-devops";
+  const addWorkItemsSurface = useCallback(() => {
+    if (!activeThreadRef || !workItemsSurfaceAvailable) return;
+    useRightPanelStore.getState().open(activeThreadRef, "work-items");
+  }, [activeThreadRef, workItemsSurfaceAvailable]);
   const { state: deviceState, loaded: deviceStateLoaded } = useDeviceState(
     activeThreadRef?.environmentId ?? null,
   );
@@ -9631,6 +9641,8 @@ export default function ChatView(props: ChatViewProps) {
       />
     ) : renderedRightPanelSurface?.kind === "pull-requests" && activeThreadRef ? (
       <ThreadPullRequestsPanel threadRef={activeThreadRef} />
+    ) : renderedRightPanelSurface?.kind === "work-items" && gitStatusCwd !== null ? (
+      <WorkItemsPanel environmentId={activeThread.environmentId} cwd={gitStatusCwd} />
     ) : renderedRightPanelSurface?.kind === "agents" ? (
       <AgentsPanel
         model={agentPanelModel}
@@ -9772,6 +9784,7 @@ export default function ChatView(props: ChatViewProps) {
             availableEditors={availableEditors}
             rightPanelOpen={rightPanelOpen}
             gitCwd={gitCwd}
+            workItemsAvailable={workItemsSurfaceAvailable}
             onNewThreadInProject={handleNewThreadInActiveProject}
             {...(activeDraftLogicalProjectKey
               ? { onOpenProjectSettings: handleOpenDraftProjectSettings }
@@ -10307,6 +10320,7 @@ export default function ChatView(props: ChatViewProps) {
           onAddFiles={addFilesSurface}
           onAddPullRequest={addPullRequestSurface}
           onAddPullRequests={addPullRequestsSurface}
+          onAddWorkItems={addWorkItemsSurface}
           onAddAgents={addAgentsSurface}
           onAddDevice={addDeviceSurface}
           browserAvailable={isPreviewSupportedInRuntime()}
@@ -10315,6 +10329,7 @@ export default function ChatView(props: ChatViewProps) {
           filesAvailable={activeProject !== null}
           pullRequestAvailable={pullRequestSurfaceAvailable}
           pullRequestsAvailable={pullRequestsSurfaceAvailable}
+          workItemsAvailable={workItemsSurfaceAvailable}
           agentsAvailable
           deviceAvailable={activeThreadRef !== null}
           liveAgentCount={agentPanelModel.liveCount}
@@ -10364,6 +10379,7 @@ export default function ChatView(props: ChatViewProps) {
             onAddFiles={addFilesSurface}
             onAddPullRequest={addPullRequestSurface}
             onAddPullRequests={addPullRequestsSurface}
+            onAddWorkItems={addWorkItemsSurface}
             onAddAgents={addAgentsSurface}
             onAddDevice={addDeviceSurface}
             browserAvailable={isPreviewSupportedInRuntime()}
@@ -10372,6 +10388,7 @@ export default function ChatView(props: ChatViewProps) {
             filesAvailable={activeProject !== null}
             pullRequestAvailable={pullRequestSurfaceAvailable}
             pullRequestsAvailable={pullRequestsSurfaceAvailable}
+            workItemsAvailable={workItemsSurfaceAvailable}
             agentsAvailable
             deviceAvailable={activeThreadRef !== null}
             liveAgentCount={agentPanelModel.liveCount}

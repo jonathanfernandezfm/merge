@@ -201,6 +201,114 @@ const withRepos = <A, E, R>(
 
 it.layer(NodeServices.layer)("TaskWorkspaceService", (it) => {
   it.effect(
+    "detaches another worktree holding the branch only when asked",
+    () =>
+      withRepos(({ root }) =>
+        Effect.gen(function* () {
+          const path = yield* Path.Path;
+          const fs = yield* FileSystem.FileSystem;
+          const service = yield* TaskWorkspaceService.TaskWorkspaceService;
+          yield* setupProject(root);
+          const other = path.join(path.dirname(root), "other-worktree");
+          yield* git(root, ["worktree", "add", "-b", BRANCH, other, `origin/${BRANCH}`]);
+          yield* writeFile(path.join(other, "wip.txt"), "uncommitted\n");
+          const head = yield* git(other, ["rev-parse", "HEAD"]);
+
+          const error = yield* service
+            .create({ projectId: PROJECT_ID, title: "Widgets", branch: BRANCH })
+            .pipe(Effect.flip);
+          expect(error).toMatchObject({ reason: "branch-checked-out" });
+          const checkoutPath = error.checkoutPath;
+          assert(checkoutPath !== undefined);
+          expect((yield* (yield* ProjectionSnapshotQuery).getShellSnapshot()).tasks).toEqual([]);
+
+          const { taskId } = yield* service.create({
+            projectId: PROJECT_ID,
+            title: "Widgets",
+            branch: BRANCH,
+            detachCheckoutAt: checkoutPath,
+          });
+          yield* service.awaitSetup(taskId);
+
+          const workspacePath = (yield* readTask(taskId)).workspace.path;
+          assert(workspacePath !== null);
+          expect(yield* git(workspacePath, ["rev-parse", "--abbrev-ref", "HEAD"])).toBe(BRANCH);
+          expect(yield* git(other, ["rev-parse", "--abbrev-ref", "HEAD"])).toBe("HEAD");
+          expect(yield* git(other, ["rev-parse", "HEAD"])).toBe(head);
+          expect(yield* fs.readFileString(path.join(other, "wip.txt"))).toBe("uncommitted\n");
+        }),
+      ),
+    { timeout: 60_000 },
+  );
+
+  it.effect(
+    "takes over a worktree that already holds the branch",
+    () =>
+      withRepos(({ root }) =>
+        Effect.gen(function* () {
+          const path = yield* Path.Path;
+          const fs = yield* FileSystem.FileSystem;
+          const service = yield* TaskWorkspaceService.TaskWorkspaceService;
+          yield* setupProject(root);
+          const other = path.join(path.dirname(root), "agent-worktree");
+          yield* git(root, ["worktree", "add", "-b", BRANCH, other, `origin/${BRANCH}`]);
+          yield* writeFile(path.join(other, "wip.txt"), "uncommitted\n");
+
+          const { taskId } = yield* service.create({
+            projectId: PROJECT_ID,
+            title: "Widgets",
+            branch: BRANCH,
+            worktreePath: other,
+          });
+          yield* service.awaitSetup(taskId);
+
+          expect((yield* readTask(taskId)).workspace.path).toBe(yield* fs.realPath(other));
+          expect(yield* git(other, ["rev-parse", "--abbrev-ref", "HEAD"])).toBe(BRANCH);
+          expect(yield* fs.readFileString(path.join(other, "wip.txt"))).toBe("uncommitted\n");
+
+          // A second task can neither adopt nor detach a worktree a live task owns.
+          for (const claim of [{ worktreePath: other }, { detachCheckoutAt: other }]) {
+            const taken = yield* service
+              .create({ projectId: PROJECT_ID, title: "Again", branch: BRANCH, ...claim })
+              .pipe(Effect.flip);
+            expect(taken).toMatchObject({ reason: "failed" });
+          }
+          expect(yield* git(other, ["rev-parse", "--abbrev-ref", "HEAD"])).toBe(BRANCH);
+
+          const error = yield* service
+            .create({ projectId: PROJECT_ID, title: "Main", branch: "main", worktreePath: root })
+            .pipe(Effect.flip);
+          expect(error).toMatchObject({ reason: "failed" });
+        }),
+      ),
+    { timeout: 60_000 },
+  );
+
+  it.effect(
+    "never detaches the project's main checkout",
+    () =>
+      withRepos(({ root }) =>
+        Effect.gen(function* () {
+          const service = yield* TaskWorkspaceService.TaskWorkspaceService;
+          yield* setupProject(root);
+          yield* git(root, ["checkout", BRANCH]);
+
+          const error = yield* service
+            .create({
+              projectId: PROJECT_ID,
+              title: "Widgets",
+              branch: BRANCH,
+              detachCheckoutAt: root,
+            })
+            .pipe(Effect.flip);
+          expect(error).toMatchObject({ reason: "failed" });
+          expect(yield* git(root, ["rev-parse", "--abbrev-ref", "HEAD"])).toBe(BRANCH);
+        }),
+      ),
+    { timeout: 60_000 },
+  );
+
+  it.effect(
     "checks out the existing remote branch, copies files and runs setup scripts",
     () =>
       withRepos(({ root }) =>
@@ -283,6 +391,36 @@ it.layer(NodeServices.layer)("TaskWorkspaceService", (it) => {
             threadId: second.threadId,
           });
           expect(yield* fs.exists(path.join(workspacePath, "widgets.txt"))).toBe(true);
+        }),
+      ),
+    { timeout: 60_000 },
+  );
+
+  it.effect(
+    "checks out a branch that exists only locally without an upstream",
+    () =>
+      withRepos(({ root }) =>
+        Effect.gen(function* () {
+          const service = yield* TaskWorkspaceService.TaskWorkspaceService;
+          yield* setupProject(root);
+          yield* git(root, ["branch", "feature/local-only"]);
+
+          const { taskId } = yield* service.create({
+            projectId: PROJECT_ID,
+            title: "Local",
+            branch: "feature/local-only",
+          });
+          yield* service.awaitSetup(taskId);
+
+          const task = yield* readTask(taskId);
+          const workspacePath = task.workspace.path;
+          assert(workspacePath !== null);
+          expect(task.workspace.setup.status).toBe("ready");
+          expect(yield* git(workspacePath, ["rev-parse", "--abbrev-ref", "HEAD"])).toBe(
+            "feature/local-only",
+          );
+          // No upstream until the branch is pushed.
+          yield* git(workspacePath, ["rev-parse", "@{upstream}"]).pipe(Effect.flip);
         }),
       ),
     { timeout: 60_000 },

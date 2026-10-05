@@ -325,6 +325,7 @@ export class GitLabPullRequestCli extends Context.Service<
       readonly number: number;
       readonly action: PullRequestAction;
       readonly mergeMethod?: PullRequestMergeMethod;
+      readonly mergeMessage?: string;
     }) => Effect.Effect<void, GitLabPullRequestCliError>;
 
     /** Whichever of the two is given is sent. GitLab calls a merge request's body its description. */
@@ -484,7 +485,16 @@ function query(params: ReadonlyArray<readonly [string, string]>): string {
 function actionArgs(
   action: PullRequestAction,
   mergeMethod: PullRequestMergeMethod | undefined,
+  mergeMessage: string | undefined,
 ): ReadonlyArray<string> {
+  // A squash takes its own message flag; a rebase writes no merge commit to carry one.
+  const messageArgs = !mergeMessage
+    ? []
+    : mergeMethod === "squash"
+      ? ["--squash-message", mergeMessage]
+      : mergeMethod === "rebase"
+        ? []
+        : ["--message", mergeMessage];
   switch (action) {
     case "merge":
       return [
@@ -494,6 +504,7 @@ function actionArgs(
         "--yes",
         ...(mergeMethod === "squash" ? ["--squash"] : []),
         ...(mergeMethod === "rebase" ? ["--rebase"] : []),
+        ...messageArgs,
       ];
     // The same command with the flag the other way up: here the wait is the whole point, so
     // glab is told to arm the merge rather than talked out of it.
@@ -504,6 +515,7 @@ function actionArgs(
         "--yes",
         ...(mergeMethod === "squash" ? ["--squash"] : []),
         ...(mergeMethod === "rebase" ? ["--rebase"] : []),
+        ...messageArgs,
       ];
     // Never reached: taking the arming back has no `glab mr` command, so it goes to the API.
     case "disable-auto-merge":
@@ -1373,7 +1385,11 @@ export const make = Effect.gen(function* () {
           method: "POST",
         }).pipe(Effect.asVoid);
       }
-      const [subcommand, ...flags] = actionArgs(input.action, input.mergeMethod);
+      const [subcommand, ...flags] = actionArgs(
+        input.action,
+        input.mergeMethod,
+        input.mergeMessage,
+      );
       return gitlab
         .execute({
           cwd: input.cwd,

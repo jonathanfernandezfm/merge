@@ -107,6 +107,11 @@ messages, review titles, and descriptions from your changes.
 Choose the writing style and model in **Settings → Source Control**. **Repository conventions**
 uses the project's instructions and recent commit subjects.
 
+For Azure DevOps, turn on **Reference work items** (per project if you like) when your branches are
+named after a work item, such as `feature/#1234-title`. Generated commit messages then start with
+`#<id>: `, using the child task that best fits the change, or the branch's work item when none fits.
+New pull requests link the branch's work item and every child task their commits reference.
+
 ## Review and merge
 
 Open **Pull requests** to review changes and comments, request reviewers, check out a branch,
@@ -159,6 +164,22 @@ does not show its diff, so marks are made and read on web and desktop.
   remotes can require separate setup from the hosting provider's API access.
 - **A review cannot load:** open it on the host website while resolving connectivity, permissions,
   or rate limits.
+
+## Work items
+
+In an Azure DevOps repository, open **Work items** from the right panel (`W`) or the command
+palette to see the Azure Boards item the thread's branch belongs to, with its subtasks. Click an id
+to copy it, or **Copy ids** for every subtask. The panel also shows the description and acceptance criteria
+(repro steps for bugs), and **Copy as prompt** puts all of it, with the subtask ids, on the
+clipboard for an agent. The work item's id sits in the chat header; click it to open the panel.
+
+The item is read from the branch name, such as `feature/#1234-title`. When the name has no id,
+type one under **Link**; the link is saved on the branch and replaces the name for generated
+commit messages and pull requests. Remove it from the link menu to go back to the branch name.
+
+You can move an item to another state, assign it to yourself, and add subtasks. New subtasks land
+in the parent's area and iteration. Everything else, like descriptions and comments, opens in Azure
+Boards. Edits use your `az` sign-in, so no extra token is needed.
 
 ## Linked pull requests
 

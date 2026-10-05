@@ -262,6 +262,7 @@ export const make = Effect.gen(function* () {
           number: input.number,
           action: input.action,
           ...(input.mergeMethod === undefined ? {} : { mergeMethod: input.mergeMethod }),
+          ...(input.mergeMessage === undefined ? {} : { mergeMessage: input.mergeMessage }),
         })
         .pipe(Effect.mapError(fail("runAction"))),
 

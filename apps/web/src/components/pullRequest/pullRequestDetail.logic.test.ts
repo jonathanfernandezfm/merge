@@ -46,6 +46,7 @@ import {
   resolvePullRequestReferenceHost,
   resolvePullRequestPrimaryControl,
   allowsSinglePullRequestMerge,
+  defaultPullRequestMergeMessage,
   shouldRefreshPullRequestActivity,
   resolveBaseFreshness,
   resolvePullRequestMergeMethod,
@@ -1798,4 +1799,17 @@ describe("single-PR merge compatibility during stack discovery", () => {
       ).toBe(allowed);
     },
   );
+});
+
+describe("defaultPullRequestMergeMessage", () => {
+  it.each([
+    ["Fix login", "feature/#604335-login", "#604335: Fix login"],
+    ["#604335: Fix login", "main-fix", "#604335: Fix login"],
+    ["#604335 Fix login", "bugfix/ESP-111111", "#604335: Fix login"],
+    ["Merged PR 52615: #604335: Fix login", "x", "#604335: Fix login"],
+    ["Merged PR 1: Merged PR 2: Fix login", "bugfix/604335", "#604335: Fix login"],
+    ["Fix login", "fix-login", "Fix login"],
+  ])("%s on %s", (title, branch, expected) => {
+    expect(defaultPullRequestMergeMessage(title, branch)).toBe(expected);
+  });
 });

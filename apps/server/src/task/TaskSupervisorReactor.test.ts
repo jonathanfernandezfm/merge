@@ -19,6 +19,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as PubSub from "effect/PubSub";
 import * as Queue from "effect/Queue";
 import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
@@ -39,7 +40,10 @@ import { SqlitePersistenceMemory } from "../persistence/Layers/Sqlite.ts";
 import * as TaskScmEvents from "../persistence/TaskScmEvents.ts";
 import { RepositoryIdentityResolver } from "../project/RepositoryIdentityResolver.ts";
 import { decodeThreadsJson } from "../pullRequest/azureDevOpsPullRequestJson.ts";
-import { PullRequestService } from "../pullRequest/PullRequestService.ts";
+import {
+  PullRequestService,
+  type PullRequestMergeEvent,
+} from "../pullRequest/PullRequestService.ts";
 import * as TaskSupervisorReactor from "./TaskSupervisorReactor.ts";
 import { TaskWorkspaceService } from "./TaskWorkspaceService.ts";
 
@@ -95,7 +99,11 @@ const reviewThread = (id: string, body: string): PullRequestReviewThread => ({
   ],
 });
 
-const makeLayer = (host: Host, created: Queue.Queue<CreatedThread>) => {
+const makeLayer = (
+  host: Host,
+  created: Queue.Queue<CreatedThread>,
+  merges: PubSub.PubSub<PullRequestMergeEvent>,
+) => {
   const summary = (): PullRequestSummary => {
     host.summaryReads += 1;
     const pr = host.pullRequest!;
@@ -201,6 +209,7 @@ const makeLayer = (host: Host, created: Queue.Queue<CreatedThread>) => {
     Layer.provide(
       Layer.mock(PullRequestService)({
         summary: () => Effect.sync(summary),
+        subscribeMerges: PubSub.subscribe(merges).pipe(Effect.map(Stream.fromSubscription)),
         detail: () =>
           Effect.sync(() => ({ checks: [], viewer: host.viewer }) as unknown as PullRequestDetail),
         activity: () =>
@@ -224,6 +233,7 @@ const makeLayer = (host: Host, created: Queue.Queue<CreatedThread>) => {
 interface Fixture {
   readonly host: Host;
   readonly created: Queue.Queue<CreatedThread>;
+  readonly merges: PubSub.PubSub<PullRequestMergeEvent>;
   readonly workspacePath: string;
 }
 
@@ -251,6 +261,7 @@ const withTask = <A, E, R>(
         ...options.host,
       };
       const created = yield* Queue.unbounded<CreatedThread>();
+      const merges = yield* PubSub.unbounded<PullRequestMergeEvent>();
       return yield* Effect.gen(function* () {
         const engine = yield* OrchestrationEngineService;
         yield* engine.dispatch({
@@ -285,8 +296,8 @@ const withTask = <A, E, R>(
           autoHandleCIFailures: false,
           createdAt: CREATED_AT,
         });
-        return yield* body({ host, created, workspacePath });
-      }).pipe(Effect.provide(makeLayer(host, created)));
+        return yield* body({ host, created, merges, workspacePath });
+      }).pipe(Effect.provide(makeLayer(host, created, merges)));
     }),
   );
 
@@ -681,6 +692,50 @@ it.layer(NodeServices.layer)("TaskSupervisorReactor", (it) => {
       }),
     ),
   );
+  it.effect("records a merge made in the app without waiting for the next sweep", () =>
+    withTask({ autoHandleReviewFeedback: false }, ({ host, merges }) =>
+      Effect.gen(function* () {
+        const engine = yield* OrchestrationEngineService;
+        const reactor = yield* TaskSupervisorReactor.TaskSupervisorReactor;
+        const nextSync = (merged: boolean) =>
+          engine.subscribeDomainEvents.pipe(
+            Effect.flatMap((events) =>
+              events.pipe(
+                Stream.filter(
+                  (event) =>
+                    event.type === "task.meta-updated" &&
+                    (merged ? event.payload.mergedAt != null : event.payload.pullRequest != null),
+                ),
+                Stream.runHead,
+              ),
+            ),
+            Effect.forkScoped,
+          );
+        // The startup sweep links the open PR; the next sweep is a minute away.
+        const linked = yield* nextSync(false);
+        yield* reactor.start();
+        yield* Fiber.join(linked);
+        yield* reactor.drain;
+
+        host.pullRequest = {
+          state: "merged",
+          updatedAt: "2026-01-05T00:00:00.000Z",
+          mergedAt: "2026-01-05T00:00:00.000Z",
+        };
+        const synced = yield* nextSync(true);
+        const task = yield* readTask;
+        yield* PubSub.publish(merges, {
+          projectId: PROJECT_ID,
+          repository: "github.com/owner/repo",
+          number: task.pullRequest!.number,
+          mergedAt: "2026-01-05T00:00:00.000Z",
+        } as PullRequestMergeEvent);
+        yield* Fiber.join(synced);
+        expect((yield* readTask).mergedAt).toBe("2026-01-05T00:00:00.000Z");
+      }),
+    ),
+  );
+
   it.effect("links the pull request as soon as setup becomes ready", () =>
     withTask({ autoHandleReviewFeedback: false, setupStatus: "running" }, ({ workspacePath }) =>
       Effect.gen(function* () {

@@ -4,6 +4,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   groupTaskboardTasks,
+  linkedTasksByKey,
   latestTaskThread,
   resolveTaskStatus,
   taskboardColumnForStatus,
@@ -156,7 +157,7 @@ describe("taskboardColumnForStatus", () => {
       "waiting-for-review": "in-review",
       approved: "ready-to-merge",
       "merge-ready": "ready-to-merge",
-      merged: "archive",
+      merged: "merged",
       archived: "archive",
     });
   });
@@ -209,5 +210,26 @@ describe("groupTaskboardTasks", () => {
     expect(columns.get("needs-you")?.map((card) => card.task.id)).toEqual(["blocked"]);
     expect(columns.get("archive")?.map((card) => card.task.id)).toEqual(["old"]);
     expect(columns.get("in-review")).toEqual([]);
+  });
+});
+
+describe("linkedTasksByKey", () => {
+  it("links live tasks on the same branch and leaves the rest out", () => {
+    const branch = (name: string) => ({ branch: name, setup: { status: "done" } });
+    const api = task({ id: TaskId.make("api"), workspace: branch("feature/42") } as never);
+    const ui = task({ id: TaskId.make("ui"), workspace: branch("feature/42") } as never);
+    const solo = task({ id: TaskId.make("solo"), workspace: branch("feature/7") } as never);
+    const archived = task({
+      id: TaskId.make("old"),
+      workspace: branch("feature/7"),
+      archivedAt: "2026-10-01T12:00:00.000Z",
+    } as never);
+
+    const linked = linkedTasksByKey([api, ui, solo, archived], (value) => value.id);
+
+    expect(linked.get("api")).toEqual([ui]);
+    expect(linked.get("ui")).toEqual([api]);
+    expect(linked.has("solo")).toBe(false);
+    expect(linked.has("old")).toBe(false);
   });
 });
