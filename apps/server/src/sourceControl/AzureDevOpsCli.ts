@@ -730,7 +730,7 @@ export const make = Effect.gen(function* () {
           "true",
           "--id",
           String(input.id),
-          ...(input.state === undefined ? [] : ["--state", input.state]),
+          ...(input.state === undefined ? [] : [`--state=${input.state}`]),
           ...(input.assignToMe === true ? ["--assigned-to", "me"] : []),
         ],
       }).pipe(Effect.asVoid),
@@ -771,8 +771,8 @@ export const make = Effect.gen(function* () {
             fields["System.TeamProject"],
             "--type",
             input.type,
-            "--title",
-            input.title,
+            // `=` keeps a title starting with `-` from being read as a flag.
+            `--title=${input.title}`,
             ...(fields["System.AreaPath"] ? ["--area", fields["System.AreaPath"]] : []),
             ...(fields["System.IterationPath"]
               ? ["--iteration", fields["System.IterationPath"]]

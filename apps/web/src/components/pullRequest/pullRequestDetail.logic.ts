@@ -65,7 +65,7 @@ export function defaultPullRequestMergeMessage(title: string, headBranch: string
     subject = subject.replace(/^Merged PR \d+:\s*/iu, "");
   }
   const leading = /^#(\d+)\s*:?\s*/u.exec(subject);
-  const branchId = /(?:^|[/#_-])(\d{4,})(?=$|[/_-])/u.exec(headBranch)?.[1];
+  const branchId = /(?:^|[/#_-])(?<!\d[_-])(\d{4,7})(?=$|[/_-])(?![_-]\d)/u.exec(headBranch)?.[1];
   const id = leading?.[1] ?? branchId;
   const rest = leading ? subject.slice(leading[0].length).trim() : subject;
   return id === undefined ? rest : `#${id}: ${rest}`;

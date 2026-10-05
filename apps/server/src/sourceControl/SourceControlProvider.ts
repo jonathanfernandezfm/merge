@@ -125,11 +125,12 @@ export interface SourceControlWorkItemState {
 }
 
 /**
- * The work item a branch is named after: the first 4+ digit run that stands
+ * The work item a branch is named after: the first 4-7 digit run that stands
  * alone between separators, as in `feature/#123456-x` or `bugfix/ESP-123456`.
+ * Runs joined to other digits (`2026-10-05`) or longer (`20240101`) are dates.
  */
 export function workItemIdFromBranch(branch: string): number | null {
-  const match = /(?:^|[/#_-])(\d{4,})(?=$|[/_-])/u.exec(branch);
+  const match = /(?:^|[/#_-])(?<!\d[_-])(\d{4,7})(?=$|[/_-])(?![_-]\d)/u.exec(branch);
   return match?.[1] === undefined ? null : Number(match[1]);
 }
 

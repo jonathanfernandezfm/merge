@@ -449,6 +449,29 @@ const make = Effect.gen(function* () {
   });
 
   /**
+   * A live task owns its branch's worktree; adopting or detaching it for a
+   * second task would let archiving either one delete the other's workspace.
+   */
+  const requireBranchUnowned = Effect.fn("TaskWorkspaceService.requireBranchUnowned")(function* (
+    projectId: OrchestrationTask["projectId"],
+    branch: string,
+  ) {
+    const snapshot = yield* snapshots
+      .getShellSnapshot()
+      .pipe(Effect.mapError((error) => failed("Failed to read the project's tasks.", error)));
+    const owner = (snapshot.tasks ?? []).find(
+      (task) =>
+        task.projectId === projectId &&
+        task.archivedAt === null &&
+        task.deletedAt === null &&
+        task.workspace.branch === branch,
+    );
+    if (owner !== undefined) {
+      return yield* failed(`Branch '${branch}' already belongs to task '${owner.title}'.`);
+    }
+  });
+
+  /**
    * Checked before the task exists, so a branch held by another worktree
    * fails cleanly instead of leaving a task with failed setup. The caller may
    * ask to detach that worktree; the project's own checkout is never touched.
@@ -916,6 +939,7 @@ const make = Effect.gen(function* () {
         message: `Branch '${branch}' does not exist locally or on ${remoteName}. Tasks never create branches.`,
       });
     }
+    yield* requireBranchUnowned(project.id, branch);
     const adoptedPath =
       input.worktreePath === undefined
         ? null

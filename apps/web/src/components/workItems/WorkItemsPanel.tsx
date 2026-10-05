@@ -13,7 +13,6 @@ import {
 import { useState, type FormEvent } from "react";
 
 import { writeTextToClipboard } from "~/hooks/useCopyToClipboard";
-import { useEnvironmentQuery } from "~/state/query";
 import { sourceControlEnvironment } from "~/state/sourceControl";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { Button } from "../ui/button";
@@ -36,7 +35,13 @@ import { toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { MetaRow, Section } from "../pullRequest/PullRequestSummaryTab";
 import { WorkItemCopyButtons, WorkItemDetailsSection } from "./WorkItemDetails";
-import { copyText, failureMessage, stateCategory, StateGlyph } from "./workItemPresentation";
+import {
+  copyText,
+  failureMessage,
+  stateCategory,
+  StateGlyph,
+  useBranchWorkItems,
+} from "./workItemPresentation";
 
 interface PanelTarget {
   environmentId: EnvironmentId;
@@ -45,9 +50,7 @@ interface PanelTarget {
 
 /** The work item the thread's branch is tied to, with its subtasks. */
 export function WorkItemsPanel({ environmentId, cwd }: PanelTarget) {
-  const query = useEnvironmentQuery(
-    sourceControlEnvironment.branchWorkItems({ environmentId, input: { cwd } }),
-  );
+  const query = useBranchWorkItems(environmentId, cwd);
   const data = query.data;
 
   if (data === null) {

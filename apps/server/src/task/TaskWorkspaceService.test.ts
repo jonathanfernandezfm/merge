@@ -266,6 +266,15 @@ it.layer(NodeServices.layer)("TaskWorkspaceService", (it) => {
           expect(yield* git(other, ["rev-parse", "--abbrev-ref", "HEAD"])).toBe(BRANCH);
           expect(yield* fs.readFileString(path.join(other, "wip.txt"))).toBe("uncommitted\n");
 
+          // A second task can neither adopt nor detach a worktree a live task owns.
+          for (const claim of [{ worktreePath: other }, { detachCheckoutAt: other }]) {
+            const taken = yield* service
+              .create({ projectId: PROJECT_ID, title: "Again", branch: BRANCH, ...claim })
+              .pipe(Effect.flip);
+            expect(taken).toMatchObject({ reason: "failed" });
+          }
+          expect(yield* git(other, ["rev-parse", "--abbrev-ref", "HEAD"])).toBe(BRANCH);
+
           const error = yield* service
             .create({ projectId: PROJECT_ID, title: "Main", branch: "main", worktreePath: root })
             .pipe(Effect.flip);

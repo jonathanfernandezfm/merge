@@ -2,11 +2,10 @@ import type { EnvironmentId, ScopedThreadRef } from "@t3tools/contracts";
 import { ListTodoIcon } from "lucide-react";
 
 import { useRightPanelStore } from "~/rightPanelStore";
-import { useEnvironmentQuery } from "~/state/query";
-import { sourceControlEnvironment } from "~/state/sourceControl";
 import { Button } from "../ui/button";
 import { MenuItem, MenuItemLabel } from "../ui/menu";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { useBranchWorkItems } from "./workItemPresentation";
 
 /**
  * Opens the Work items side panel from the chat header. Hidden until the
@@ -23,9 +22,7 @@ export function WorkItemHeaderButton({
   threadRef: ScopedThreadRef;
   presentation: "toolbar" | "menu";
 }) {
-  const query = useEnvironmentQuery(
-    sourceControlEnvironment.branchWorkItems({ environmentId, input: { cwd } }),
-  );
+  const query = useBranchWorkItems(environmentId, cwd);
   const root = query.data?.root ?? null;
   if (root === null) return null;
   const openPanel = () => useRightPanelStore.getState().open(threadRef, "work-items");

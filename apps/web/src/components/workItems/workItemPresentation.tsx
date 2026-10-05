@@ -1,9 +1,18 @@
-import type { BranchWorkItems, WorkItem, WorkItemStateCategory } from "@t3tools/contracts";
+import type {
+  BranchWorkItems,
+  EnvironmentId,
+  WorkItem,
+  WorkItemStateCategory,
+} from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import { CircleCheckIcon, CircleDashedIcon, CircleDotIcon } from "lucide-react";
+import { useEffect } from "react";
 
 import { writeTextToClipboard } from "~/hooks/useCopyToClipboard";
 import { cn } from "~/lib/utils";
+import { useEnvironmentQuery } from "~/state/query";
+import { sourceControlEnvironment } from "~/state/sourceControl";
+import { vcsEnvironment } from "~/state/vcs";
 import { toastManager } from "../ui/toast";
 
 /** One shape per category, so a dense list reads by outline as well as tint. */
@@ -46,4 +55,24 @@ export function failureMessage(cause: Cause.Cause<unknown>, fallback: string): s
     if (detail.length > 0) return detail;
   }
   return fallback;
+}
+
+/**
+ * The branch's work items, refetched as soon as git status reports a
+ * different branch than the cached result was read for (a checkout would
+ * otherwise show the previous branch's item until the cache goes stale).
+ */
+export function useBranchWorkItems(environmentId: EnvironmentId, cwd: string) {
+  const query = useEnvironmentQuery(
+    sourceControlEnvironment.branchWorkItems({ environmentId, input: { cwd } }),
+  );
+  const branch = useEnvironmentQuery(vcsEnvironment.status({ environmentId, input: { cwd } })).data
+    ?.refName;
+  const cachedBranch = query.data?.branch;
+  const { refresh, isPending } = query;
+  useEffect(() => {
+    if (branch !== undefined && cachedBranch !== undefined && branch !== cachedBranch && !isPending)
+      refresh();
+  }, [branch, cachedBranch, isPending, refresh]);
+  return query;
 }

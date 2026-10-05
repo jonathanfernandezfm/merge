@@ -27,4 +27,7 @@ it("reads the work item a branch is named after", () => {
   assert.strictEqual(workItemIdFromBranch("task/#606282"), 606282);
   assert.strictEqual(workItemIdFromBranch("feature/http2-support"), null);
   assert.strictEqual(workItemIdFromBranch("release/2026.1"), null);
+  assert.strictEqual(workItemIdFromBranch("release/2026-10"), null);
+  assert.strictEqual(workItemIdFromBranch("hotfix/2026-10-05-x"), null);
+  assert.strictEqual(workItemIdFromBranch("renovate/foo-20240101"), null);
 });
