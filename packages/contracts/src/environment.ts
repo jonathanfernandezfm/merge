@@ -157,6 +157,8 @@ export const ExecutionEnvironmentCapabilities = Schema.Struct({
   pullRequestStackActions: Schema.optionalKey(Schema.Boolean),
   /** Server answers sourceControl.branchWorkItems and the work item edits beside it. */
   workItems: Schema.optionalKey(Schema.Boolean),
+  /** Server answers review.listCommits and review.getDiffPreview with a commit headRef. */
+  gitGraph: Schema.optionalKey(Schema.Boolean),
   /** The update path clients should offer for this server. Absent on
       servers that must be relaunched manually (dev checkouts, Windows
       foreground runs, pre-update servers). */

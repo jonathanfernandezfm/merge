@@ -69,6 +69,7 @@ import {
   SunIcon,
   TextSearchIcon,
   ListTodoIcon,
+  GitGraphIcon,
 } from "lucide-react";
 import {
   useCallback,
@@ -2037,6 +2038,23 @@ function OpenCommandPaletteDialog(props: {
         },
       });
     }
+  }
+
+  if (
+    activeThread !== null &&
+    activeThreadServerConfig?.environment.capabilities.gitGraph === true
+  ) {
+    const threadRef = scopeThreadRef(activeThread.environmentId, activeThread.id);
+    actionItems.push({
+      kind: "action",
+      value: "action:open-git-graph",
+      searchTerms: ["git graph", "commits", "history", "log", "compare branch"],
+      title: "Show git graph",
+      icon: <GitGraphIcon className={ITEM_ICON_CLASS} />,
+      run: async () => {
+        useRightPanelStore.getState().open(threadRef, "git-graph");
+      },
+    });
   }
 
   if (

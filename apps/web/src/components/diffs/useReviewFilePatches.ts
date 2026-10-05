@@ -12,6 +12,7 @@ export function useReviewFilePatches({
   cwd,
   source,
   baseRef,
+  headRef,
   ignoreWhitespace,
   theme,
   revision,
@@ -21,6 +22,8 @@ export function useReviewFilePatches({
   cwd: string | undefined;
   source: ReviewDiffPreviewSource | null;
   baseRef: string | null;
+  /** Set when reviewing one commit; omitted for the branch and working-tree comparisons. */
+  headRef?: string | null;
   ignoreWhitespace: boolean;
   theme: "light" | "dark";
   revision: string | undefined;
@@ -33,6 +36,7 @@ export function useReviewFilePatches({
     source?.kind,
     source?.diffHash,
     baseRef,
+    headRef,
     ignoreWhitespace,
   ]);
   const [requested, setRequested] = useState({ scope, indices: [0, 1, 2, 3] });
@@ -64,6 +68,7 @@ export function useReviewFilePatches({
                     request: {
                       cwd,
                       ...(baseRef ? { baseRef } : {}),
+                      ...(headRef ? { headRef } : {}),
                       ignoreWhitespace,
                       file: {
                         path: file.path,
@@ -75,7 +80,7 @@ export function useReviewFilePatches({
                 }),
               };
             }),
-    [environmentId, cwd, source, files, indices, scope, baseRef, ignoreWhitespace],
+    [environmentId, cwd, source, files, indices, scope, baseRef, headRef, ignoreWhitespace],
   );
   const previousPreview = useRef({ scope, revision, queries: [] as typeof queries });
   useEffect(() => {

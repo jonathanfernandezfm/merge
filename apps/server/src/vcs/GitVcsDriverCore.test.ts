@@ -1092,6 +1092,70 @@ it.layer(TestLayer)("GitVcsDriver core integration", (it) => {
   });
 
   describe("review diff previews", () => {
+    it.effect("lists branch-only commits and diffs each one against its parent", () =>
+      Effect.gen(function* () {
+        const cwd = yield* makeTmpDir();
+        const { initialBranch } = yield* initRepoWithCommit(cwd);
+        const driver = yield* GitVcsDriver.GitVcsDriver;
+        const rootSha = yield* git(cwd, ["rev-parse", "HEAD"]);
+        yield* git(cwd, ["checkout", "-b", "feature/graph"]);
+        yield* writeTextFile(cwd, "a.txt", "one\n");
+        yield* git(cwd, ["add", "."]);
+        yield* git(cwd, ["commit", "-m", "add a", "-m", "with a body\n\nand\x1fodd bytes"]);
+        yield* writeTextFile(cwd, "a.txt", "one\ntwo\n");
+        yield* writeTextFile(cwd, "b.txt", "b\n");
+        yield* git(cwd, ["add", "."]);
+        yield* git(cwd, ["commit", "-m", "extend a, add b"]);
+        yield* writeTextFile(cwd, "dirty.txt", "not committed\n");
+
+        const listed = yield* driver.listReviewCommits({ cwd, baseRef: initialBranch });
+        assert.equal(listed.mergeBase, rootSha);
+        assert.equal(listed.headRef, "feature/graph");
+        assert.deepStrictEqual(
+          listed.commits.map((commit) => commit.subject),
+          ["extend a, add b", "add a"],
+        );
+        assert.equal(listed.commits[1]!.body, "with a body\n\nand\x1fodd bytes");
+        assert.deepStrictEqual(listed.commits[1]!.parents, [rootSha]);
+        assert.include(listed.commits[0]!.refs, "feature/graph");
+        assert.isFalse(listed.truncated);
+
+        const limited = yield* driver.listReviewCommits({ cwd, baseRef: initialBranch, limit: 1 });
+        assert.equal(limited.commits.length, 1);
+        assert.isTrue(limited.truncated);
+
+        const tip = yield* driver.getReviewDiffPreview({ cwd, headRef: listed.commits[0]!.sha });
+        const tipRange = tip.sources.find((source) => source.kind === "branch-range")!;
+        assert.equal(tipRange.baseRef, listed.commits[1]!.sha);
+        assert.deepStrictEqual(
+          tipRange.files!.map((file) => [file.path, file.additions]),
+          [
+            ["a.txt", 1],
+            ["b.txt", 1],
+          ],
+        );
+        // A commit view never mixes in uncommitted work.
+        assert.equal(tip.sources.find((source) => source.kind === "working-tree")!.diff, "");
+
+        const root = yield* driver.getReviewDiffPreview({ cwd, headRef: rootSha });
+        const rootRange = root.sources.find((source) => source.kind === "branch-range")!;
+        assert.deepStrictEqual(
+          rootRange.files!.map((file) => file.path),
+          ["README.md"],
+        );
+        const rootContents = yield* driver.getReviewDiffFileContents({
+          cwd,
+          sourceKind: "branch-range",
+          changeType: "new",
+          baseRef: rootRange.baseRef,
+          headRef: rootSha,
+          oldPath: "README.md",
+          newPath: "README.md",
+        });
+        assert.equal(rootContents.newContents, "# test\n");
+      }),
+    );
+
     it.effect("loads repository-relative files from a nested project directory", () =>
       Effect.gen(function* () {
         const cwd = yield* makeTmpDir();

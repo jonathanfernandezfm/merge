@@ -154,6 +154,16 @@ server, but the host's own site will not show them, and the count reads **viewed
 The **Code** tab is a web and desktop surface. The mobile app reports a pull request's status but
 does not show its diff, so marks are made and read on web and desktop.
 
+## Browse branch commits
+
+Open **Git graph** from the right panel's **+** menu or the command palette to see the commits your
+thread's branch added, newest first, ending where it branched off. Pick a commit to read its message
+and the files it changed, using the same viewer as **Diff**. A merge commit is shown against its
+first parent.
+
+The branch is compared with the same target as the Diff panel's **Branch changes**. Changing it in
+either panel changes both. The graph is available on web and desktop.
+
 ## Troubleshooting
 
 - **Not authenticated:** run the provider's login command on the server, then rescan. For Bitbucket,

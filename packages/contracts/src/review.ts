@@ -6,6 +6,8 @@ import { VcsError } from "./vcs.ts";
 export const ReviewDiffPreviewInput = Schema.Struct({
   cwd: TrimmedNonEmptyString,
   baseRef: Schema.optional(TrimmedNonEmptyString),
+  /** Head of the branch-range comparison. Defaults to HEAD; the Git graph passes a commit sha. */
+  headRef: Schema.optionalKey(TrimmedNonEmptyString),
   ignoreWhitespace: Schema.optionalKey(Schema.Boolean),
   file: Schema.optionalKey(
     Schema.Struct({
@@ -65,6 +67,39 @@ export const ReviewDiffPreviewResult = Schema.Struct({
   sources: Schema.Array(ReviewDiffPreviewSource),
 });
 export type ReviewDiffPreviewResult = typeof ReviewDiffPreviewResult.Type;
+
+export const ReviewListCommitsInput = Schema.Struct({
+  cwd: TrimmedNonEmptyString,
+  /** Comparison target. Defaults to the branch's automatic base, like the Diff panel. */
+  baseRef: Schema.optionalKey(TrimmedNonEmptyString),
+  limit: Schema.optionalKey(Schema.Number),
+});
+export type ReviewListCommitsInput = typeof ReviewListCommitsInput.Type;
+
+export const ReviewCommit = Schema.Struct({
+  sha: TrimmedNonEmptyString,
+  parents: Schema.Array(TrimmedNonEmptyString),
+  subject: Schema.String,
+  body: Schema.String,
+  authorName: Schema.String,
+  authorEmail: Schema.String,
+  authoredAt: Schema.String,
+  /** Decorations such as branch and tag names pointing at this commit. */
+  refs: Schema.Array(Schema.String),
+});
+export type ReviewCommit = typeof ReviewCommit.Type;
+
+export const ReviewListCommitsResult = Schema.Struct({
+  cwd: TrimmedNonEmptyString,
+  headRef: Schema.NullOr(TrimmedNonEmptyString),
+  baseRef: Schema.NullOr(TrimmedNonEmptyString),
+  /** Where the branch left its base; null when there is no base or no shared history. */
+  mergeBase: Schema.NullOr(TrimmedNonEmptyString),
+  /** Branch-only commits (`base..HEAD`), newest first in topological order. */
+  commits: Schema.Array(ReviewCommit),
+  truncated: Schema.Boolean,
+});
+export type ReviewListCommitsResult = typeof ReviewListCommitsResult.Type;
 
 export const ReviewDiffPreviewError = Schema.Union([VcsError, GitCommandError]);
 export type ReviewDiffPreviewError = typeof ReviewDiffPreviewError.Type;

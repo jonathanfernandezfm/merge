@@ -23,8 +23,10 @@ import {
   T3_PROJECT_FILE_NAME,
   type ReviewDiffFileContentsInput,
   type ReviewDiffPreviewInput,
+  type ReviewCommit,
   type ReviewDiffFileStat,
   type ReviewDiffPreviewSource,
+  type ReviewListCommitsInput,
   type VcsRef,
 } from "@t3tools/contracts";
 import { dedupeRemoteBranchesWithLocalMatches, normalizeGitRemoteUrl } from "@t3tools/shared/git";
@@ -193,6 +195,33 @@ function parseNumstatEntries(
     });
   }
   return entries;
+}
+
+const REVIEW_COMMIT_LIMIT = 200;
+// Unit separators between fields and a record separator per commit survive any commit message.
+const REVIEW_COMMIT_FORMAT = "%H%x1f%P%x1f%an%x1f%ae%x1f%aI%x1f%D%x1f%s%x1f%b%x1e";
+
+export function parseReviewCommitLog(stdout: string): ReviewCommit[] {
+  const commits: ReviewCommit[] = [];
+  for (const record of stdout.split("\x1e")) {
+    const fields = record.replace(/^\n/, "").split("\x1f");
+    if (fields.length < 8 || !fields[0]) continue;
+    const [sha, parents, authorName, authorEmail, authoredAt, refs, subject, ...body] = fields;
+    commits.push({
+      sha: sha!,
+      parents: parents!.split(" ").filter(Boolean),
+      authorName: authorName!,
+      authorEmail: authorEmail!,
+      authoredAt: authoredAt!,
+      refs: refs!
+        .split(", ")
+        .map((ref) => ref.replace(/^HEAD -> /, "").trim())
+        .filter((ref) => ref.length > 0 && ref !== "HEAD"),
+      subject: subject!,
+      body: body.join("\x1f").trim(),
+    });
+  }
+  return commits;
 }
 
 // -z preserves tabs/newlines in paths and gives renames two separate path fields.
@@ -2403,6 +2432,28 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
     return env;
   });
 
+  const resolveEmptyTree = Effect.fn("resolveEmptyTree")(function* (cwd: string) {
+    return (yield* runGitStdout("GitVcsDriver.resolveEmptyTree", cwd, [
+      "hash-object",
+      "-t",
+      "tree",
+      (yield* HostProcessPlatform) === "win32" ? "NUL" : "/dev/null",
+    ])).trim();
+  });
+
+  const resolveParentOrEmptyTree = Effect.fn("resolveParentOrEmptyTree")(function* (
+    cwd: string,
+    revision: string,
+  ) {
+    const parent = (yield* runGitStdout(
+      "GitVcsDriver.resolveParentOrEmptyTree",
+      cwd,
+      ["rev-parse", "--verify", "--quiet", "--end-of-options", `${revision}^1^{commit}`],
+      true,
+    )).trim();
+    return parent.length > 0 ? parent : yield* resolveEmptyTree(cwd);
+  });
+
   const getReviewDiffPreview = Effect.fn("getReviewDiffPreview")(function* (
     input: ReviewDiffPreviewInput,
   ) {
@@ -2430,11 +2481,26 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
 
     const cwd = repository.worktreeRoot;
     const branch = repository.currentBranch;
+    // An explicit head reviews one revision (the Git graph's commit view): its default base is
+    // the first parent, or the empty tree for a root commit, and the dirty worktree is skipped.
+    const headRef = input.headRef ?? null;
+    if (headRef?.startsWith("-")) {
+      return yield* new GitCommandError({
+        operation: "GitVcsDriver.getReviewDiffPreview",
+        cwd,
+        command: "git diff",
+        detail: "Invalid review head revision.",
+      });
+    }
     const baseRef =
       input.baseRef ??
-      (branch
-        ? yield* resolveBaseBranchForNoUpstream(cwd, branch).pipe(Effect.orElseSucceed(() => null))
-        : null);
+      (headRef
+        ? yield* resolveParentOrEmptyTree(cwd, headRef)
+        : branch
+          ? yield* resolveBaseBranchForNoUpstream(cwd, branch).pipe(
+              Effect.orElseSucceed(() => null),
+            )
+          : null);
 
     const diffArgs = [
       "diff",
@@ -2459,12 +2525,7 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
       );
       if (result.exitCode === 0) return { ref, files: parseReviewNumstat(result.stdout) };
       if (ref === "HEAD" && isUnbornHeadStderr(result.stderr)) {
-        const emptyTree = (yield* runGitStdout("GitVcsDriver.getReviewDiffPreview.emptyTree", cwd, [
-          "hash-object",
-          "-t",
-          "tree",
-          (yield* HostProcessPlatform) === "win32" ? "NUL" : "/dev/null",
-        ])).trim();
+        const emptyTree = yield* resolveEmptyTree(cwd);
         const stdout = yield* runGitStdoutWithOptions(
           "GitVcsDriver.getReviewDiffPreview.unbornStat",
           cwd,
@@ -2497,7 +2558,7 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
       return { ...patch, files: stat.files };
     });
     const readDirty = Effect.gen(function* () {
-      if (input.file?.sourceKind === "branch-range") return yield* readTrackedDiff(null);
+      if (headRef || input.file?.sourceKind === "branch-range") return yield* readTrackedDiff(null);
       const untracked = yield* executeGit(
         "GitVcsDriver.review.listUntracked",
         cwd,
@@ -2537,9 +2598,14 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
       [
         readDirty,
         readTrackedDiff(
-          baseRef && branch && input.file?.sourceKind !== "working-tree"
-            ? `${baseRef}...HEAD`
-            : null,
+          input.file?.sourceKind === "working-tree" || !baseRef
+            ? null
+            : headRef
+              ? // Two-dot form, because a root commit's base is a tree with no merge base.
+                `${baseRef}..${headRef}`
+              : branch
+                ? `${baseRef}...HEAD`
+                : null,
         ),
       ],
       { concurrency: 2 },
@@ -2584,7 +2650,7 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
         kind: "branch-range",
         title: baseRef ? `Against ${baseRef}` : "Against base branch",
         baseRef,
-        headRef: branch ?? "HEAD",
+        headRef: headRef ?? branch ?? "HEAD",
         diff: baseDiff,
         files: baseFiles,
         diffHash: baseDiffHash,
@@ -2596,6 +2662,72 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
       cwd: input.cwd,
       generatedAt: yield* DateTime.now,
       sources,
+    };
+  });
+
+  const listReviewCommits = Effect.fn("listReviewCommits")(function* (
+    input: ReviewListCommitsInput,
+  ) {
+    const repository = yield* resolveRepositoryPathsUncached(input.cwd).pipe(
+      Effect.catchTags({
+        GitCommandError: (error) =>
+          isMissingGitCwdError(error) ? Effect.succeed(null) : Effect.fail(error),
+      }),
+    );
+    const empty = {
+      cwd: input.cwd,
+      headRef: null,
+      baseRef: null,
+      mergeBase: null,
+      commits: [],
+      truncated: false,
+    };
+    if (!repository?.worktreeRoot) return empty;
+    const cwd = repository.worktreeRoot;
+    const branch = repository.currentBranch;
+    const head = (yield* runGitStdout(
+      "GitVcsDriver.listReviewCommits.head",
+      cwd,
+      ["rev-parse", "--verify", "--quiet", "HEAD"],
+      true,
+    )).trim();
+    if (head.length === 0) return { ...empty, headRef: branch };
+    const baseRef =
+      input.baseRef ??
+      (branch
+        ? yield* resolveBaseBranchForNoUpstream(cwd, branch).pipe(Effect.orElseSucceed(() => null))
+        : null);
+    const mergeBase = baseRef
+      ? (yield* runGitStdout(
+          "GitVcsDriver.listReviewCommits.mergeBase",
+          cwd,
+          ["merge-base", "--end-of-options", baseRef, "HEAD"],
+          true,
+        )).trim() || null
+      : null;
+    const limit = Math.max(1, Math.min(input.limit ?? REVIEW_COMMIT_LIMIT, REVIEW_COMMIT_LIMIT));
+    const stdout = yield* runGitStdoutWithOptions(
+      "GitVcsDriver.listReviewCommits.log",
+      cwd,
+      [
+        "log",
+        "--topo-order",
+        "--no-color",
+        `--max-count=${limit + 1}`,
+        `--format=${REVIEW_COMMIT_FORMAT}`,
+        "--end-of-options",
+        ...(mergeBase ? ["HEAD", `^${mergeBase}`] : ["HEAD"]),
+      ],
+      { maxOutputBytes: REVIEW_METADATA_MAX_OUTPUT_BYTES },
+    );
+    const commits = parseReviewCommitLog(stdout);
+    return {
+      cwd: input.cwd,
+      headRef: branch ?? head,
+      baseRef,
+      mergeBase,
+      commits: commits.slice(0, limit),
+      truncated: commits.length > limit,
     };
   });
 
@@ -2734,12 +2866,16 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
         "Branch diff file expansion requires both base and head refs.",
       );
     }
-    const mergeBase = yield* runGitStdout(
-      "GitVcsDriver.getReviewDiffFileContents.mergeBase",
-      input.cwd,
-      ["merge-base", input.baseRef, input.headRef],
-    ).pipe(Effect.map((value) => value.trim()));
-    if (mergeBase.length === 0) {
+    // New files have no old side, which also covers a root commit whose base is the empty tree.
+    const mergeBase =
+      input.changeType === "new"
+        ? ""
+        : yield* runGitStdout("GitVcsDriver.getReviewDiffFileContents.mergeBase", input.cwd, [
+            "merge-base",
+            input.baseRef,
+            input.headRef,
+          ]).pipe(Effect.map((value) => value.trim()));
+    if (input.changeType !== "new" && mergeBase.length === 0) {
       return yield* reviewDiffFileError(input, "Could not resolve the branch comparison base.");
     }
     const [oldContents, newContents] = yield* Effect.all(
@@ -3682,6 +3818,7 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
     readRangeContext,
     getReviewDiffPreview,
     getReviewDiffFileContents,
+    listReviewCommits,
     readConfigValue,
     listRefs,
     createWorktree: (input, options) =>

@@ -240,6 +240,7 @@ export const make = Effect.gen(function* () {
       threadPullRequests: true,
       pullRequestStackActions: true,
       workItems: true,
+      gitGraph: true,
       threadPullRequestLinking: true,
       environmentIcon: true,
       projectCloneTracking: true,

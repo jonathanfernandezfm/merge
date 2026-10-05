@@ -222,6 +222,7 @@ import { TaskWorkspaceChrome, useThreadTask } from "./task/TaskWorkspaceBar";
 import { LinkPullRequestDialogHost } from "./pullRequest/LinkPullRequestDialog";
 import { ThreadPullRequestsPanel } from "./pullRequest/ThreadPullRequestsPanel";
 import { WorkItemsPanel } from "./workItems/WorkItemsPanel";
+import { GitGraphPanel } from "./gitGraph/GitGraphPanel";
 import { useDeviceState } from "~/state/device";
 import { DeviceSetup } from "./device/DeviceSetup";
 import { Dialog } from "./ui/dialog";
@@ -4594,6 +4595,15 @@ export default function ChatView(props: ChatViewProps) {
     if (!activeThreadRef || !workItemsSurfaceAvailable) return;
     useRightPanelStore.getState().open(activeThreadRef, "work-items");
   }, [activeThreadRef, workItemsSurfaceAvailable]);
+  const gitGraphSurfaceAvailable =
+    isServerThread &&
+    isGitRepo &&
+    gitStatusCwd !== null &&
+    serverConfig?.environment.capabilities.gitGraph === true;
+  const addGitGraphSurface = useCallback(() => {
+    if (!activeThreadRef || !gitGraphSurfaceAvailable) return;
+    useRightPanelStore.getState().open(activeThreadRef, "git-graph");
+  }, [activeThreadRef, gitGraphSurfaceAvailable]);
   const { state: deviceState, loaded: deviceStateLoaded } = useDeviceState(
     activeThreadRef?.environmentId ?? null,
   );
@@ -9641,6 +9651,16 @@ export default function ChatView(props: ChatViewProps) {
       />
     ) : renderedRightPanelSurface?.kind === "pull-requests" && activeThreadRef ? (
       <ThreadPullRequestsPanel threadRef={activeThreadRef} />
+    ) : renderedRightPanelSurface?.kind === "git-graph" &&
+      gitStatusCwd !== null &&
+      activeThreadRef ? (
+      <GitGraphPanel
+        key={activeThreadKey}
+        threadRef={activeThreadRef}
+        cwd={gitStatusCwd}
+        composerDraftTarget={composerDraftTarget}
+        workspaceMutationId={workspaceMutationId}
+      />
     ) : renderedRightPanelSurface?.kind === "work-items" && gitStatusCwd !== null ? (
       <WorkItemsPanel environmentId={activeThread.environmentId} cwd={gitStatusCwd} />
     ) : renderedRightPanelSurface?.kind === "agents" ? (
@@ -10321,6 +10341,7 @@ export default function ChatView(props: ChatViewProps) {
           onAddPullRequest={addPullRequestSurface}
           onAddPullRequests={addPullRequestsSurface}
           onAddWorkItems={addWorkItemsSurface}
+          onAddGitGraph={addGitGraphSurface}
           onAddAgents={addAgentsSurface}
           onAddDevice={addDeviceSurface}
           browserAvailable={isPreviewSupportedInRuntime()}
@@ -10330,6 +10351,7 @@ export default function ChatView(props: ChatViewProps) {
           pullRequestAvailable={pullRequestSurfaceAvailable}
           pullRequestsAvailable={pullRequestsSurfaceAvailable}
           workItemsAvailable={workItemsSurfaceAvailable}
+          gitGraphAvailable={gitGraphSurfaceAvailable}
           agentsAvailable
           deviceAvailable={activeThreadRef !== null}
           liveAgentCount={agentPanelModel.liveCount}
@@ -10380,6 +10402,7 @@ export default function ChatView(props: ChatViewProps) {
             onAddPullRequest={addPullRequestSurface}
             onAddPullRequests={addPullRequestsSurface}
             onAddWorkItems={addWorkItemsSurface}
+            onAddGitGraph={addGitGraphSurface}
             onAddAgents={addAgentsSurface}
             onAddDevice={addDeviceSurface}
             browserAvailable={isPreviewSupportedInRuntime()}
@@ -10389,6 +10412,7 @@ export default function ChatView(props: ChatViewProps) {
             pullRequestAvailable={pullRequestSurfaceAvailable}
             pullRequestsAvailable={pullRequestsSurfaceAvailable}
             workItemsAvailable={workItemsSurfaceAvailable}
+            gitGraphAvailable={gitGraphSurfaceAvailable}
             agentsAvailable
             deviceAvailable={activeThreadRef !== null}
             liveAgentCount={agentPanelModel.liveCount}

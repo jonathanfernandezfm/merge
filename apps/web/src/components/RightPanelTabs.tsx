@@ -15,6 +15,7 @@ import type {
 import { getTerminalLabel } from "@t3tools/shared/terminalLabels";
 import {
   Bot,
+  GitGraph,
   ListTodo,
   Smartphone,
   ChevronDown,
@@ -123,6 +124,7 @@ interface RightPanelTabsProps {
   onAddPullRequest: () => void;
   onAddPullRequests: () => void;
   onAddWorkItems?: () => void;
+  onAddGitGraph?: () => void;
   onAddAgents: () => void;
   onAddDevice: () => void;
   browserAvailable: boolean;
@@ -132,6 +134,7 @@ interface RightPanelTabsProps {
   pullRequestAvailable: boolean;
   pullRequestsAvailable: boolean;
   workItemsAvailable?: boolean;
+  gitGraphAvailable?: boolean;
   agentsAvailable: boolean;
   deviceAvailable: boolean;
   pullRequestStatusSeeds?: Readonly<Record<string, PullRequestTabStatusSeed>>;
@@ -166,6 +169,7 @@ const SURFACE_DISABLED_REASONS = {
   pullRequest: "This thread's branch has no pull request yet.",
   pullRequests: "No linked pull requests are available for this thread.",
   workItems: "Work items are only available for Azure DevOps repositories.",
+  gitGraph: "The Git graph is only available for server threads in Git repositories.",
   agents: "Agents are only available from a thread.",
   device: "Devices are only available from a thread.",
 } as const;
@@ -191,6 +195,7 @@ const SURFACE_UNAVAILABLE_HINTS = {
   pullRequest: "No pull request on this branch yet.",
   pullRequests: "No linked pull requests available.",
   workItems: "Available for Azure DevOps repositories.",
+  gitGraph: "Available for Git repositories.",
   agents: "Available from a thread.",
   device: "Available from a thread.",
 } as const;
@@ -332,6 +337,7 @@ function RightPanelEmptyState(props: {
   onAddPullRequest: () => void;
   onAddPullRequests: () => void;
   onAddWorkItems?: () => void;
+  onAddGitGraph?: () => void;
   onAddAgents: () => void;
   onAddDevice: () => void;
   browserAvailable: boolean;
@@ -341,6 +347,7 @@ function RightPanelEmptyState(props: {
   pullRequestAvailable: boolean;
   pullRequestsAvailable: boolean;
   workItemsAvailable?: boolean;
+  gitGraphAvailable?: boolean;
   agentsAvailable: boolean;
   deviceAvailable: boolean;
   liveAgentCount: number;
@@ -383,6 +390,15 @@ function RightPanelEmptyState(props: {
       available: props.diffAvailable,
       disabledReason: SURFACE_UNAVAILABLE_HINTS.diff,
       onClick: props.onAddDiff,
+      badgeCount: 0,
+    },
+    {
+      label: "Git graph",
+      icon: GitGraph,
+      shortcut: "G",
+      available: props.gitGraphAvailable === true,
+      disabledReason: SURFACE_UNAVAILABLE_HINTS.gitGraph,
+      onClick: props.onAddGitGraph ?? noop,
       badgeCount: 0,
     },
     {
@@ -648,6 +664,8 @@ function surfaceTitle(
       return "Pull requests";
     case "work-items":
       return "Work items";
+    case "git-graph":
+      return "Git graph";
     case "agents":
       return "Agents";
     case "device":
@@ -735,6 +753,8 @@ function SurfaceIcon({
       return <PullRequestGlyph.link className="size-3 shrink-0" />;
     case "work-items":
       return <ListTodo className="size-3 shrink-0" />;
+    case "git-graph":
+      return <GitGraph className="size-3 shrink-0" />;
     case "agents":
       return <Bot className="size-3 shrink-0" />;
     case "device":
@@ -922,6 +942,14 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
       available: props.diffAvailable,
       disabledReason: SURFACE_DISABLED_REASONS.diff,
       onClick: props.onAddDiff,
+    },
+    {
+      label: "Git graph",
+      icon: GitGraph,
+      shortcut: "G",
+      available: props.gitGraphAvailable === true,
+      disabledReason: SURFACE_DISABLED_REASONS.gitGraph,
+      onClick: props.onAddGitGraph ?? noop,
     },
     {
       label: "Pull request",
@@ -1445,6 +1473,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
             onAddPullRequest={props.onAddPullRequest}
             onAddPullRequests={props.onAddPullRequests}
             {...(props.onAddWorkItems ? { onAddWorkItems: props.onAddWorkItems } : {})}
+            {...(props.onAddGitGraph ? { onAddGitGraph: props.onAddGitGraph } : {})}
             onAddAgents={props.onAddAgents}
             onAddDevice={props.onAddDevice}
             browserAvailable={props.browserAvailable}
@@ -1454,6 +1483,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
             pullRequestAvailable={props.pullRequestAvailable}
             pullRequestsAvailable={props.pullRequestsAvailable}
             workItemsAvailable={props.workItemsAvailable === true}
+            gitGraphAvailable={props.gitGraphAvailable === true}
             agentsAvailable={props.agentsAvailable}
             deviceAvailable={props.deviceAvailable}
             liveAgentCount={props.liveAgentCount}

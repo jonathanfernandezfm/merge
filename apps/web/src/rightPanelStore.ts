@@ -29,6 +29,7 @@ const RIGHT_PANEL_KINDS = [
   "pull-request",
   "pull-requests",
   "work-items",
+  "git-graph",
   "agents",
 ] as const;
 export type RightPanelKind = (typeof RIGHT_PANEL_KINDS)[number];
@@ -88,6 +89,8 @@ export type RightPanelSurface =
   | { id: "pull-requests"; kind: "pull-requests" }
   /** The work item the thread's branch is tied to, with its subtasks. */
   | { id: "work-items"; kind: "work-items" }
+  /** The branch's own commits, each inspectable as a diff. */
+  | { id: "git-graph"; kind: "git-graph" }
   | { id: "agents"; kind: "agents" };
 
 const RIGHT_PANEL_STORAGE_KEY = "t3code:right-panel-state:v2";
@@ -194,6 +197,8 @@ const singletonSurface = (
       return { id: "pull-requests", kind };
     case "work-items":
       return { id: "work-items", kind };
+    case "git-graph":
+      return { id: "git-graph", kind };
     case "agents":
       return { id: "agents", kind };
     case "device":
