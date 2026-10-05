@@ -20,6 +20,7 @@ export type TaskThreadShell = Pick<
   | "title"
   | "session"
   | "latestTurn"
+  | "backgroundLiveness"
   | "hasPendingApprovals"
   | "hasPendingUserInput"
   | "settledOverride"
@@ -32,17 +33,20 @@ export type TaskThreadShell = Pick<
 /**
  * The one mapping from a thread shell to what `deriveTaskStatus` needs.
  * Pending approvals and questions outrank a running turn: the agent is
- * blocked on the user either way.
+ * blocked on the user either way. Subagents still working after the turn
+ * settles keep the thread running, unless the session failed; watch loops
+ * (`monitoring`) do not, matching the sidebar's thread status.
  */
 export function taskThreadState(
   thread: Pick<
     TaskThreadShell,
-    "session" | "latestTurn" | "hasPendingApprovals" | "hasPendingUserInput"
+    "session" | "latestTurn" | "backgroundLiveness" | "hasPendingApprovals" | "hasPendingUserInput"
   >,
 ): TaskThreadState {
   if (thread.hasPendingApprovals || thread.hasPendingUserInput) return "waiting";
   const status = thread.session?.status;
   if (status === "starting" || status === "running") return "running";
+  if (status !== "error" && thread.backgroundLiveness === "working") return "running";
   return thread.latestTurn === null ? "new" : "idle";
 }
 
@@ -110,7 +114,12 @@ export type TaskThreadTabState = "running" | "idle" | "waiting" | "completed";
 export function taskThreadTabState(
   thread: Pick<
     TaskThreadShell,
-    "session" | "latestTurn" | "hasPendingApprovals" | "hasPendingUserInput" | "settledOverride"
+    | "session"
+    | "latestTurn"
+    | "backgroundLiveness"
+    | "hasPendingApprovals"
+    | "hasPendingUserInput"
+    | "settledOverride"
   >,
 ): TaskThreadTabState {
   const state = taskThreadState(thread);

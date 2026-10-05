@@ -5,6 +5,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   groupTaskboardTasks,
   latestTaskThread,
+  resolveTaskStatus,
   taskboardColumnForStatus,
   taskThreadsInOrder,
   taskThreadState,
@@ -63,6 +64,42 @@ describe("taskThreadState", () => {
     expect(taskThreadState(thread())).toBe("new");
     expect(taskThreadState(thread({ latestTurn: COMPLETED_TURN }))).toBe("idle");
     expect(taskThreadState(thread({ session: RUNNING_SESSION }))).toBe("running");
+  });
+
+  it("keeps a thread running while its subagents work after the turn settles", () => {
+    const settled = {
+      session: { ...RUNNING_SESSION, status: "ready" as const },
+      latestTurn: COMPLETED_TURN,
+    };
+    expect(taskThreadState(thread({ ...settled, backgroundLiveness: "working" }))).toBe("running");
+    expect(taskThreadState(thread({ ...settled, backgroundLiveness: "monitoring" }))).toBe("idle");
+    expect(
+      taskThreadState(
+        thread({
+          session: { ...RUNNING_SESSION, status: "error" as const },
+          latestTurn: COMPLETED_TURN,
+          backgroundLiveness: "working",
+        }),
+      ),
+    ).toBe("idle");
+  });
+});
+
+describe("resolveTaskStatus", () => {
+  const TASK = task({ id: TASK_ID });
+
+  it("reads working while a settled thread's subagents still run", () => {
+    expect(
+      resolveTaskStatus(TASK, [
+        thread({ latestTurn: COMPLETED_TURN, backgroundLiveness: "working" }),
+      ]),
+    ).toBe("working");
+    expect(resolveTaskStatus(TASK, [thread({ latestTurn: COMPLETED_TURN })])).toBe("idle");
+  });
+
+  it("reads idle for a task with no threads or only a fresh one", () => {
+    expect(resolveTaskStatus(TASK, [])).toBe("idle");
+    expect(resolveTaskStatus(TASK, [thread()])).toBe("idle");
   });
 });
 

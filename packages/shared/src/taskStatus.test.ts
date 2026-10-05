@@ -116,10 +116,10 @@ describe("deriveTaskStatus", () => {
     expect(deriveTaskStatus({ task: closed, threads: [idle] })).toBe("idle");
   });
 
-  it("is idle once an agent has finished work, working before that", () => {
+  it("is idle whenever nothing is running, even before any agent worked", () => {
     expect(deriveTaskStatus({ task: task(), threads: [fresh, idle] })).toBe("idle");
-    expect(deriveTaskStatus({ task: task(), threads: [fresh] })).toBe("working");
-    expect(deriveTaskStatus({ task: task(), threads: [] })).toBe("working");
+    expect(deriveTaskStatus({ task: task(), threads: [fresh] })).toBe("idle");
+    expect(deriveTaskStatus({ task: task(), threads: [] })).toBe("idle");
   });
 });
 
