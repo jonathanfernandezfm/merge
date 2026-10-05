@@ -18,6 +18,7 @@ import {
   CircleCheckIcon,
   CircleDotDashedIcon,
   CircleXIcon,
+  EyeIcon,
   MessageSquareMoreIcon,
   MessageSquareWarningIcon,
   TriangleAlertIcon,
@@ -184,6 +185,7 @@ const TASK_STATUS_ICON: Readonly<
   "setting-up": WrenchIcon,
   "setup-failed": TriangleAlertIcon,
   working: WorkingSpinner,
+  monitoring: EyeIcon,
   "waiting-for-user": CircleAlertIcon,
   idle: IdleGlyph,
   "ci-running": CircleDotDashedIcon,
@@ -205,6 +207,7 @@ const TASK_STATUS_ICON_CLASS: Readonly<Record<TaskStatus, string>> = {
   "setting-up": "text-sky-600 dark:text-sky-400",
   "setup-failed": "text-destructive-foreground",
   working: "text-info-foreground",
+  monitoring: "text-info-foreground",
   "waiting-for-user": "text-warning-foreground",
   idle: "text-muted-foreground",
   "ci-running": "text-cyan-600 dark:text-cyan-400",
@@ -255,6 +258,11 @@ export const TASK_THREAD_TAB_STATE_PRESENTATION: Readonly<
   Record<TaskThreadTabState, StatusPresentation>
 > = {
   running: { label: "Running", Icon: WorkingSpinner, className: "text-info-foreground" },
+  monitoring: {
+    label: "Monitoring",
+    Icon: ({ className }) => <EyeIcon aria-hidden className={cn("size-3.5 shrink-0", className)} />,
+    className: "text-info-foreground",
+  },
   idle: presentation("Idle", { ring: "solid" }, "text-muted-foreground"),
   waiting: presentation("Needs you", { ring: "filled", mark: "alert" }, "text-warning-foreground"),
   completed: presentation("Completed", { ring: "solid", mark: "check" }, "text-success-foreground"),

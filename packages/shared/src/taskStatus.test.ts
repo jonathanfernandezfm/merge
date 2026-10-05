@@ -116,6 +116,12 @@ describe("deriveTaskStatus", () => {
     expect(deriveTaskStatus({ task: closed, threads: [idle] })).toBe("idle");
   });
 
+  it("monitors while only watch loops run, below running agents", () => {
+    const monitoring: TaskStatusThread = { origin: "user", state: "monitoring" };
+    expect(deriveTaskStatus({ task: task(), threads: [idle, monitoring] })).toBe("monitoring");
+    expect(deriveTaskStatus({ task: task(), threads: [monitoring, running] })).toBe("working");
+  });
+
   it("is idle whenever nothing is running, even before any agent worked", () => {
     expect(deriveTaskStatus({ task: task(), threads: [fresh, idle] })).toBe("idle");
     expect(deriveTaskStatus({ task: task(), threads: [fresh] })).toBe("idle");

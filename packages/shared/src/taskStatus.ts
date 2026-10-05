@@ -4,6 +4,7 @@ export const TASK_STATUSES = [
   "setting-up",
   "setup-failed",
   "working",
+  "monitoring",
   "waiting-for-user",
   "idle",
   "ci-running",
@@ -21,10 +22,11 @@ export type TaskStatus = (typeof TASK_STATUSES)[number];
 /**
  * What a task thread is doing, mapped by the caller from its shell:
  * `running` while a turn runs, `waiting` while it blocks on the user
- * (pending approval or input), `idle` once it has run at least one turn,
- * `new` before its first turn.
+ * (pending approval or input), `monitoring` while only watch loops outlive
+ * the turn, `idle` once it has run at least one turn, `new` before its first
+ * turn.
  */
-export type TaskThreadState = "running" | "waiting" | "idle" | "new";
+export type TaskThreadState = "running" | "waiting" | "monitoring" | "idle" | "new";
 
 export interface TaskStatusThread {
   readonly origin: ThreadOrigin | null | undefined;
@@ -41,7 +43,7 @@ export type TaskStatusTask = Pick<
 /**
  * The single place a task's status is decided (spec §22). The first matching
  * rule wins: archived, merged, setup, waiting on the user, automated review
- * work, failing checks, requested changes, running agents, approval, pending
+ * work, failing checks, requested changes, running agents, watch loops, approval, pending
  * checks, an open pull request, and finally no pull request.
  */
 export function deriveTaskStatus(input: {
@@ -73,6 +75,7 @@ export function deriveTaskStatus(input: {
   if (openPullRequest?.checks === "failing") return "ci-failing";
   if (openPullRequest?.review === "changes-requested") return "changes-requested";
   if (threads.some((thread) => thread.state === "running")) return "working";
+  if (threads.some((thread) => thread.state === "monitoring")) return "monitoring";
 
   if (openPullRequest !== null) {
     if (openPullRequest.review === "approved") {
@@ -118,6 +121,7 @@ export const TASK_STATUS_PRESENTATION: Readonly<Record<TaskStatus, TaskStatusPre
   "setting-up": { label: "Setting up", glyph: glyph("dashed"), tone: "info" },
   "setup-failed": { label: "Setup failed", glyph: glyph("dashed", 0, "x"), tone: "danger" },
   working: { label: "Working", glyph: glyph("dashed", 0.25), tone: "info" },
+  monitoring: { label: "Monitoring", glyph: glyph("solid", 0.25), tone: "info" },
   "waiting-for-user": { label: "Needs you", glyph: glyph("filled", 0, "alert"), tone: "warning" },
   idle: { label: "Idle", glyph: glyph("solid", 0.5), tone: "neutral" },
   "ci-running": { label: "Checks running", glyph: glyph("dashed", 0.5), tone: "info" },

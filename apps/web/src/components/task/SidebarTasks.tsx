@@ -472,10 +472,11 @@ const SidebarTaskRow = memo(function SidebarTaskRow({
 }) {
   const status = resolveTaskStatus(task, threads);
   const statusLabel = TASK_STATUS_PRESENTATION[status].label;
-  // Working and waiting outrank a new response, which only replaces calmer statuses.
+  // Live work and waiting outrank a new response, which only replaces calmer statuses.
   const unseen =
     useUnseenThreadFlags(threads).includes(true) &&
     status !== "working" &&
+    status !== "monitoring" &&
     status !== "waiting-for-user";
   // A process running in any of the task's thread terminals, e.g. a Run script.
   const terminalSessions = useKnownTerminalSessions({

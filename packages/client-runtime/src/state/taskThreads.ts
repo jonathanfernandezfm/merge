@@ -35,7 +35,7 @@ export type TaskThreadShell = Pick<
  * Pending approvals and questions outrank a running turn: the agent is
  * blocked on the user either way. Subagents still working after the turn
  * settles keep the thread running, unless the session failed; watch loops
- * (`monitoring`) do not, matching the sidebar's thread status.
+ * alone read as monitoring, matching the sidebar's thread status.
  */
 export function taskThreadState(
   thread: Pick<
@@ -47,6 +47,7 @@ export function taskThreadState(
   const status = thread.session?.status;
   if (status === "starting" || status === "running") return "running";
   if (status !== "error" && thread.backgroundLiveness === "working") return "running";
+  if (status !== "error" && thread.backgroundLiveness === "monitoring") return "monitoring";
   return thread.latestTurn === null ? "new" : "idle";
 }
 
@@ -108,8 +109,8 @@ export function resolveTaskStatus(
   });
 }
 
-/** The glyph a thread tab shows: running, idle, blocked on the user, or settled. */
-export type TaskThreadTabState = "running" | "idle" | "waiting" | "completed";
+/** The glyph a thread tab shows: running, watching, idle, blocked on the user, or settled. */
+export type TaskThreadTabState = "running" | "monitoring" | "idle" | "waiting" | "completed";
 
 export function taskThreadTabState(
   thread: Pick<
@@ -123,7 +124,7 @@ export function taskThreadTabState(
   >,
 ): TaskThreadTabState {
   const state = taskThreadState(thread);
-  if (state === "waiting" || state === "running") return state;
+  if (state === "waiting" || state === "running" || state === "monitoring") return state;
   return thread.settledOverride === "settled" ? "completed" : "idle";
 }
 
@@ -154,6 +155,7 @@ export function taskboardColumnForStatus(status: TaskStatus): TaskboardColumnId 
   switch (status) {
     case "setting-up":
     case "working":
+    case "monitoring":
     case "idle":
     case "addressing-comments":
       return "working";

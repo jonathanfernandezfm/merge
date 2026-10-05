@@ -73,7 +73,9 @@ describe("taskThreadState", () => {
       latestTurn: COMPLETED_TURN,
     };
     expect(taskThreadState(thread({ ...settled, backgroundLiveness: "working" }))).toBe("running");
-    expect(taskThreadState(thread({ ...settled, backgroundLiveness: "monitoring" }))).toBe("idle");
+    expect(taskThreadState(thread({ ...settled, backgroundLiveness: "monitoring" }))).toBe(
+      "monitoring",
+    );
     expect(
       taskThreadState(
         thread({
@@ -148,6 +150,7 @@ describe("taskboardColumnForStatus", () => {
       "setting-up": "working",
       "setup-failed": "needs-you",
       working: "working",
+      monitoring: "working",
       "waiting-for-user": "needs-you",
       idle: "working",
       "ci-running": "in-review",

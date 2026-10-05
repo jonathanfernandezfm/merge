@@ -431,11 +431,12 @@ function TaskThreadTabs({
         {threads.map((thread, index) => {
           const tabState = taskThreadTabState(thread);
           const active = thread.id === activeThreadId;
-          // Running and waiting outrank a new response; the open tab is read by definition.
+          // Live work and waiting outrank a new response; the open tab is read by definition.
           const unseen =
             !active &&
             unseenFlags[index] === true &&
             tabState !== "running" &&
+            tabState !== "monitoring" &&
             tabState !== "waiting";
           const state = unseen
             ? UNSEEN_RESPONSE_PRESENTATION
