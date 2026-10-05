@@ -113,7 +113,7 @@ const CLONE_ENV = {
 const STATE_KEY_SEPARATOR = "\u0000";
 
 /** Git config key holding a work item linked to a branch by hand. */
-export const branchWorkItemConfigKey = (branch: string) => `branch.${branch}.work-item`;
+const branchWorkItemConfigKey = (branch: string) => `branch.${branch}.work-item`;
 
 /**
  * The work item a branch is tied to: a hand-made link wins over the id in the
