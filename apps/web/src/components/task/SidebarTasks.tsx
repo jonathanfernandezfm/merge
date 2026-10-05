@@ -521,7 +521,7 @@ const SidebarTaskRow = memo(function SidebarTaskRow({
         className={cn(
           "flex h-8 w-full min-w-0 cursor-pointer items-center gap-2.5 rounded-md ps-8 pe-2 text-left",
           active
-            ? "bg-sidebar-row-hover text-sidebar-foreground"
+            ? "bg-primary/8 text-sidebar-foreground"
             : "text-sidebar-foreground/80 hover:bg-sidebar-row-hover hover:text-sidebar-foreground",
           unseen && "font-semibold text-sidebar-foreground",
           highlighted && !active && "bg-primary/8 ring-1 ring-primary/30 ring-inset",
