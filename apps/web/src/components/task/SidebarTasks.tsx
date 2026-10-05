@@ -13,16 +13,25 @@ import {
   ChevronDownIcon,
   FolderClosedIcon,
   FolderOpenIcon,
+  Link2Icon,
   ListFilterIcon,
   PlusIcon,
   SquareKanbanIcon,
+  TerminalIcon,
 } from "lucide-react";
-import { memo, useCallback, useMemo, type MouseEvent, type ReactNode } from "react";
+import { memo, useCallback, useMemo, useState, type MouseEvent, type ReactNode } from "react";
 
 import { useLocalStorage } from "~/hooks/useLocalStorage";
 import { cn } from "~/lib/utils";
 import { useProjects, useThreadShell } from "~/state/entities";
-import { taskThreadsKey, useTasks, useTaskThreadsByTask } from "~/state/tasks";
+import {
+  taskThreadsKey,
+  useLinkedTasksByTask,
+  useTasks,
+  useTaskThreadsByTask,
+} from "~/state/tasks";
+import { useKnownTerminalSessions } from "~/state/terminalSessions";
+import { synchronizeTerminalPulse, terminalStatusFromRunningIds } from "../ThreadStatusIndicators";
 import { Button } from "../ui/button";
 import { SidebarHeaderIconButton } from "../sidebar/SidebarThreadHeader";
 import {
@@ -148,6 +157,9 @@ export const SidebarTasks = memo(function SidebarTasks({
   const tasks = useTasks();
   const projects = useProjects();
   const threadsByTask = useTaskThreadsByTask();
+  const linkedByTask = useLinkedTasksByTask();
+  // Hovering a linked task highlights the same branch in the other repos.
+  const [hoveredBranch, setHoveredBranch] = useState<string | null>(null);
   const activeTaskKey = useActiveTaskKey();
   const navigate = useNavigate();
   const { isMobile, setOpenMobile } = useSidebar();
@@ -208,6 +220,12 @@ export const SidebarTasks = memo(function SidebarTasks({
       ];
     });
   }, [hiddenProjectKeys, projects, query, searching, taskSort, tasks, threadsByTask]);
+
+  const projectTitles = useMemo(
+    () =>
+      new Map(projects.map((project) => [`${project.environmentId}:${project.id}`, project.title])),
+    [projects],
+  );
 
   // Explicit toggles per project; untouched projects open only when they have tasks.
   const [projectExpanded, setProjectExpanded] = useLocalStorage(
@@ -366,12 +384,30 @@ export const SidebarTasks = memo(function SidebarTasks({
                   <ul className="flex flex-col gap-px">
                     {group.tasks.map((task) => {
                       const key = taskThreadsKey(task.environmentId, task.id);
+                      const linked = linkedByTask.get(key);
                       return (
                         <SidebarTaskRow
                           key={key}
                           task={task}
                           threads={threadsByTask.get(key) ?? EMPTY_THREADS}
                           active={key === activeTaskKey}
+                          linkedProjects={
+                            linked === undefined
+                              ? null
+                              : linked
+                                  .map(
+                                    (sibling) =>
+                                      projectTitles.get(
+                                        `${sibling.environmentId}:${sibling.projectId}`,
+                                      ) ?? sibling.title,
+                                  )
+                                  .join(", ")
+                          }
+                          linkedCount={linked?.length ?? 0}
+                          highlighted={
+                            linked !== undefined && hoveredBranch === task.workspace.branch
+                          }
+                          onHoverLinked={setHoveredBranch}
                           onOpen={openTask}
                           onContextMenu={openTaskContextMenu}
                         />
@@ -415,12 +451,22 @@ const SidebarTaskRow = memo(function SidebarTaskRow({
   task,
   threads,
   active,
+  linkedProjects,
+  linkedCount,
+  highlighted,
+  onHoverLinked,
   onOpen,
   onContextMenu,
 }: {
   task: EnvironmentTask;
   threads: ReadonlyArray<EnvironmentThreadShell>;
   active: boolean;
+  /** Repos with a task on the same branch, or null when the task is not linked. */
+  linkedProjects: string | null;
+  linkedCount: number;
+  /** A linked task in another repo is hovered. */
+  highlighted: boolean;
+  onHoverLinked: (branch: string | null) => void;
   onOpen: (task: EnvironmentTask, threads: ReadonlyArray<EnvironmentThreadShell>) => void;
   onContextMenu: (task: EnvironmentTask, position: { x: number; y: number }) => void;
 }) {
@@ -431,11 +477,27 @@ const SidebarTaskRow = memo(function SidebarTaskRow({
     useUnseenThreadFlags(threads).includes(true) &&
     status !== "working" &&
     status !== "waiting-for-user";
+  // A process running in any of the task's thread terminals, e.g. a Run script.
+  const terminalSessions = useKnownTerminalSessions({
+    environmentId: task.environmentId,
+    threadId: null,
+  });
+  const runningTerminalIds = useMemo(() => {
+    const threadIds = new Set<string>(threads.map((thread) => thread.id));
+    return terminalSessions
+      .filter(
+        (session) => session.state.hasRunningSubprocess && threadIds.has(session.target.threadId),
+      )
+      .map((session) => session.target.terminalId);
+  }, [terminalSessions, threads]);
+  const terminalStatus = terminalStatusFromRunningIds(runningTerminalIds);
   const detail = [
     unseen ? UNSEEN_RESPONSE_PRESENTATION.label : null,
     statusLabel,
+    terminalStatus?.label ?? null,
     task.workspace.branch,
     task.pullRequest !== null ? `#${task.pullRequest.number}` : null,
+    linkedProjects !== null ? `Also in ${linkedProjects}` : null,
   ]
     .filter(Boolean)
     .join(" · ");
@@ -446,6 +508,12 @@ const SidebarTaskRow = memo(function SidebarTaskRow({
         aria-current={active ? "page" : undefined}
         aria-label={`${task.title}, ${detail}`}
         onClick={() => onOpen(task, threads)}
+        {...(linkedProjects !== null
+          ? {
+              onPointerEnter: () => onHoverLinked(task.workspace.branch),
+              onPointerLeave: () => onHoverLinked(null),
+            }
+          : {})}
         onContextMenu={(event: MouseEvent) => {
           event.preventDefault();
           onContextMenu(task, { x: event.clientX, y: event.clientY });
@@ -456,6 +524,7 @@ const SidebarTaskRow = memo(function SidebarTaskRow({
             ? "bg-sidebar-row-hover text-sidebar-foreground"
             : "text-sidebar-foreground/80 hover:bg-sidebar-row-hover hover:text-sidebar-foreground",
           unseen && "font-semibold text-sidebar-foreground",
+          highlighted && !active && "bg-primary/8 ring-1 ring-primary/30 ring-inset",
         )}
       >
         {unseen ? (
@@ -464,6 +533,35 @@ const SidebarTaskRow = memo(function SidebarTaskRow({
           <TaskStatusIcon status={status} />
         )}
         <span className="min-w-0 flex-1 truncate text-sm">{task.title}</span>
+        {terminalStatus ? (
+          <TerminalIcon
+            aria-hidden="true"
+            className={cn(
+              "size-3.5 shrink-0",
+              terminalStatus.colorClass,
+              terminalStatus.pulse && "motion-safe:animate-status-pulse",
+            )}
+            onAnimationStart={synchronizeTerminalPulse}
+          />
+        ) : null}
+        {linkedProjects !== null ? (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <span
+                  className={cn(
+                    "flex shrink-0 items-center gap-0.5 text-xs tabular-nums",
+                    highlighted ? "text-primary" : "text-sidebar-muted-foreground",
+                  )}
+                />
+              }
+            >
+              <Link2Icon aria-hidden className="size-3.5" />
+              {linkedCount}
+            </TooltipTrigger>
+            <TooltipPopup side="right">Same branch in {linkedProjects}</TooltipPopup>
+          </Tooltip>
+        ) : null}
       </button>
     </li>
   );

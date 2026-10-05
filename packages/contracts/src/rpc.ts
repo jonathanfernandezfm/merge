@@ -283,6 +283,11 @@ import {
   SourceControlRepositoryError,
   SourceControlRepositoryInfo,
   SourceControlRepositoryLookupInput,
+  BranchWorkItems,
+  BranchWorkItemsInput,
+  CreateChildWorkItemInput,
+  LinkBranchWorkItemInput,
+  UpdateWorkItemInput,
 } from "./sourceControl.ts";
 import { VcsError } from "./vcs.ts";
 import {
@@ -459,6 +464,10 @@ export const WS_METHODS = {
   sourceControlLookupRepository: "sourceControl.lookupRepository",
   sourceControlCloneRepository: "sourceControl.cloneRepository",
   sourceControlPublishRepository: "sourceControl.publishRepository",
+  sourceControlBranchWorkItems: "sourceControl.branchWorkItems",
+  sourceControlLinkBranchWorkItem: "sourceControl.linkBranchWorkItem",
+  sourceControlUpdateWorkItem: "sourceControl.updateWorkItem",
+  sourceControlCreateChildWorkItem: "sourceControl.createChildWorkItem",
   projectCloneStart: "projectClone.start",
   projectCloneCancel: "projectClone.cancel",
   projectCloneRetry: "projectClone.retry",
@@ -985,6 +994,38 @@ const WsSourceControlPublishRepositoryRpc = Rpc.make(WS_METHODS.sourceControlPub
   success: SourceControlPublishRepositoryResult,
   error: Schema.Union([SourceControlRepositoryError, EnvironmentAuthorizationError]),
 });
+
+const SourceControlWorkItemRpcError = Schema.Union([
+  SourceControlRepositoryError,
+  EnvironmentAuthorizationError,
+]);
+
+const WsSourceControlBranchWorkItemsRpc = Rpc.make(WS_METHODS.sourceControlBranchWorkItems, {
+  payload: BranchWorkItemsInput,
+  success: BranchWorkItems,
+  error: SourceControlWorkItemRpcError,
+});
+
+const WsSourceControlLinkBranchWorkItemRpc = Rpc.make(WS_METHODS.sourceControlLinkBranchWorkItem, {
+  payload: LinkBranchWorkItemInput,
+  success: Schema.Void,
+  error: SourceControlWorkItemRpcError,
+});
+
+const WsSourceControlUpdateWorkItemRpc = Rpc.make(WS_METHODS.sourceControlUpdateWorkItem, {
+  payload: UpdateWorkItemInput,
+  success: Schema.Void,
+  error: SourceControlWorkItemRpcError,
+});
+
+const WsSourceControlCreateChildWorkItemRpc = Rpc.make(
+  WS_METHODS.sourceControlCreateChildWorkItem,
+  {
+    payload: CreateChildWorkItemInput,
+    success: Schema.Struct({ id: Schema.Number }),
+    error: SourceControlWorkItemRpcError,
+  },
+);
 
 const WsProjectsSearchEntriesRpc = Rpc.make(WS_METHODS.projectsSearchEntries, {
   payload: ProjectSearchEntriesInput,
@@ -1575,6 +1616,10 @@ export const WsRpcGroup = RpcGroup.make(
   WsSourceControlLookupRepositoryRpc,
   WsSourceControlCloneRepositoryRpc,
   WsSourceControlPublishRepositoryRpc,
+  WsSourceControlBranchWorkItemsRpc,
+  WsSourceControlLinkBranchWorkItemRpc,
+  WsSourceControlUpdateWorkItemRpc,
+  WsSourceControlCreateChildWorkItemRpc,
   WsProjectCloneStartRpc,
   WsProjectCloneCancelRpc,
   WsProjectCloneRetryRpc,

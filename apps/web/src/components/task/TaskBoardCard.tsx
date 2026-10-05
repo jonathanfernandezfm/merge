@@ -19,7 +19,7 @@ const PULL_REQUEST_STATE: Readonly<
   open: { label: "Open", className: "text-success-foreground" },
   draft: { label: "Draft", className: "text-muted-foreground" },
   closed: { label: "Closed", className: "text-destructive-foreground" },
-  merged: { label: "Merged", className: "text-info-foreground" },
+  merged: { label: "Merged", className: "text-purple-600 dark:text-purple-400" },
 };
 
 /** The provider driving a thread, or undefined when its instance is unknown here. */

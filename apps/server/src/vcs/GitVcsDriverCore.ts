@@ -3066,7 +3066,9 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
     "createWorktree",
   )(function* (input, options) {
     const targetBranch = input.newRefName ?? input.refName;
-    const sanitizedBranch = targetBranch.replace(/\//g, "-");
+    // Dev servers serve files by absolute path, so URL-significant characters
+    // like `#` in the directory name break module loading (`bugfix/#123-x`).
+    const sanitizedBranch = targetBranch.replace(/[^\w.-]+/g, "-");
     const repoName = path.basename(input.cwd);
     const worktreePath = input.path ?? path.join(worktreesDir, repoName, sanitizedBranch);
     const args = input.newRefName

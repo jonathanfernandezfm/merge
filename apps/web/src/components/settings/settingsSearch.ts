@@ -738,6 +738,13 @@ export const SETTINGS_SEARCH_ITEMS = [
     environmentOnly: true,
   },
   {
+    id: "reference-work-items",
+    title: "Reference work items",
+    to: "/settings/source-control",
+    searchTerms: ["azure devops boards task pbi commit id prefix link pull request"],
+    environmentOnly: true,
+  },
+  {
     id: "source-control-writer-model",
     title: "Source control writer model",
     to: "/settings/source-control",
@@ -752,6 +759,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     title: "Actions",
     to: "/settings/projects",
     searchTerms: ["commands scripts setup run dev server checkout worktree t3.json import"],
+  },
+  {
+    id: "project-workspace-files",
+    title: "Workspace files",
+    to: "/settings/projects",
+    searchTerms: ["copy files env local untracked task workspace worktree t3.json"],
   },
   {
     id: "environment-icon",

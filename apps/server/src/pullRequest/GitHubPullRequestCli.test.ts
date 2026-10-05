@@ -1831,6 +1831,37 @@ layer("GitHubPullRequestCli.layer", (it) => {
     }),
   );
 
+  it.effect("sends a custom merge message as subject and stdin body", () =>
+    Effect.gen(function* () {
+      mockedExecute.mockReturnValue(Effect.succeed(output("")));
+      const cli = yield* GitHubPullRequestCli.GitHubPullRequestCli;
+
+      yield* cli.runPullRequestAction({
+        cwd: "/w",
+        repository: "acme/web",
+        host: "github.com",
+        number: 7,
+        action: "merge",
+        mergeMethod: "squash",
+        mergeMessage: "Ship it (#7)\n\nLonger body\nsecond line",
+      });
+
+      expect(callAt(0).args).toEqual([
+        "pr",
+        "merge",
+        "7",
+        "--repo",
+        "github.com/acme/web",
+        "--squash",
+        "--subject",
+        "Ship it (#7)",
+        "--body-file",
+        "-",
+      ]);
+      expect(callAt(0).stdin).toBe("Longer body\nsecond line");
+    }),
+  );
+
   it.effect("arms auto-merge with the same strategy a merge would have used", () =>
     Effect.gen(function* () {
       mockedExecute.mockReturnValue(Effect.succeed(output("")));

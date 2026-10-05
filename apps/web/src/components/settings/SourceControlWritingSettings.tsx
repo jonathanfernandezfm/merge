@@ -82,6 +82,7 @@ export function SourceControlWritingSettingsSection() {
   const modeMixed = styleFieldMixed("mode");
   const instructionsMixed = styleFieldMixed("customInstructions");
   const templatesMixed = styleFieldMixed("followChangeRequestTemplates");
+  const workItemsMixed = styleFieldMixed("referenceWorkItems");
   const writingStyleMixed = modeMixed || instructionsMixed;
   const mixedWriterModel = useScopedSettingsMixed(["sourceControlWriterModelSelection"]);
   const customInstructionsRef = useRef<HTMLTextAreaElement>(null);
@@ -276,6 +277,38 @@ export function SourceControlWritingSettingsSection() {
               })
             }
             aria-label="Follow change request templates"
+          />
+        }
+      />
+
+      <SettingsRow
+        serverScoped
+        settingKeys={["sourceControlWritingStyle"]}
+        mixed={workItemsMixed}
+        {...searchableSetting("reference-work-items")}
+        description="Azure DevOps: start commit messages with the branch's work item or the child task the change belongs to, and link them to new pull requests."
+        resetAction={
+          workItemsMixed || style.referenceWorkItems !== defaults.referenceWorkItems ? (
+            <SettingResetButton
+              label="work item references"
+              onClick={() =>
+                updateSettings({
+                  sourceControlWritingStyle: { referenceWorkItems: defaults.referenceWorkItems },
+                })
+              }
+            />
+          ) : null
+        }
+        control={
+          <Switch
+            mixed={workItemsMixed}
+            checked={workItemsMixed ? false : style.referenceWorkItems}
+            onCheckedChange={(checked) =>
+              updateSettings({
+                sourceControlWritingStyle: { referenceWorkItems: Boolean(checked) },
+              })
+            }
+            aria-label="Reference work items"
           />
         }
       />

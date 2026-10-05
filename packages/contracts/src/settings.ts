@@ -963,6 +963,8 @@ export const SourceControlWritingStyleSettings = Schema.Struct({
   followChangeRequestTemplates: Schema.Boolean.pipe(
     Schema.withDecodingDefault(Effect.succeed(true)),
   ),
+  /** Prefix commits with the branch's work item (or its matching child) and link them to PRs. */
+  referenceWorkItems: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
 });
 export type SourceControlWritingStyleSettings = typeof SourceControlWritingStyleSettings.Type;
 
@@ -1568,6 +1570,7 @@ export const ServerSettingsPatch = Schema.Struct({
       mode: Schema.optionalKey(SourceControlWritingStyleMode),
       customInstructions: Schema.optionalKey(TrimmedString),
       followChangeRequestTemplates: Schema.optionalKey(Schema.Boolean),
+      referenceWorkItems: Schema.optionalKey(Schema.Boolean),
     }),
   ),
   sourceControlWriterModelSelection: Schema.optionalKey(Schema.NullOr(ModelSelection)),

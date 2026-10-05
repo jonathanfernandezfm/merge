@@ -166,6 +166,7 @@ describe("searchSettings", () => {
       "network-access",
       "publish-agent-activity",
       "provider-health-check-interval",
+      "reference-work-items",
       "cursor-keychain-usage",
       "source-control-writer-model",
       "source-control-writing-style",

@@ -2,9 +2,10 @@
  * TaskWorkspaceService - creates, prepares and archives the git worktree a
  * task works in.
  *
- * A task always works on an EXISTING remote branch: the service fetches the
- * remote, checks out the local tracking branch of the same name in a new
- * worktree and never creates any other branch. Setup (copy rules from
+ * A task always works on an EXISTING branch: the service fetches the remote,
+ * checks out the local tracking branch of the same name in a new worktree and
+ * never creates any other branch. A branch that exists only locally is checked
+ * out as is; it gets its upstream once pushed. Setup (copy rules from
  * `t3.json`, then the project's `runOnWorktreeCreate` scripts) runs in the
  * background and reports each step through `task.sync`. Archive removes the
  * worktree but keeps the branch, the task and its threads.
@@ -420,8 +421,15 @@ const make = Effect.gen(function* () {
       );
     }
     const localBranches = yield* git.listLocalBranchNames(root);
+    const onRemote = yield* git.remoteBranchExists({
+      cwd: root,
+      remoteName,
+      refName: remoteBranch,
+    });
     const log: Array<string> = [];
-    if (localBranches.includes(branch)) {
+    if (localBranches.includes(branch) && !onRemote) {
+      log.push(`Using local branch ${branch}; it is not on ${remoteName} yet`);
+    } else if (localBranches.includes(branch)) {
       log.push(yield* syncLocalBranch(root, workspace));
     } else {
       yield* git.execute({
@@ -435,10 +443,68 @@ const make = Effect.gen(function* () {
       { cwd: root, refName: branch, path: workspace.path },
       { submodules: null },
     );
-    yield* git.setBranchUpstream({ cwd: root, branch, remoteName, remoteBranch });
+    if (onRemote) yield* git.setBranchUpstream({ cwd: root, branch, remoteName, remoteBranch });
     log.push(`Checked out ${branch} at ${created.worktree.path}`);
     return { path: created.worktree.path, log: log.join("\n") };
   });
+
+  /**
+   * Checked before the task exists, so a branch held by another worktree
+   * fails cleanly instead of leaving a task with failed setup. The caller may
+   * ask to detach that worktree; the project's own checkout is never touched.
+   */
+  const detachExistingCheckout = Effect.fn("TaskWorkspaceService.detachExistingCheckout")(
+    function* (root: string, branch: string, detachCheckoutAt: string | undefined) {
+      yield* git.pruneWorktrees({ cwd: root });
+      const checkout = yield* findCheckout(root, branch);
+      if (checkout === null) return;
+      const real = (target: string) =>
+        fs.realPath(target).pipe(Effect.orElseSucceed(() => path.resolve(target)));
+      if ((yield* real(checkout)) === (yield* real(root))) {
+        return yield* failed(
+          `Branch '${branch}' is checked out in the project's main checkout. Switch it to another branch, then retry.`,
+        );
+      }
+      if (detachCheckoutAt !== checkout) {
+        return yield* new TaskOperationError({
+          reason: "branch-checked-out",
+          message: `Branch '${branch}' is already checked out at ${checkout}.`,
+          checkoutPath: checkout,
+        });
+      }
+      yield* git.execute({
+        operation: "TaskWorkspaceService.detachCheckout",
+        cwd: checkout,
+        args: ["switch", "--detach"],
+      });
+      yield* Effect.logInfo("task creation detached an existing checkout", { branch, checkout });
+    },
+  );
+
+  /**
+   * A worktree handed in at creation must already hold `branch` for this
+   * project and must not be the main checkout; the task then owns it as is.
+   */
+  const requireAdoptableWorktree = Effect.fn("TaskWorkspaceService.requireAdoptableWorktree")(
+    function* (root: string, branch: string, worktreePath: string) {
+      yield* git.pruneWorktrees({ cwd: root });
+      const checkout = yield* findCheckout(root, branch);
+      const real = (target: string) =>
+        fs.realPath(target).pipe(Effect.orElseSucceed(() => path.resolve(target)));
+      const target = yield* real(worktreePath);
+      if (checkout === null || (yield* real(checkout)) !== target) {
+        return yield* failed(
+          `${worktreePath} is not a worktree of this project with '${branch}' checked out.`,
+        );
+      }
+      if (target === (yield* real(root))) {
+        return yield* failed(
+          `${worktreePath} is the project's main checkout; a task needs its own worktree.`,
+        );
+      }
+      return checkout;
+    },
+  );
 
   // --- Setup steps -------------------------------------------------------
 
@@ -827,22 +893,39 @@ const make = Effect.gen(function* () {
       });
     }
     const remoteRef = `${remoteName}/${branch}`;
+    const isLocal = (yield* git
+      .listLocalBranchNames(root)
+      .pipe(Effect.mapError((error) => failed(errorDetail(error), error)))).includes(branch);
 
-    yield* git
-      .fetchRemote({ cwd: root, remoteName, refName: branch })
-      .pipe(
-        Effect.mapError((error) =>
-          failed(`Could not fetch ${remoteName}: ${errorDetail(error)}`, error),
-        ),
-      );
+    // A local branch does not need the remote, so a failed fetch only fails a
+    // branch that has to come from it.
+    const fetched = yield* git.fetchRemote({ cwd: root, remoteName, refName: branch }).pipe(
+      Effect.as(true),
+      Effect.catchTag("GitCommandError", (error) =>
+        isLocal
+          ? Effect.succeed(false)
+          : Effect.fail(failed(`Could not fetch ${remoteName}: ${errorDetail(error)}`, error)),
+      ),
+    );
     const remoteBranchExists = yield* git
       .remoteBranchExists({ cwd: root, remoteName, refName: branch })
       .pipe(Effect.mapError((error) => failed(errorDetail(error), error)));
-    if (!remoteBranchExists) {
+    if (!remoteBranchExists && !isLocal) {
       return yield* new TaskOperationError({
         reason: "remote-branch-missing",
-        message: `Branch '${branch}' does not exist on ${remoteName}. Push it first; tasks never create branches.`,
+        message: `Branch '${branch}' does not exist locally or on ${remoteName}. Tasks never create branches.`,
       });
+    }
+    const adoptedPath =
+      input.worktreePath === undefined
+        ? null
+        : yield* requireAdoptableWorktree(root, branch, input.worktreePath).pipe(
+            Effect.catchTag("GitCommandError", (error) => failed(errorDetail(error), error)),
+          );
+    if (adoptedPath === null) {
+      yield* detachExistingCheckout(root, branch, input.detachCheckoutAt).pipe(
+        Effect.catchTag("GitCommandError", (error) => failed(errorDetail(error), error)),
+      );
     }
 
     const plan = yield* loadSetupPlan(project);
@@ -855,15 +938,17 @@ const make = Effect.gen(function* () {
       step.id === "fetch"
         ? {
             ...step,
-            status: "done" as const,
-            log: `Fetched ${remoteRef}`,
+            status: fetched ? ("done" as const) : ("skipped" as const),
+            log: fetched
+              ? `Fetched ${remoteRef}`
+              : `Could not fetch ${remoteName}; using local ${branch}`,
             startedAt: createdAt,
             finishedAt: createdAt,
           }
         : step,
     );
     let workspace: OrchestrationTaskWorkspace = {
-      path: null,
+      path: adoptedPath,
       branch,
       remoteName,
       remoteBranch: branch,

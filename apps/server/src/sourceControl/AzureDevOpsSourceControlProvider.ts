@@ -53,6 +53,19 @@ export const discovery = {
     "Install the Azure command-line tools (`az`), then enable Azure DevOps support with `az extension add --name azure-devops`.",
 } satisfies SourceControlCliDiscoverySpec;
 
+function workItemError(operation: string, cwd: string, reference: string) {
+  return (error: AzureDevOpsCli.AzureDevOpsCliError) =>
+    new SourceControlProviderError({
+      provider: "azure-devops",
+      operation,
+      command: error.command,
+      cwd,
+      reference,
+      detail: error.detail,
+      cause: error,
+    });
+}
+
 function toChangeRequest(summary: {
   readonly number: number;
   readonly title: string;
@@ -143,6 +156,7 @@ export const make = Effect.gen(function* () {
           ...(input.target !== undefined ? { target: input.target } : {}),
           title: input.title,
           bodyFile: input.bodyFile,
+          ...(input.workItemIds !== undefined ? { workItemIds: input.workItemIds } : {}),
         })
         .pipe(
           Effect.mapError(
@@ -161,6 +175,35 @@ export const make = Effect.gen(function* () {
           ),
         );
     },
+    listWorkItemFamily: (input) =>
+      azure.listWorkItemFamily({ cwd: input.cwd, id: input.id }).pipe(
+        Effect.mapError(
+          (error) =>
+            new SourceControlProviderError({
+              provider: "azure-devops",
+              operation: "listWorkItemFamily",
+              command: error.command,
+              cwd: input.cwd,
+              reference: String(input.id),
+              detail: error.detail,
+              cause: error,
+            }),
+        ),
+      ),
+    listWorkItemStates: (input) =>
+      azure
+        .listWorkItemStates(input)
+        .pipe(Effect.mapError(workItemError("listWorkItemStates", input.cwd, input.type))),
+    updateWorkItem: (input) =>
+      azure
+        .updateWorkItem(input)
+        .pipe(Effect.mapError(workItemError("updateWorkItem", input.cwd, String(input.id)))),
+    createChildWorkItem: (input) =>
+      azure
+        .createChildWorkItem(input)
+        .pipe(
+          Effect.mapError(workItemError("createChildWorkItem", input.cwd, String(input.parentId))),
+        ),
     getRepositoryCloneUrls: (input) =>
       azure.getRepositoryCloneUrls(input).pipe(
         Effect.mapError(

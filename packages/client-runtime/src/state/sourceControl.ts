@@ -1,4 +1,5 @@
 import { WS_METHODS } from "@t3tools/contracts";
+import * as Effect from "effect/Effect";
 import { Atom } from "effect/unstable/reactivity";
 
 import {
@@ -16,7 +17,54 @@ export function createSourceControlEnvironmentAtoms<R, E>(
   runtime: Atom.AtomRuntime<EnvironmentRegistry | EnvironmentCacheStore | R, E>,
 ) {
   const commandScheduler = createAtomCommandScheduler();
+  // Work item reads boot `az` (about two seconds), so they are kept a minute
+  // and refreshed after every edit instead of polled.
+  const branchWorkItems = createEnvironmentRpcQueryAtomFamily(runtime, {
+    label: "environment-data:source-control:branch-work-items",
+    tag: WS_METHODS.sourceControlBranchWorkItems,
+    staleTimeMs: 60_000,
+  });
+  const workItemCommand = <
+    TTag extends
+      | typeof WS_METHODS.sourceControlLinkBranchWorkItem
+      | typeof WS_METHODS.sourceControlUpdateWorkItem
+      | typeof WS_METHODS.sourceControlCreateChildWorkItem,
+  >(
+    label: string,
+    tag: TTag,
+  ) =>
+    createEnvironmentRpcCommand(runtime, {
+      label,
+      tag,
+      scheduler: commandScheduler,
+      concurrency: {
+        mode: "serial",
+        key: ({ environmentId, input }) => `${environmentId}:${input.cwd}`,
+      },
+      onSettled: (target, registry) =>
+        Effect.sync(() =>
+          registry.refresh(
+            branchWorkItems({
+              environmentId: target.environmentId,
+              input: { cwd: target.input.cwd },
+            }),
+          ),
+        ),
+    });
   return {
+    branchWorkItems,
+    linkBranchWorkItem: workItemCommand(
+      "environment-data:source-control:link-branch-work-item",
+      WS_METHODS.sourceControlLinkBranchWorkItem,
+    ),
+    updateWorkItem: workItemCommand(
+      "environment-data:source-control:update-work-item",
+      WS_METHODS.sourceControlUpdateWorkItem,
+    ),
+    createChildWorkItem: workItemCommand(
+      "environment-data:source-control:create-child-work-item",
+      WS_METHODS.sourceControlCreateChildWorkItem,
+    ),
     discovery: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "environment-data:server:source-control-discovery",
       tag: WS_METHODS.serverDiscoverSourceControl,

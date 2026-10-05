@@ -1,5 +1,6 @@
 import * as Arr from "effect/Array";
 import * as Cache from "effect/Cache";
+import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
 import * as ByteSize from "effect/ByteSize";
@@ -68,7 +69,9 @@ import { extractBranchNameFromRemoteRef } from "./remoteRefs.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import type { GitManagerServiceError } from "@t3tools/contracts";
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
+import * as SourceControlProvider from "../sourceControl/SourceControlProvider.ts";
 import * as SourceControlProviderRegistry from "../sourceControl/SourceControlProviderRegistry.ts";
+import * as SourceControlRepositoryService from "../sourceControl/SourceControlRepositoryService.ts";
 import { detectPrTemplate } from "../sourceControl/PrTemplateDetection.ts";
 import type { ChangeRequest } from "@t3tools/contracts";
 
@@ -543,6 +546,37 @@ function sanitizeCommitMessage(generated: {
     body: generated.body.trim(),
     ...(generated.branch !== undefined ? { branch: generated.branch } : {}),
   };
+}
+
+/**
+ * Prefixes a generated subject with `#<id>: `. The model's pick stands only
+ * when it names a work item in the branch's family; anything else falls back
+ * to the branch's own work item.
+ */
+export function withWorkItemPrefix(
+  subject: string,
+  candidateIds: ReadonlyArray<number>,
+  fallbackId: number,
+): string {
+  const match = /^\s*#(\d+)\s*:?\s*/u.exec(subject);
+  const picked = match?.[1] === undefined ? null : Number(match[1]);
+  const id = picked !== null && candidateIds.includes(picked) ? picked : fallbackId;
+  const rest = match ? subject.slice(match[0].length) : subject;
+  return `#${id}: ${rest.trim() || "Update project files"}`;
+}
+
+function workItemCommitInstructions(
+  items: ReadonlyArray<SourceControlProvider.SourceControlWorkItem>,
+) {
+  return [
+    "Start the subject with `#<id>: ` using the work item below that this change implements.",
+    "Prefer a child task whose title matches the kind of change (implementation, tests, a finding); use the parent when none fits.",
+    "Do not add any other work item reference.",
+    ...items.map(
+      (item) =>
+        `- #${item.id}${item.parentId === null ? " (parent)" : ""} [${item.type ?? "Work item"}] ${item.title}`,
+    ),
+  ].join("\n");
 }
 
 function sanitizeProgressText(value: string): string | null {
@@ -1838,6 +1872,33 @@ export const make = Effect.gen(function* () {
       );
   });
 
+  /**
+   * The work item a branch is named after plus its children, or null when the
+   * branch names none or the provider has no work items. Never fails: a
+   * missing reference must not block a commit.
+   */
+  const readBranchWorkItems = Effect.fn("readBranchWorkItems")(
+    function* (cwd: string, branch: string | null) {
+      const resolved =
+        branch === null
+          ? null
+          : yield* SourceControlRepositoryService.resolveBranchWorkItemId(gitCore, cwd, branch);
+      if (resolved === null) return null;
+      const branchId = resolved.id;
+      const provider = yield* sourceControlProvider(cwd);
+      if (!provider.listWorkItemFamily) return null;
+      const items = yield* provider.listWorkItemFamily({ cwd, id: branchId });
+      return items.some((item) => item.id === branchId) ? { branchId, items } : null;
+    },
+    Effect.catchCause((cause) =>
+      Cause.hasInterruptsOnly(cause)
+        ? Effect.failCause(cause as Cause.Cause<never>)
+        : Effect.logWarning("work item lookup failed", { cause: Cause.pretty(cause) }).pipe(
+            Effect.as(null),
+          ),
+    ),
+  );
+
   const resolveCommitAndBranchSuggestion = Effect.fn("resolveCommitAndBranchSuggestion")(
     function* (input: {
       cwd: string;
@@ -1865,7 +1926,22 @@ export const make = Effect.gen(function* () {
         };
       }
 
-      const policy = yield* resolveStylePolicy(input.cwd, input.settings);
+      const basePolicy = yield* resolveStylePolicy(input.cwd, input.settings);
+      const workItems = input.settings.style.referenceWorkItems
+        ? yield* readBranchWorkItems(input.cwd, input.branch)
+        : null;
+      const policy =
+        workItems === null
+          ? basePolicy
+          : {
+              ...basePolicy,
+              commitInstructions: [
+                basePolicy.commitInstructions,
+                workItemCommitInstructions(workItems.items),
+              ]
+                .filter(Boolean)
+                .join("\n\n"),
+            };
 
       const generated = yield* textGeneration
         .generateCommitMessage({
@@ -1877,7 +1953,21 @@ export const make = Effect.gen(function* () {
           ...(policy ? { policy } : {}),
           modelSelection: input.settings.modelSelection,
         })
-        .pipe(Effect.map((result) => sanitizeCommitMessage(result)));
+        .pipe(
+          Effect.map((result) => sanitizeCommitMessage(result)),
+          Effect.map((result) =>
+            workItems === null
+              ? result
+              : {
+                  ...result,
+                  subject: withWorkItemPrefix(
+                    result.subject,
+                    workItems.items.map((item) => item.id),
+                    workItems.branchId,
+                  ),
+                },
+          ),
+        );
 
       return {
         subject: generated.subject,
@@ -2089,6 +2179,22 @@ export const make = Effect.gen(function* () {
       phase: "pr",
       label: `Creating ${terms.singular}...`,
     });
+    // Link the branch's work item and every one of its family the commits name.
+    const workItems = settings.style.referenceWorkItems
+      ? yield* readBranchWorkItems(cwd, branch)
+      : null;
+    const referenced = new Set(
+      Array.from(rangeContext.commitSummary.matchAll(/#(\d+)/gu), (match) => Number(match[1])),
+    );
+    const workItemIds =
+      workItems === null
+        ? []
+        : [
+            workItems.branchId,
+            ...workItems.items
+              .map((item) => item.id)
+              .filter((id) => id !== workItems.branchId && referenced.has(id)),
+          ];
     yield* provider
       .createChangeRequest({
         cwd,
@@ -2096,6 +2202,7 @@ export const make = Effect.gen(function* () {
         headSelector: headContext.preferredHeadSelector,
         title: generated.title,
         bodyFile,
+        ...(workItemIds.length > 0 ? { workItemIds } : {}),
       })
       .pipe(Effect.ensuring(fileSystem.remove(bodyFile).pipe(Effect.ignore)));
 

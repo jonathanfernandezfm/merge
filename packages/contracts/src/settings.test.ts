@@ -891,6 +891,7 @@ describe("ServerSettings.sourceControlWritingStyle", () => {
       mode: "repo_conventions",
       customInstructions: "",
       followChangeRequestTemplates: true,
+      referenceWorkItems: false,
     });
     expect(settings.sourceControlWriterModelSelection).toBeNull();
   });

@@ -107,6 +107,7 @@ import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { PullRequestEditButton } from "./PullRequestEditButton";
 import { Input } from "../ui/input";
+import { Textarea } from "../ui/textarea";
 import { Toggle, ToggleGroup } from "../ui/toggle-group";
 import {
   Menu,
@@ -157,6 +158,7 @@ import {
   resolveDisplayedPullRequestDetail,
   resolvePullRequestPrimaryControl,
   allowsSinglePullRequestMerge,
+  defaultPullRequestMergeMessage,
   resolveBaseFreshness,
   resolvePullRequestMergeMethod,
   type PullRequestFinding,
@@ -587,6 +589,8 @@ export function PullRequestDetailPanel({
     readonly action: "merge" | "close" | "enable-auto-merge" | "revert" | "approve-workflows";
   }>({ open: false, action: "merge" });
   const confirmAction = confirmation.action;
+  // Null until edited, so the dialog shows the default; blank leaves the message to the host.
+  const [editedMergeMessage, setEditedMergeMessage] = useState<string | null>(null);
   // Which handoff is preparing, keyed so a per-finding button can say "Preparing..." on itself
   // alone. One at a time whatever the key: they all check the same pull request out.
   const [handoff, setHandoff] = useState<string | null>(null);
@@ -960,6 +964,7 @@ export function PullRequestDetailPanel({
     action: PullRequestAction,
     method?: PullRequestMergeMethod,
     updateMethod?: PullRequestUpdateMethod,
+    message?: string,
   ) => {
     onActed?.(action, "sent");
     const result = await runAction({
@@ -968,6 +973,7 @@ export function PullRequestDetailPanel({
         ...reference,
         action,
         ...(method ? { mergeMethod: method } : {}),
+        ...(message?.trim() ? { mergeMessage: message } : {}),
         ...(updateMethod ? { updateMethod } : {}),
       },
     });
@@ -1011,10 +1017,11 @@ export function PullRequestDetailPanel({
     action: PullRequestAction,
     method?: PullRequestMergeMethod,
     updateMethod?: PullRequestUpdateMethod,
+    message?: string,
   ) => {
     if (pendingAction !== null) return false;
     setPendingAction(action);
-    return finishAction(action, method, updateMethod);
+    return finishAction(action, method, updateMethod, message);
   };
 
   const performCommentAction = async (body: string, action: "close" | "reopen") => {
@@ -1424,6 +1431,9 @@ export function PullRequestDetailPanel({
     lastSelectedMergeMethod,
   );
   const selectedMergeMethodLabel = PULL_REQUEST_MERGE_METHOD_LABELS[selectedMergeMethod];
+  const mergeMessage =
+    editedMergeMessage ??
+    (detail ? defaultPullRequestMergeMessage(detail.title, detail.headBranch) : "");
   const pendingAutoMergeLabel = `Auto-merge (${selectedMergeMethodLabel.toLowerCase()})`;
   const conflicting = detail?.state === "open" && detail.mergeability === "conflicting";
   // Only an outright yes arms it. A host that reports nothing has not said the merge is already
@@ -2809,7 +2819,10 @@ export function PullRequestDetailPanel({
         open={confirmation.open}
         onOpenChange={(open) => setConfirmation((current) => ({ ...current, open }))}
         onOpenChangeComplete={(open) => {
-          if (!open) setConfirmation({ open: false, action: "merge" });
+          if (!open) {
+            setConfirmation({ open: false, action: "merge" });
+            setEditedMergeMessage(null);
+          }
         }}
       >
         <AlertDialogPopup>
@@ -2839,6 +2852,17 @@ export function PullRequestDetailPanel({
                       ? `This allows ${workflowApprovalsRequired} ${workflowApprovalsRequired === 1 ? "workflow" : "workflows"} from #${reference.number} to run. Review the code and workflow changes first.`
                       : `This closes #${reference.number} without merging it.`}
             </AlertDialogDescription>
+            {/* A rebase writes no merge commit, so there is no message to change. */}
+            {(confirmAction === "merge" || confirmAction === "enable-auto-merge") &&
+            selectedMergeMethod !== "rebase" ? (
+              <Textarea
+                value={mergeMessage}
+                rows={4}
+                placeholder="Merge commit message. The first line is the subject; leave empty for the host's default."
+                aria-label="Merge commit message"
+                onChange={(event) => setEditedMergeMessage(event.target.value)}
+              />
+            ) : null}
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogClose render={<Button variant="outline" size="sm" />}>
@@ -2851,9 +2875,10 @@ export function PullRequestDetailPanel({
               onClick={() => {
                 const action = confirmAction;
                 setConfirmation((current) => ({ ...current, open: false }));
-                if (action === "merge") void perform("merge", selectedMergeMethod);
+                if (action === "merge")
+                  void perform("merge", selectedMergeMethod, undefined, mergeMessage);
                 if (action === "enable-auto-merge")
-                  void perform("enable-auto-merge", selectedMergeMethod);
+                  void perform("enable-auto-merge", selectedMergeMethod, undefined, mergeMessage);
                 if (action === "revert") void perform("revert");
                 if (action === "approve-workflows") void perform("approve-workflows");
                 if (action === "close") void perform("close");

@@ -132,6 +132,7 @@ export type TaskboardColumnId =
   | "needs-you"
   | "in-review"
   | "ready-to-merge"
+  | "merged"
   | "archive";
 
 /** The board's columns in order; `archive` renders as the collapsible footer. */
@@ -144,6 +145,7 @@ export const TASKBOARD_COLUMNS: ReadonlyArray<{
   { id: "needs-you", label: "Needs you", tone: "warning" },
   { id: "in-review", label: "In review", tone: "neutral" },
   { id: "ready-to-merge", label: "Ready to merge", tone: "success" },
+  { id: "merged", label: "Merged", tone: "success" },
   { id: "archive", label: "Archive", tone: "neutral" },
 ];
 
@@ -167,6 +169,7 @@ export function taskboardColumnForStatus(status: TaskStatus): TaskboardColumnId 
     case "merge-ready":
       return "ready-to-merge";
     case "merged":
+      return "merged";
     case "archived":
       return "archive";
     default: {
@@ -211,4 +214,32 @@ export function groupTaskboardTasks<K extends OrchestrationTaskShell, T extends 
     );
   }
   return columns;
+}
+
+/**
+ * Live tasks on the same branch as another live task: one piece of work split
+ * across repositories. Maps `keyOf(task)` to the other tasks on its branch;
+ * tasks without a sibling are absent.
+ */
+export function linkedTasksByKey<K extends OrchestrationTaskShell>(
+  tasks: ReadonlyArray<K>,
+  keyOf: (task: K) => string,
+): ReadonlyMap<string, ReadonlyArray<K>> {
+  const byBranch = new Map<string, K[]>();
+  for (const task of tasks) {
+    if (task.archivedAt !== null) continue;
+    const group = byBranch.get(task.workspace.branch);
+    if (group === undefined) byBranch.set(task.workspace.branch, [task]);
+    else group.push(task);
+  }
+  const linked = new Map<string, ReadonlyArray<K>>();
+  for (const group of byBranch.values()) {
+    if (group.length < 2) continue;
+    for (const task of group)
+      linked.set(
+        keyOf(task),
+        group.filter((other) => other !== task),
+      );
+  }
+  return linked;
 }

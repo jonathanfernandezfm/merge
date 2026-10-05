@@ -64,6 +64,7 @@ function makeLayer(input: {
       Layer.mock(SourceControlProviderRegistry.SourceControlProviderRegistry)({
         resolveLink: () => undefined,
         get: () => Effect.succeed(input.provider ?? makeProvider()),
+        resolve: () => Effect.succeed(input.provider ?? makeProvider()),
       }),
     ),
     Layer.provide(
@@ -548,3 +549,71 @@ it.effect("publish succeeds with status remote_added when the local repo has no 
     ),
   );
 });
+
+function gitWithBranch(branch: string, linked: string | null = null) {
+  return {
+    execute: (input: GitVcsDriver.ExecuteGitInput) =>
+      Effect.succeed({
+        ...processOutput(),
+        stdout: input.args[0] === "symbolic-ref" ? `${branch}\n` : "",
+      }),
+    readConfigValue: (_cwd: string, key: string) =>
+      Effect.succeed(key === `branch.${branch}.work-item` ? linked : null),
+  };
+}
+
+const FAMILY: ReadonlyArray<SourceControlProvider.SourceControlWorkItem> = [
+  { id: 7001, title: "Story", type: "Bug", state: "Committed", parentId: null, project: "P" },
+  { id: 7002, title: "Tests", type: "Task", state: "To Do", parentId: 7001, project: "P" },
+];
+
+it.effect("reads the branch's work item family with each type's states", () => {
+  const families: Array<number> = [];
+  const provider = makeProvider({
+    kind: "azure-devops",
+    listWorkItemFamily: (input) => Effect.sync(() => (families.push(input.id), FAMILY)),
+    listWorkItemStates: (input) =>
+      Effect.succeed([{ name: `${input.type} open`, category: "proposed" as const }]),
+  });
+  return Effect.gen(function* () {
+    const service = yield* SourceControlRepositoryService.SourceControlRepositoryService;
+    const result = yield* service.branchWorkItems({ cwd: "/repo" });
+
+    assert.deepStrictEqual(families, [7001]);
+    assert.strictEqual(result.source, "branch-name");
+    assert.strictEqual(result.root?.id, 7001);
+    assert.deepStrictEqual(
+      result.children.map((child) => child.id),
+      [7002],
+    );
+    assert.deepStrictEqual(result.states, {
+      Bug: [{ name: "Bug open", category: "proposed" }],
+      Task: [{ name: "Task open", category: "proposed" }],
+    });
+  }).pipe(Effect.provide(makeLayer({ provider, git: gitWithBranch("bugfix/#7001-fix") })));
+});
+
+it.effect("prefers a linked work item over the id in the branch name", () => {
+  const families: Array<number> = [];
+  const provider = makeProvider({
+    kind: "azure-devops",
+    listWorkItemFamily: (input) => Effect.sync(() => (families.push(input.id), [])),
+  });
+  return Effect.gen(function* () {
+    const service = yield* SourceControlRepositoryService.SourceControlRepositoryService;
+    const result = yield* service.branchWorkItems({ cwd: "/repo" });
+
+    assert.deepStrictEqual(families, [9001]);
+    assert.strictEqual(result.source, "linked");
+    assert.strictEqual(result.root, null);
+  }).pipe(Effect.provide(makeLayer({ provider, git: gitWithBranch("bugfix/#7001-fix", "9001") })));
+});
+
+it.effect("reports providers without work items as unsupported", () =>
+  Effect.gen(function* () {
+    const service = yield* SourceControlRepositoryService.SourceControlRepositoryService;
+    const result = yield* service.branchWorkItems({ cwd: "/repo" });
+    assert.strictEqual(result.supported, false);
+    assert.strictEqual(result.root, null);
+  }).pipe(Effect.provide(makeLayer({ git: gitWithBranch("feature/#7001") }))),
+);

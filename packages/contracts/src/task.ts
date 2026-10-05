@@ -57,9 +57,9 @@ export const OrchestrationTaskSetup = Schema.Struct({
 export type OrchestrationTaskSetup = typeof OrchestrationTaskSetup.Type;
 
 /**
- * The git worktree a task works in. Always checked out on an existing remote
- * branch (`remoteName/remoteBranch`) through the local tracking branch
- * `branch`; `path` is null until the worktree exists.
+ * The git worktree a task works in, checked out on the existing local branch
+ * `branch`, which tracks `remoteName/remoteBranch` once that exists on the
+ * remote; `path` is null until the worktree exists.
  */
 export const OrchestrationTaskWorkspace = Schema.Struct({
   path: Schema.NullOr(TrimmedNonEmptyString),
@@ -144,9 +144,20 @@ export const TaskCreateInput = Schema.Struct({
   description: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(20_000))),
   /** Defaults to the project's default remote (usually `origin`). */
   remoteName: Schema.optionalKey(TrimmedNonEmptyString),
-  /** An existing branch on the remote. Tasks never create remote branches. */
+  /** An existing local or remote branch. Tasks never create branches. */
   branch: TrimmedNonEmptyString,
   autoHandleReviewFeedback: Schema.optionalKey(Schema.Boolean),
+  /**
+   * A worktree that has `branch` checked out, as reported by a
+   * `branch-checked-out` error. It is switched to a detached HEAD (files and
+   * uncommitted changes stay) so the task can check the branch out itself.
+   */
+  detachCheckoutAt: Schema.optionalKey(TrimmedNonEmptyString),
+  /**
+   * An existing worktree of the project that has `branch` checked out. The
+   * task takes it over as its workspace instead of creating one.
+   */
+  worktreePath: Schema.optionalKey(TrimmedNonEmptyString),
 });
 export type TaskCreateInput = typeof TaskCreateInput.Type;
 
@@ -197,6 +208,7 @@ export const TaskOperationErrorReason = Schema.Literals([
   "archived",
   "remote-branch-missing",
   "invalid-branch",
+  "branch-checked-out",
   "archive-blocked",
   "not-implemented",
   "failed",
@@ -209,6 +221,8 @@ export class TaskOperationError extends Schema.TaggedError<TaskOperationError>()
     reason: TaskOperationErrorReason,
     message: TrimmedNonEmptyString,
     blockers: Schema.optional(Schema.Array(TaskArchiveBlocker)),
+    /** Set with `branch-checked-out`: the worktree holding the branch. */
+    checkoutPath: Schema.optional(TrimmedNonEmptyString),
     cause: Schema.optional(Schema.Defect()),
   },
 ) {}

@@ -735,6 +735,7 @@ export class GitHubPullRequestCli extends Context.Service<
       readonly stackNumber?: number;
       readonly expectedStackHeads?: ReadonlyArray<PullRequestStackHead>;
       readonly mergeMethod?: PullRequestMergeMethod;
+      readonly mergeMessage?: string;
       readonly updateMethod?: PullRequestUpdateMethod;
     }) => Effect.Effect<void, GitHubPullRequestCliError>;
 
@@ -1050,6 +1051,13 @@ function searchQuery(input: {
  */
 function cursorVariable(cursor: string | null): readonly [string, string] {
   return cursor === null ? ["-F", "cursor=null"] : ["-f", `cursor=${cursor}`];
+}
+
+/** A merge commit message as GitHub takes it: the first line is the subject, the rest the body. */
+function splitMergeMessage(message: string | undefined): { subject: string; body: string } | null {
+  if (!message?.trim()) return null;
+  const [subject = "", ...rest] = message.trim().split("\n");
+  return { subject: subject.trim(), body: rest.join("\n").trim() };
 }
 
 function actionArgs(
@@ -2642,10 +2650,24 @@ export const make = Effect.gen(function* () {
         input.mergeMethod,
         input.updateMethod,
       );
+      // A rebase writes no merge commit, so there is no message for it to carry.
+      const message =
+        (input.action === "merge" || input.action === "enable-auto-merge") &&
+        input.mergeMethod !== "rebase"
+          ? splitMergeMessage(input.mergeMessage)
+          : null;
       return github
         .execute({
           cwd: input.cwd,
-          args: ["pr", subcommand!, String(input.number), ...repositoryArgs(input), ...flags],
+          args: [
+            "pr",
+            subcommand!,
+            String(input.number),
+            ...repositoryArgs(input),
+            ...flags,
+            ...(message ? ["--subject", message.subject, "--body-file", "-"] : []),
+          ],
+          ...(message ? { stdin: message.body } : {}),
         })
         .pipe(Effect.asVoid);
     },

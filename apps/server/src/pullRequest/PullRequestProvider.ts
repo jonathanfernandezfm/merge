@@ -526,6 +526,8 @@ export interface PullRequestProviderApi {
       readonly expectedStackHeads?: ReadonlyArray<PullRequestStackHead>;
       /** Meaningful for `merge` and `enable-auto-merge`; absent takes the host's own default. */
       readonly mergeMethod?: PullRequestMergeMethod;
+      /** Merge commit message, first line as subject; absent takes the host's own. */
+      readonly mergeMessage?: string;
       /** Only meaningful for `update-branch`; absent takes the host's own default. */
       readonly updateMethod?: PullRequestUpdateMethod;
     },

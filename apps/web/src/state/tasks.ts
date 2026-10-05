@@ -2,6 +2,7 @@ import { useAtomValue } from "@effect/atom-react";
 import {
   createEnvironmentTaskAtoms,
   createTaskEnvironmentAtoms,
+  linkedTasksByKey,
   taskThreadsInOrder,
   type EnvironmentTask,
   type ScopedTaskRef,
@@ -13,6 +14,7 @@ import { Atom } from "effect/unstable/reactivity";
 
 import { environmentCatalog } from "../connection/catalog";
 import { connectionAtomRuntime } from "../connection/runtime";
+import { appAtomRegistry } from "../rpc/atomRegistry";
 import { environmentSnapshotAtom } from "./shell";
 import { environmentThreadShells } from "./threads";
 
@@ -67,6 +69,28 @@ const taskThreadsAtomFamily = Atom.family((key: string) => {
   }).pipe(Atom.withLabel(`web-task-threads:${key}`));
 });
 
+const EMPTY_TASKS: ReadonlyArray<EnvironmentTask> = Object.freeze([]);
+
+/** Each task's siblings on the same branch in other projects; arrays keep identity while unchanged. */
+const linkedTasksAtom = (() => {
+  let previous: ReadonlyMap<string, ReadonlyArray<EnvironmentTask>> = new Map();
+  return Atom.make((get) => {
+    const linked = linkedTasksByKey(get(environmentTasks.tasksAtom), (task) =>
+      taskRefKey({ environmentId: task.environmentId, taskId: task.id }),
+    );
+    const next = new Map<string, ReadonlyArray<EnvironmentTask>>();
+    for (const [key, siblings] of linked) {
+      const before = previous.get(key);
+      next.set(
+        key,
+        before !== undefined && arrayElementsEqual(before, siblings) ? before : siblings,
+      );
+    }
+    previous = next;
+    return next;
+  }).pipe(Atom.withLabel("web-linked-tasks"));
+})();
+
 function taskRefKey(ref: ScopedTaskRef): string {
   return `${ref.environmentId}\u0000${ref.taskId}`;
 }
@@ -101,6 +125,22 @@ export function useTaskThreadsByTask(): ReadonlyMap<string, ReadonlyArray<Enviro
   return useAtomValue(taskThreadsByTaskAtom);
 }
 
+/** Every task's linked siblings, keyed like `taskThreadsKey`. */
+export function useLinkedTasksByTask(): ReadonlyMap<string, ReadonlyArray<EnvironmentTask>> {
+  return useAtomValue(linkedTasksAtom);
+}
+
 export function taskThreadsKey(environmentId: EnvironmentId, taskId: TaskId): string {
   return taskRefKey({ environmentId, taskId });
+}
+
+export function readLinkedTasks(task: EnvironmentTask): ReadonlyArray<EnvironmentTask> {
+  return (
+    appAtomRegistry.get(linkedTasksAtom).get(taskThreadsKey(task.environmentId, task.id)) ??
+    EMPTY_TASKS
+  );
+}
+
+export function readTaskThreadShells(ref: ScopedTaskRef): ReadonlyArray<EnvironmentThreadShell> {
+  return appAtomRegistry.get(taskThreadsAtomFamily(taskRefKey(ref)));
 }

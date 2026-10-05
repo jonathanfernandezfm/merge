@@ -92,6 +92,47 @@ export function sourceControlRefFromInput(input: {
   return input.source ?? parseSourceControlOwnerRef(input.headSelector);
 }
 
+/** A tracked work item (Azure Boards) that commits and change requests can reference. */
+export interface SourceControlWorkItem {
+  readonly id: number;
+  readonly title: string;
+  readonly type: string | null;
+  readonly state: string | null;
+  readonly parentId: number | null;
+  readonly assignedTo?: string | null;
+  /** Azure Boards project the item lives in; needed to read its type's states. */
+  readonly project?: string | null;
+  readonly url?: string | null;
+  readonly details?: SourceControlWorkItemDetails;
+}
+
+/** Long-form fields; providers fill them only for the item a family was read for. */
+export interface SourceControlWorkItemDetails {
+  readonly descriptionHtml: string | null;
+  readonly criteriaHtml: string | null;
+  readonly criteriaLabel: "Acceptance criteria" | "Repro steps";
+  readonly sprint: string | null;
+  readonly priority: number | null;
+  readonly tags: ReadonlyArray<string>;
+  readonly createdAt: string | null;
+  readonly updatedAt: string | null;
+  readonly stateChangedAt: string | null;
+}
+
+export interface SourceControlWorkItemState {
+  readonly name: string;
+  readonly category: "proposed" | "in-progress" | "resolved" | "completed" | "removed";
+}
+
+/**
+ * The work item a branch is named after: the first 4+ digit run that stands
+ * alone between separators, as in `feature/#123456-x` or `bugfix/ESP-123456`.
+ */
+export function workItemIdFromBranch(branch: string): number | null {
+  const match = /(?:^|[/#_-])(\d{4,})(?=$|[/_-])/u.exec(branch);
+  return match?.[1] === undefined ? null : Number(match[1]);
+}
+
 export class SourceControlProvider extends Context.Service<
   SourceControlProvider,
   {
@@ -120,7 +161,35 @@ export class SourceControlProvider extends Context.Service<
       readonly headSelector: string;
       readonly title: string;
       readonly bodyFile: string;
+      /** Work items to link; providers without work items ignore them. */
+      readonly workItemIds?: ReadonlyArray<number>;
     }) => Effect.Effect<void, SourceControlProviderError>;
+    /** Optional capability: a work item and its direct children. */
+    readonly listWorkItemFamily?: (input: {
+      readonly cwd: string;
+      readonly context?: SourceControlProviderContext;
+      readonly id: number;
+    }) => Effect.Effect<ReadonlyArray<SourceControlWorkItem>, SourceControlProviderError>;
+    /** Optional capability: the states a work item type moves through. */
+    readonly listWorkItemStates?: (input: {
+      readonly cwd: string;
+      readonly project: string;
+      readonly type: string;
+    }) => Effect.Effect<ReadonlyArray<SourceControlWorkItemState>, SourceControlProviderError>;
+    /** Optional capability: change a work item's state or assign it to the CLI user. */
+    readonly updateWorkItem?: (input: {
+      readonly cwd: string;
+      readonly id: number;
+      readonly state?: string;
+      readonly assignToMe?: boolean;
+    }) => Effect.Effect<void, SourceControlProviderError>;
+    /** Optional capability: a new work item under `parentId`, in the parent's area and iteration. */
+    readonly createChildWorkItem?: (input: {
+      readonly cwd: string;
+      readonly parentId: number;
+      readonly type: string;
+      readonly title: string;
+    }) => Effect.Effect<{ readonly id: number }, SourceControlProviderError>;
     readonly getRepositoryCloneUrls: (input: {
       readonly cwd: string;
       readonly context?: SourceControlProviderContext;

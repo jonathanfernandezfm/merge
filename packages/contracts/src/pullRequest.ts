@@ -1072,6 +1072,11 @@ export const PullRequestActionInput = Schema.Struct({
    * than at the moment it happens. Absent means the host's own default.
    */
   mergeMethod: Schema.optional(PullRequestMergeMethod),
+  /**
+   * The merge commit's message, first line as its subject. Read for `merge` and
+   * `enable-auto-merge`; absent or blank means the host's own message.
+   */
+  mergeMessage: Schema.optional(Schema.String.check(Schema.isMaxLength(65_536))),
   /** Only read for `update-branch`, where absent means the host's own default. */
   updateMethod: Schema.optional(PullRequestUpdateMethod),
 });
