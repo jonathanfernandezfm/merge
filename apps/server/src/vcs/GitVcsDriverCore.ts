@@ -201,7 +201,7 @@ const REVIEW_COMMIT_LIMIT = 200;
 // Unit separators between fields and a record separator per commit survive any commit message.
 const REVIEW_COMMIT_FORMAT = "%H%x1f%P%x1f%an%x1f%ae%x1f%aI%x1f%D%x1f%s%x1f%b%x1e";
 
-export function parseReviewCommitLog(stdout: string): ReviewCommit[] {
+function parseReviewCommitLog(stdout: string): ReviewCommit[] {
   const commits: ReviewCommit[] = [];
   for (const record of stdout.split("\x1e")) {
     const fields = record.replace(/^\n/, "").split("\x1f");
