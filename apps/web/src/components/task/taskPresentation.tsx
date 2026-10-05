@@ -126,8 +126,7 @@ export function TaskStatusLabel({
     <span
       className={cn(
         "inline-flex min-w-0 items-center gap-1.5",
-        // Merged keeps the merge purple of its sidebar icon rather than the generic success tone.
-        status === "merged" ? TASK_STATUS_ICON_CLASS.merged : TONE_CLASS[presentation.tone],
+        TONE_CLASS[presentation.tone],
         className,
       )}
       {...(compact ? { role: "img", "aria-label": presentation.label } : {})}
