@@ -201,6 +201,7 @@ const ACTION_SUCCESS_LABELS: Record<PullRequestAction, string> = {
   "disable-auto-merge": "Auto-merge turned off",
   revert: "Revert pull request opened",
   "approve-workflows": "Workflows approved",
+  "requeue-checks": "Expired checks queued again",
 };
 
 /** Said as the thing that did not happen, rather than as the operation that returned an error. */
@@ -215,6 +216,7 @@ const ACTION_FAILURE_LABELS: Record<PullRequestAction, string> = {
   "disable-auto-merge": "Could not turn off auto-merge",
   revert: "Could not open a revert pull request",
   "approve-workflows": "Could not approve workflows",
+  "requeue-checks": "Could not queue the expired checks",
 };
 
 /** What to try, for the times the host says only that it refused. */
@@ -240,6 +242,8 @@ const ACTION_FAILURE_HINTS: Record<PullRequestAction, string> = {
     "The host refused it. Check that you have write access and that this pull request was merged on the host.",
   "approve-workflows":
     "The host refused it. Check that you have Actions write access and that these workflow runs are still awaiting approval.",
+  "requeue-checks":
+    "The host refused it. Check that you have permission to queue builds for this repository.",
 };
 
 /**
@@ -1445,6 +1449,11 @@ export function PullRequestDetailPanel({
     : "Auto-merge";
   const workflowApprovalsRequired =
     detail?.state === "open" ? (detail.workflowApprovalsRequired ?? 0) : 0;
+  // Azure keeps an expired build as a required check, so it holds the merge until queued again.
+  const expiredChecks =
+    detail?.state === "open"
+      ? detail.checks.filter((check) => check.status === "expired").length
+      : 0;
   // Out of date with the base, and still cleanly mergeable — the one pairing an update button
   // exists for. Null everywhere else, including hosts that cannot compare at all.
   const freshness = detail === null ? null : resolveBaseFreshness(detail);
@@ -2596,6 +2605,20 @@ export function PullRequestDetailPanel({
                         : "Approve workflows to run"}
                     </TooltipPopup>
                   </Tooltip>
+                ) : expiredChecks > 0 && !checksStale && can("requeue-checks") ? (
+                  <Button
+                    size="xs"
+                    variant="warning-outline"
+                    disabled={actionPending}
+                    onClick={() => void perform("requeue-checks")}
+                  >
+                    <RotateCcwIcon aria-hidden className="size-3.5" />
+                    <span>
+                      {pendingAction === "requeue-checks"
+                        ? "Queuing..."
+                        : `Re-queue ${expiredChecks} expired ${expiredChecks === 1 ? "check" : "checks"}`}
+                    </span>
+                  </Button>
                 ) : (
                   <span
                     className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"
@@ -2840,7 +2863,11 @@ export function PullRequestDetailPanel({
             </AlertDialogTitle>
             <AlertDialogDescription>
               {confirmAction === "merge"
-                ? `This merges #${reference.number} using ${selectedMergeMethod}.`
+                ? `This merges #${reference.number} using ${selectedMergeMethod}.${
+                    expiredChecks > 0
+                      ? ` ${expiredChecks} required ${expiredChecks === 1 ? "check has" : "checks have"} expired, and the host will refuse the merge until ${expiredChecks === 1 ? "it is" : "they are"} queued again.`
+                      : ""
+                  }`
                 : confirmAction === "enable-auto-merge"
                   ? // The host merges this as soon as it considers the pull request ready, which
                     // may be immediately — there is no telling from here whether anything is

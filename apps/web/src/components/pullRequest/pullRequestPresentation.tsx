@@ -14,6 +14,7 @@ import {
   CircleDashedIcon,
   CircleDotIcon,
   CircleXIcon,
+  TimerOffIcon,
   UserCheckIcon,
   UserRoundIcon,
   UserRoundXIcon,
@@ -226,6 +227,7 @@ const CHECK_STATUS_PRESENTATION = {
   cancelled: { label: "Cancelled", Icon: CircleXIcon, toneClassName: "text-destructive" },
   skipped: { label: "Skipped", Icon: CircleDashedIcon, toneClassName: "text-muted-foreground/70" },
   neutral: { label: "Neutral", Icon: CircleDashedIcon, toneClassName: "text-muted-foreground/70" },
+  expired: { label: "Expired", Icon: TimerOffIcon, toneClassName: "text-muted-foreground/70" },
 } as const satisfies Record<
   PullRequestCheckStatus,
   { label: string; Icon: typeof CircleCheckIcon | typeof Spinner; toneClassName: string }
@@ -579,6 +581,7 @@ export function summarizePullRequestChecks(checks: ReadonlyArray<PullRequestChec
   ).length;
   const pending = checks.filter((check) => check.status === "pending").length;
   const passed = checks.filter((check) => check.status === "success").length;
+  const expired = checks.filter((check) => check.status === "expired").length;
   if (failed > 0) return `${failed} of ${checks.length} failing`;
   if (workflowApprovalRequired > 0 && otherActionRequired > 0) {
     return `${workflowApprovalRequired} ${workflowApprovalRequired === 1 ? "workflow" : "workflows"} and ${otherActionRequired} ${otherActionRequired === 1 ? "check" : "checks"} awaiting action`;
@@ -590,5 +593,6 @@ export function summarizePullRequestChecks(checks: ReadonlyArray<PullRequestChec
     return `${otherActionRequired} ${otherActionRequired === 1 ? "check" : "checks"} awaiting action`;
   }
   if (pending > 0) return `${pending} of ${checks.length} running`;
+  if (expired > 0) return `${expired} of ${checks.length} expired`;
   return passed === checks.length ? "All checks passed" : `${passed} of ${checks.length} passing`;
 }

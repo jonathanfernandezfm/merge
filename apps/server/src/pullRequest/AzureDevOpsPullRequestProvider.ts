@@ -68,6 +68,7 @@ const CAPABILITIES: PullRequestCapabilities = {
     "reopen",
     "enable-auto-merge",
     "disable-auto-merge",
+    "requeue-checks",
   ],
   // Azure squashes as a completion option; it has no rebase strategy of its own.
   mergeMethods: ["merge", "squash"],

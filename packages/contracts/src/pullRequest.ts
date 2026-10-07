@@ -98,6 +98,8 @@ export const PullRequestAction = Schema.Literals([
   "revert",
   /** Allow Actions workflows from a fork pull request to begin running. */
   "approve-workflows",
+  /** Queue expired checks again, which is what Azure needs before it will complete. */
+  "requeue-checks",
 ]);
 export type PullRequestAction = typeof PullRequestAction.Type;
 
@@ -144,6 +146,11 @@ export const PullRequestCheckStatus = Schema.Literals([
   "skipped",
   "neutral",
   "cancelled",
+  /**
+   * A result the host no longer counts, such as an Azure build policy past its expiry. It still
+   * holds the merge, so it is neither passing nor running, and it is not a failure either.
+   */
+  "expired",
 ]);
 export type PullRequestCheckStatus = typeof PullRequestCheckStatus.Type;
 

@@ -1091,6 +1091,9 @@ function actionArgs(
     // pull request itself.
     case "approve-workflows":
       throw new Error("Workflow approval requires run discovery");
+    // Never reached: this host does not declare the action, so the service refuses it first.
+    case "requeue-checks":
+      throw new Error("GitHub pull request action requeue-checks is unsupported");
   }
 }
 

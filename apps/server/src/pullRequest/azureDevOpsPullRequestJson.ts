@@ -509,8 +509,15 @@ const RawPolicyEvaluationSchema = Schema.Struct({
       }),
     ),
   ),
+  evaluationId: Schema.optional(Schema.NullOr(Schema.String)),
   context: Schema.optional(
-    Schema.NullOr(Schema.Struct({ buildId: Schema.optional(Schema.NullOr(Schema.Number)) })),
+    Schema.NullOr(
+      Schema.Struct({
+        buildId: Schema.optional(Schema.NullOr(Schema.Number)),
+        /** Azure resets an expired build to `queued` and says so only here. */
+        isExpired: Schema.optional(Schema.NullOr(Schema.Boolean)),
+      }),
+    ),
   ),
 });
 
@@ -528,8 +535,12 @@ const decodePolicyEvaluationEntry = Schema.decodeUnknownExit(RawPolicyEvaluation
 function toCheckStatus(
   status: string | null | undefined,
   isBlocking: boolean,
+  isExpired: boolean,
 ): PullRequestCheck["status"] {
-  switch (status?.trim().toLowerCase()) {
+  const normalized = status?.trim().toLowerCase();
+  // An expired build reads `queued` but nothing is running: it waits for someone to queue it.
+  if (isExpired && (normalized === "queued" || normalized === "running")) return "expired";
+  switch (normalized) {
     case "approved":
       return "success";
     case "notapplicable":
@@ -588,7 +599,7 @@ export function decodePolicyEvaluationsJson(
     const buildId = evaluation.context?.buildId;
     checks.push({
       name,
-      status: toCheckStatus(evaluation.status, isBlocking),
+      status: toCheckStatus(evaluation.status, isBlocking, evaluation.context?.isExpired === true),
       description: isBlocking ? null : "Optional",
       url:
         isBuild && projectUrl !== null && typeof buildId === "number"
@@ -597,6 +608,27 @@ export function decodePolicyEvaluationsJson(
     });
   }
   return Result.succeed(checks);
+}
+
+/**
+ * The evaluations of a `az repos pr policy list` answer that have expired, which are the ones
+ * `az repos pr policy queue` has to be given to run again.
+ */
+export function decodeExpiredPolicyEvaluationIds(
+  raw: string,
+): Result.Result<ReadonlyArray<string>, DecodeFailure> {
+  const decoded = decodePolicyEvaluationList(raw.length === 0 ? "[]" : raw);
+  if (!Result.isSuccess(decoded)) return Result.fail(decoded.failure);
+  const entries = "value" in decoded.success ? decoded.success.value : decoded.success;
+  const ids: string[] = [];
+  for (const entry of entries) {
+    const decodedEvaluation = decodePolicyEvaluationEntry(entry);
+    if (Exit.isFailure(decodedEvaluation)) continue;
+    const evaluation = decodedEvaluation.value;
+    const id = trimmed(evaluation.evaluationId);
+    if (id !== null && evaluation.context?.isExpired === true) ids.push(id);
+  }
+  return Result.succeed(ids);
 }
 
 /**

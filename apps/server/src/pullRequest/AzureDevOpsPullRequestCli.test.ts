@@ -527,6 +527,41 @@ layer("AzureDevOpsPullRequestCli.layer", (it) => {
     }),
   );
 
+  it.effect("queues each expired policy again, and only those", () =>
+    Effect.gen(function* () {
+      mockedExecute
+        .mockReturnValueOnce(
+          Effect.succeed(
+            output(
+              `[{"evaluationId":"e1","status":"queued","context":{"isExpired":true}},` +
+                `{"evaluationId":"e2","status":"approved","context":{"isExpired":false}}]`,
+            ),
+          ),
+        )
+        .mockReturnValue(Effect.succeed(output("{}")));
+      const cli = yield* AzureDevOpsPullRequestCli.AzureDevOpsPullRequestCli;
+
+      yield* cli.runPullRequestAction({ cwd: "/w", number: 42, action: "requeue-checks" });
+
+      expect(mockedExecute).toHaveBeenCalledTimes(2);
+      expect(argsOfCall(1)).toEqual([
+        "repos",
+        "pr",
+        "policy",
+        "queue",
+        "--detect",
+        "true",
+        "--id",
+        "42",
+        "--evaluation-id",
+        "e1",
+        "--only-show-errors",
+        "--output",
+        "json",
+      ]);
+    }),
+  );
+
   it.effect.each([
     { action: "enable-auto-merge", expected: ["--auto-complete", "true"] },
     { action: "disable-auto-merge", expected: ["--auto-complete", "false"] },

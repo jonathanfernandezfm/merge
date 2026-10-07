@@ -102,6 +102,10 @@ describe("taskChecksState", () => {
     expect(
       taskChecksState(null, [{ name: "a", status: "skipped", description: null, url: null }], null),
     ).toBe("passing");
+    // An expired check holds the merge, but the task should not read as failing or running.
+    expect(
+      taskChecksState(null, [{ name: "a", status: "expired", description: null, url: null }], null),
+    ).toBe("passing");
     expect(taskChecksState(null, [], "passing")).toBe("none");
     expect(taskChecksState(null, null, "pending")).toBe("pending");
   });

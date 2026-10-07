@@ -296,6 +296,7 @@ const ACTION_ACCESS_REFUSALS: Record<PullRequestAction, string> = {
   revert: "You need write access on this repository to open a revert pull request.",
   "approve-workflows":
     "You need write access on this repository to approve workflows from a fork pull request.",
+  "requeue-checks": "You need write access on this repository to queue its checks again.",
 };
 
 /**

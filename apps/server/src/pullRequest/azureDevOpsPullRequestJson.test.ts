@@ -8,6 +8,7 @@ import {
   decodeItemContentJson,
   decodeIterationChangesJson,
   decodeIterationsJson,
+  decodeExpiredPolicyEvaluationIds,
   decodePolicyEvaluationsJson,
   decodePullRequestJson,
   decodePullRequestListJson,
@@ -730,6 +731,30 @@ describe("decodePolicyEvaluationsJson", () => {
       { name: "sonarcloud/quality-gate", status: "pending", description: null, url: null },
       { name: "Docs build", status: "skipped", description: null, url: null },
     ]);
+  });
+
+  it("reads an expired build as expired rather than queued, and names it for requeue", () => {
+    const raw = asJson([
+      {
+        evaluationId: "eval-expired",
+        status: "queued",
+        configuration: { type: { displayName: "Build" }, settings: { displayName: "Compliance" } },
+        context: { buildId: 530658, isExpired: true },
+      },
+      {
+        evaluationId: "eval-live",
+        status: "queued",
+        configuration: { type: { displayName: "Build" }, settings: { displayName: "CI" } },
+        context: { buildId: 530659, isExpired: false },
+      },
+    ]);
+
+    expect(
+      expectSuccess(decodePolicyEvaluationsJson(raw, PULL_REQUEST_URL)).map(
+        (check) => check.status,
+      ),
+    ).toEqual(["expired", "pending"]);
+    expect(expectSuccess(decodeExpiredPolicyEvaluationIds(raw))).toEqual(["eval-expired"]);
   });
 
   it("reads no policies at all as no checks", () => {

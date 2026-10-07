@@ -17,6 +17,7 @@ import {
   decodeIterationChangesJson,
   decodeIterationsJson,
   decodePullRequestJson,
+  decodeExpiredPolicyEvaluationIds,
   decodePolicyEvaluationsJson,
   decodePullRequestListJson,
   decodeThreadsJson,
@@ -347,6 +348,8 @@ function actionArgs(
     // Never reached: this host does not declare the action, so the service refuses it first.
     case "revert":
     case "approve-workflows":
+    // Queued through `az repos pr policy queue` instead; `runPullRequestAction` routes it there.
+    case "requeue-checks":
       throw new Error(`Azure DevOps pull request action ${action} is unsupported`);
   }
 }
@@ -380,6 +383,49 @@ export const make = Effect.gen(function* () {
       args: [...input.args, "--only-show-errors", "--output", "json"],
       ...(input.maxOutputBytes === undefined ? {} : { maxOutputBytes: input.maxOutputBytes }),
     });
+
+  // Each expired evaluation is queued on its own. The list is read fresh here so no evaluation
+  // id has to travel to the client and back.
+  const requeueExpiredPolicies = (input: { readonly cwd: string; readonly number: number }) =>
+    executeJson({
+      cwd: input.cwd,
+      args: ["repos", "pr", "policy", "list", ...detectArgs, "--id", String(input.number)],
+    }).pipe(
+      Effect.flatMap((result) => {
+        const decoded = decodeExpiredPolicyEvaluationIds(result.stdout.trim());
+        return Result.isSuccess(decoded)
+          ? Effect.succeed(decoded.success)
+          : Effect.fail(
+              new AzureDevOpsPullRequestReadError({
+                command: "az",
+                cwd: input.cwd,
+                operation: "requeueChecks",
+                cause: decoded.failure,
+              }),
+            );
+      }),
+      Effect.flatMap((evaluationIds) =>
+        Effect.forEach(
+          evaluationIds,
+          (evaluationId) =>
+            executeJson({
+              cwd: input.cwd,
+              args: [
+                "repos",
+                "pr",
+                "policy",
+                "queue",
+                ...detectArgs,
+                "--id",
+                String(input.number),
+                "--evaluation-id",
+                evaluationId,
+              ],
+            }),
+          { discard: true },
+        ),
+      ),
+    );
 
   /**
    * A REST route reached through `az devops invoke`, which addresses it by area, resource and
@@ -744,23 +790,31 @@ export const make = Effect.gen(function* () {
             .pipe(Effect.asVoid),
 
     runPullRequestAction: (input) =>
-      azure
-        .execute({
-          cwd: input.cwd,
-          args: [
-            "repos",
-            "pr",
-            "update",
-            ...detectArgs,
-            "--id",
-            String(input.number),
-            ...actionArgs(input.action, input.mergeMethod, input.mergeMessage),
-            "--only-show-errors",
-            "--output",
-            "json",
-          ],
-        })
-        .pipe(Effect.asVoid),
+      input.action === "requeue-checks"
+        ? requeueExpiredPolicies(input)
+        : azure
+            .execute({
+              cwd: input.cwd,
+              args: [
+                "repos",
+                "pr",
+                "update",
+                ...detectArgs,
+                "--id",
+                String(input.number),
+                ...actionArgs(input.action, input.mergeMethod, input.mergeMessage),
+                "--only-show-errors",
+                "--output",
+                "json",
+              ],
+            })
+            .pipe(
+              // Azure never re-runs an expired build by itself, so auto-complete would wait on it
+              // forever. Queuing them is best effort: auto-complete is already set either way.
+              input.action === "enable-auto-merge"
+                ? Effect.andThen(requeueExpiredPolicies(input).pipe(Effect.ignore))
+                : Effect.asVoid,
+            ),
 
     updatePullRequest: (input) =>
       azure

@@ -536,6 +536,7 @@ function actionArgs(
     // Never reached: this host does not declare the action, so the service refuses it first.
     case "revert":
     case "approve-workflows":
+    case "requeue-checks":
       throw new Error(`GitLab merge request action ${action} is unsupported`);
   }
 }
