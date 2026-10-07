@@ -49,6 +49,7 @@ import { Label } from "../ui/label";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Spinner } from "../ui/spinner";
 import { Textarea } from "../ui/textarea";
+import { toastManager } from "../ui/toast";
 import { taskTitleFromBranch } from "./taskTitleFromBranch";
 
 interface NewTaskDialogTarget {
@@ -471,8 +472,6 @@ function ArchiveTaskDialog({ taskRef, onClose }: { taskRef: ScopedTaskRef; onClo
   const [blockers, setBlockers] = useState<ReadonlyArray<TaskArchiveBlocker> | null>(null);
   const [checking, setChecking] = useState(true);
   const [checkError, setCheckError] = useState<string | null>(null);
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   // Only the latest check may settle the dialog; unmounting invalidates it too.
   const checkIdRef = useRef(0);
 
@@ -507,10 +506,22 @@ function ArchiveTaskDialog({ taskRef, onClose }: { taskRef: ScopedTaskRef; onClo
     void runCheck();
   };
 
+  // Archiving removes the worktree and can take a while, so the dialog closes
+  // right away and a toast tracks the outcome. The command runs through the
+  // atom registry, so it survives this dialog unmounting.
   const confirm = async () => {
     if (blockers === null) return;
-    setPending(true);
-    setError(null);
+    const title = task?.title ?? "task";
+    onClose();
+    // The open thread now belongs to an archived task and can no longer run
+    // turns. The Taskboard lists archived tasks; the task route would race the
+    // thread.archived shell events and redirect back to the stale thread.
+    void navigate({ to: "/taskboard" });
+    const toastId = toastManager.add({
+      type: "loading",
+      title: `Archiving ${title}...`,
+      timeout: 0,
+    });
     const result = await archiveTask({
       environmentId: taskRef.environmentId,
       input: {
@@ -518,32 +529,27 @@ function ArchiveTaskDialog({ taskRef, onClose }: { taskRef: ScopedTaskRef; onClo
         ...(blockers.length > 0 ? { force: true } : {}),
       },
     });
-    setPending(false);
     if (result._tag === "Success") {
-      onClose();
-      // The open thread now belongs to an archived task and can no longer run
-      // turns. The Taskboard lists archived tasks; the task route would race the
-      // thread.archived shell events and redirect back to the stale thread.
-      await navigate({ to: "/taskboard" });
+      toastManager.update(toastId, { type: "success", title: `Archived ${title}`, timeout: 4000 });
       return;
     }
     // A blocker can appear between the check and the archive (an agent
-    // started); show it and ask again instead of archiving anyway.
-    const failure = squashAtomCommandFailure(result);
-    if (
-      typeof failure === "object" &&
-      failure !== null &&
-      "blockers" in failure &&
-      Array.isArray(failure.blockers)
-    ) {
-      setBlockers(failure.blockers as ReadonlyArray<TaskArchiveBlocker>);
-    }
-    setError(commandErrorMessage(result, "Could not archive the task."));
+    // started); offer to review it instead of archiving anyway.
+    toastManager.update(toastId, {
+      type: "error",
+      title: `Could not archive ${title}`,
+      description: commandErrorMessage(result, "Could not archive the task."),
+      timeout: 0,
+      actionProps: {
+        children: "Review",
+        onClick: () => openArchiveTaskDialog(taskRef),
+      },
+    });
   };
 
   const hasBlockers = blockers !== null && blockers.length > 0;
   return (
-    <Dialog open onOpenChange={(open) => (!open && !pending ? onClose() : undefined)}>
+    <Dialog open onOpenChange={(open) => (!open ? onClose() : undefined)}>
       <DialogPopup className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Archive {task?.title ?? "task"}?</DialogTitle>
@@ -577,20 +583,18 @@ function ArchiveTaskDialog({ taskRef, onClose }: { taskRef: ScopedTaskRef; onClo
               </ul>
             </div>
           ) : null}
-          {error !== null ? <p className="text-destructive text-xs">{error}</p> : null}
         </DialogPanel>
         <DialogFooter>
-          <Button type="button" variant="outline" size="sm" onClick={onClose} disabled={pending}>
+          <Button type="button" variant="outline" size="sm" onClick={onClose}>
             Cancel
           </Button>
           <Button
             type="button"
             size="sm"
             variant="destructive"
-            disabled={pending || checking || blockers === null}
+            disabled={checking || blockers === null}
             onClick={() => void confirm()}
           >
-            {pending ? <Spinner /> : null}
             {hasBlockers ? "Archive anyway" : "Archive task"}
           </Button>
         </DialogFooter>
@@ -651,7 +655,6 @@ function WaitingReasonDialog({
               void submit();
             }}
           />
-          {error !== null ? <p className="text-destructive text-xs">{error}</p> : null}
         </DialogPanel>
         <DialogFooter>
           <Button type="button" variant="outline" size="sm" onClick={onClose} disabled={pending}>
