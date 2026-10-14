@@ -622,6 +622,14 @@ describe("ClientSettings sidebar", () => {
     expect(decodeClientSettingsPatch(stored)).toEqual({});
   });
 
+  it("shows the Tasks section unless turned off", () => {
+    expect(decodeClientSettings({}).sidebarTasksEnabled).toBe(true);
+    expect(decodeClientSettings({ sidebarTasksEnabled: false }).sidebarTasksEnabled).toBe(false);
+    expect(decodeClientSettingsPatch({ sidebarTasksEnabled: false }).sidebarTasksEnabled).toBe(
+      false,
+    );
+  });
+
   it("preserves an explicit legacy sidebar opt-in", () => {
     expect(decodeClientSettings({ legacySidebarEnabled: true }).legacySidebarEnabled).toBe(true);
     expect(decodeClientSettingsPatch({ legacySidebarEnabled: true }).legacySidebarEnabled).toBe(

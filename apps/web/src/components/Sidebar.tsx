@@ -2185,6 +2185,7 @@ export default function Sidebar() {
   const confirmThreadArchive = useClientSettings((s) => s.confirmThreadArchive);
   const sidebarProjectSortOrder = useClientSettings((s) => s.sidebarProjectSortOrder);
   const timestampFormat = useClientSettings((s) => s.timestampFormat);
+  const sidebarTasksEnabled = useClientSettings((s) => s.sidebarTasksEnabled);
   const projectGroupingSettings = useClientSettings(selectProjectGroupingSettings);
   const {
     settleThread,
@@ -4604,8 +4605,11 @@ export default function Sidebar() {
           </SidebarGroup>
         }
       >
-        <SidebarTasks searchQuery={threadSearchQuery} />
+        {sidebarTasksEnabled ? <SidebarTasks searchQuery={threadSearchQuery} /> : null}
         <SidebarGroup className="flex-1" role="presentation">
+          <div className="flex h-8 shrink-0 items-center ps-2 text-sm text-sidebar-muted-foreground/70">
+            Threads
+          </div>
           {isSearchingThreads ? (
             threadSearchResults.length > 0 ? (
               <TooltipProvider

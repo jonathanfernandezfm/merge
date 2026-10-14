@@ -573,6 +573,9 @@ export function useSettingsRestore(onRestored?: () => void) {
       DEFAULT_UNIFIED_SETTINGS.sidebarProjectGroupingMode
         ? ["Project Grouping"]
         : []),
+      ...(settings.sidebarTasksEnabled !== DEFAULT_UNIFIED_SETTINGS.sidebarTasksEnabled
+        ? ["Tasks in sidebar"]
+        : []),
       ...(settings.sidebarAutoSettleAfterDays !==
       DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleAfterDays
         ? ["Auto-settle inactive threads"]
@@ -694,6 +697,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.sidebarAutoSettleAfterDays,
       settings.sidebarAutoSettleOnMerge,
       settings.sidebarProjectGroupingMode,
+      settings.sidebarTasksEnabled,
       settings.sidebarThreadPreviewCount,
       settings.showSkillsInSlashMenu,
       settings.timestampFormat,
@@ -797,6 +801,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       panelAnimationDurationMs: DEFAULT_UNIFIED_SETTINGS.panelAnimationDurationMs,
       sidebarThreadPreviewCount: DEFAULT_UNIFIED_SETTINGS.sidebarThreadPreviewCount,
       sidebarProjectGroupingMode: DEFAULT_UNIFIED_SETTINGS.sidebarProjectGroupingMode,
+      sidebarTasksEnabled: DEFAULT_UNIFIED_SETTINGS.sidebarTasksEnabled,
       sidebarAutoSettleAfterDays: DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleAfterDays,
       sidebarAutoSettleOnMerge: DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleOnMerge,
       responseStreamingMode: DEFAULT_UNIFIED_SETTINGS.responseStreamingMode,
@@ -2282,6 +2287,32 @@ export function GeneralSettingsPanel() {
                 });
               }}
               aria-label="Project grouping"
+            />
+          }
+        />
+
+        <SettingsRow
+          {...searchableSetting("sidebar-tasks")}
+          description="Show the Tasks section above threads in the sidebar."
+          resetAction={
+            settings.sidebarTasksEnabled !== DEFAULT_UNIFIED_SETTINGS.sidebarTasksEnabled ? (
+              <SettingResetButton
+                label="tasks in sidebar"
+                onClick={() =>
+                  updateSettings({
+                    sidebarTasksEnabled: DEFAULT_UNIFIED_SETTINGS.sidebarTasksEnabled,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Switch
+              checked={settings.sidebarTasksEnabled}
+              onCheckedChange={(checked) =>
+                updateSettings({ sidebarTasksEnabled: Boolean(checked) })
+              }
+              aria-label="Tasks in sidebar"
             />
           }
         />

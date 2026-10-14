@@ -103,7 +103,8 @@ actions as in the sidebar.
 To keep the sidebar's Tasks section focused, use the filter menu in the Tasks header to pick which
 projects show. Hidden projects keep their tasks, still appear on the Taskboard, and show up again
 while you search. The same menu sorts tasks within each project by newest, recent activity, or
-status.
+status. To hide the Tasks section entirely, turn off **Settings → General → Tasks in sidebar**; the
+Taskboard stays reachable from the command palette.
 
 ## Known limits
 
