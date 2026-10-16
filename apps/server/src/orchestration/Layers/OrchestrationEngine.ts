@@ -4,6 +4,7 @@ import type {
   OrchestrationReadModel,
   OrchestrationAggregateKind,
   ProjectId,
+  FolderId,
   TaskId,
   ThreadId,
 } from "@t3tools/contracts";
@@ -65,7 +66,7 @@ interface CommandEnvelope {
 
 function commandToAggregateRef(command: OrchestrationCommand): {
   readonly aggregateKind: OrchestrationAggregateKind;
-  readonly aggregateId: ProjectId | ThreadId | TaskId;
+  readonly aggregateId: ProjectId | ThreadId | TaskId | FolderId;
 } {
   switch (command.type) {
     case "project.create":
@@ -82,6 +83,13 @@ function commandToAggregateRef(command: OrchestrationCommand): {
       return {
         aggregateKind: "task",
         aggregateId: command.taskId,
+      };
+    case "folder.create":
+    case "folder.rename":
+    case "folder.delete":
+      return {
+        aggregateKind: "folder",
+        aggregateId: command.folderId,
       };
     default:
       return {

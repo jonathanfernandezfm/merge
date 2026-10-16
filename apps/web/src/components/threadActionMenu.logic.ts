@@ -20,6 +20,10 @@ export type ThreadActionMenuId =
   | "snooze"
   | `snooze:${string}`
   | "unsnooze"
+  | "move-to-folder"
+  | `move-to-folder:${string}`
+  | "move-to-new-folder"
+  | "remove-from-folder"
   | "rename"
   | "regenerate-title"
   | "mark-unread"
@@ -29,6 +33,11 @@ export type ThreadActionMenuId =
   | "copy-thread-id"
   | "archive"
   | "delete";
+
+export interface ThreadFolderMenuState {
+  readonly currentFolderId: string | null;
+  readonly options: ReadonlyArray<{ readonly id: string; readonly title: string }>;
+}
 
 export interface ThreadActionMenuState {
   readonly branch: string | null;
@@ -59,6 +68,11 @@ export interface ThreadActionMenuState {
     readonly titleRegeneration: boolean;
   };
   readonly snoozePresets: ReadonlyArray<SnoozePreset>;
+  /**
+   * Folders of the thread's environment. Null where the server predates
+   * folders or the thread cannot be filed (task threads).
+   */
+  readonly folders?: ThreadFolderMenuState | null;
 }
 
 /**
@@ -113,6 +127,31 @@ export function buildThreadActionMenuItems(
                   { id: "snooze:custom" as const, label: "Custom…", separatorBefore: true },
                 ],
               },
+        ]
+      : []),
+    // Filing is placement, like pinning: it sits with the lifecycle verbs.
+    ...(state.folders
+      ? [
+          {
+            id: "move-to-folder" as const,
+            label: "Move to folder",
+            icon: "folder",
+            children: [
+              ...state.folders.options.map((folder) => ({
+                id: `move-to-folder:${folder.id}` as const,
+                label: folder.title,
+                checked: folder.id === state.folders?.currentFolderId,
+              })),
+              {
+                id: "move-to-new-folder" as const,
+                label: "New folder…",
+                separatorBefore: state.folders.options.length > 0,
+              },
+            ],
+          },
+          ...(state.folders.currentFolderId !== null
+            ? [{ id: "remove-from-folder" as const, label: "Remove from folder", icon: "folder" }]
+            : []),
         ]
       : []),
     { id: "rename", label: "Rename thread", icon: "pencil", separatorBefore: true },

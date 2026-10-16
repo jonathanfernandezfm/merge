@@ -458,6 +458,7 @@ describe("OrchestrationEngine", () => {
           getTurnStartMessage: () => Effect.die("unused"),
           getTaskById: () => Effect.succeedNone,
           getTaskShellById: () => Effect.succeedNone,
+          getFolderShellById: () => Effect.succeedNone,
           getThreadShellById: () => Effect.succeedNone,
           getThreadDetailById: () => Effect.succeedNone,
           getThreadDetailSnapshot: () => Effect.succeedNone,

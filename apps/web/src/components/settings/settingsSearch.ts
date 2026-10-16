@@ -280,6 +280,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["show hide tasks section sidebar taskboard"],
   },
   {
+    id: "sidebar-compact-threads",
+    title: "Compact thread rows",
+    to: "/settings/general",
+    searchTerms: ["dense density compact sidebar thread rows branch"],
+  },
+  {
     id: "auto-settle-inactive-threads",
     title: "Auto-settle inactive threads",
     to: "/settings/general",

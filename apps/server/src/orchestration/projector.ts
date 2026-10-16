@@ -1,5 +1,7 @@
 import type {
+  FolderId,
   OrchestrationEvent,
+  OrchestrationFolder,
   OrchestrationProject,
   OrchestrationReadModel,
   OrchestrationTask,
@@ -31,6 +33,10 @@ import * as Predicate from "effect/Predicate";
 import { toProjectorDecodeError, type OrchestrationProjectorDecodeError } from "./Errors.ts";
 import {
   MessageSentPayloadSchema,
+  FolderCreatedPayload,
+  FolderDeletedPayload,
+  FolderRenamedPayload,
+  ThreadFolderSetPayload,
   ProjectCreatedPayload,
   ProjectDeletedPayload,
   ProjectMetaUpdatedPayload,
@@ -339,6 +345,7 @@ export function createEmptyReadModel(nowIso: string): OrchestrationReadModel {
     projects: [],
     threads: [],
     tasks: [],
+    folders: [],
     updatedAt: nowIso,
   };
 }
@@ -349,6 +356,14 @@ function updateTask(
   update: (task: OrchestrationTask) => OrchestrationTask,
 ): ReadonlyArray<OrchestrationTask> {
   return (tasks ?? []).map((task) => (task.id === taskId ? update(task) : task));
+}
+
+function updateFolder(
+  folders: ReadonlyArray<OrchestrationFolder> | undefined,
+  folderId: FolderId,
+  update: (folder: OrchestrationFolder) => OrchestrationFolder,
+): ReadonlyArray<OrchestrationFolder> {
+  return (folders ?? []).map((folder) => (folder.id === folderId ? update(folder) : folder));
 }
 
 /** Apply a task.meta-updated patch: absent fields are unchanged, null clears. */
@@ -644,6 +659,17 @@ export function projectEvent(
           ...nextBase,
           threads: updateThread(nextBase.threads, payload.threadId, {
             autoSettleDisabledAt: payload.autoSettleDisabledAt,
+            updatedAt: payload.updatedAt,
+          }),
+        })),
+      );
+
+    case "thread.folder-set":
+      return decodeForEvent(ThreadFolderSetPayload, event.payload, event.type, "payload").pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          threads: updateThread(nextBase.threads, payload.threadId, {
+            folderId: payload.folderId,
             updatedAt: payload.updatedAt,
           }),
         })),
@@ -1183,6 +1209,56 @@ export function projectEvent(
             archivedAt: payload.archivedAt,
             updatedAt: payload.updatedAt,
           })),
+        })),
+      );
+
+    case "folder.created":
+      return decodeForEvent(FolderCreatedPayload, event.payload, event.type, "payload").pipe(
+        Effect.map((payload) => {
+          const folder: OrchestrationFolder = {
+            id: payload.folderId,
+            title: payload.title,
+            createdAt: payload.createdAt,
+            updatedAt: payload.updatedAt,
+            deletedAt: null,
+          };
+          const folders = nextBase.folders ?? [];
+          return {
+            ...nextBase,
+            folders: folders.some((entry) => entry.id === folder.id)
+              ? folders.map((entry) => (entry.id === folder.id ? folder : entry))
+              : [...folders, folder],
+          };
+        }),
+      );
+
+    case "folder.renamed":
+      return decodeForEvent(FolderRenamedPayload, event.payload, event.type, "payload").pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          folders: updateFolder(nextBase.folders, payload.folderId, (folder) => ({
+            ...folder,
+            title: payload.title,
+            updatedAt: payload.updatedAt,
+          })),
+        })),
+      );
+
+    // Deleting a folder releases its threads back to the thread list.
+    case "folder.deleted":
+      return decodeForEvent(FolderDeletedPayload, event.payload, event.type, "payload").pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          folders: updateFolder(nextBase.folders, payload.folderId, (folder) => ({
+            ...folder,
+            deletedAt: payload.deletedAt,
+            updatedAt: payload.deletedAt,
+          })),
+          threads: nextBase.threads.some((thread) => thread.folderId === payload.folderId)
+            ? nextBase.threads.map((thread) =>
+                thread.folderId === payload.folderId ? { ...thread, folderId: null } : thread,
+              )
+            : nextBase.threads,
         })),
       );
 

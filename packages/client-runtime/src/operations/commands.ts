@@ -59,6 +59,10 @@ export type RevertThreadCheckpointInput = CommandInput<"thread.checkpoint.revert
 };
 export type StopThreadSessionInput = CommandInput<"thread.session.stop">;
 export type UpdateTaskMetadataInput = CommandInput<"task.meta.update">;
+export type CreateFolderInput = CommandInput<"folder.create">;
+export type RenameFolderInput = CommandInput<"folder.rename">;
+export type DeleteFolderInput = CommandInput<"folder.delete">;
+export type SetThreadFolderInput = CommandInput<"thread.folder.set">;
 
 type DispatchTag = typeof ORCHESTRATION_WS_METHODS.dispatchCommand;
 type CommandEffect = Effect.Effect<
@@ -274,6 +278,46 @@ export const updateTaskMetadata: (input: UpdateTaskMetadataInput) => CommandEffe
   return yield* dispatch({
     ...input,
     type: "task.meta.update",
+    commandId: yield* commandId(input),
+  });
+});
+
+export const setThreadFolder: (input: SetThreadFolderInput) => CommandEffect = Effect.fn(
+  "EnvironmentCommands.setThreadFolder",
+)(function* (input) {
+  return yield* dispatch({
+    ...input,
+    type: "thread.folder.set",
+    commandId: yield* commandId(input),
+  });
+});
+
+export const createFolder: (input: CreateFolderInput) => CommandEffect = Effect.fn(
+  "EnvironmentCommands.createFolder",
+)(function* (input) {
+  return yield* dispatch({
+    ...input,
+    type: "folder.create",
+    commandId: yield* commandId(input),
+  });
+});
+
+export const renameFolder: (input: RenameFolderInput) => CommandEffect = Effect.fn(
+  "EnvironmentCommands.renameFolder",
+)(function* (input) {
+  return yield* dispatch({
+    ...input,
+    type: "folder.rename",
+    commandId: yield* commandId(input),
+  });
+});
+
+export const deleteFolder: (input: DeleteFolderInput) => CommandEffect = Effect.fn(
+  "EnvironmentCommands.deleteFolder",
+)(function* (input) {
+  return yield* dispatch({
+    ...input,
+    type: "folder.delete",
     commandId: yield* commandId(input),
   });
 });

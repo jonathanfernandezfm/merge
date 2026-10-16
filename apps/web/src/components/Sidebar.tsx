@@ -37,6 +37,7 @@ import {
   scopedThreadKey,
 } from "@t3tools/client-runtime/environment";
 import {
+  FolderId,
   resolveEnvironmentMachineKind,
   type EnvironmentMachineKind,
   type ProjectIconOverride,
@@ -55,6 +56,7 @@ import {
   ClockIcon,
   EyeIcon,
   FolderIcon,
+  FoldVerticalIcon,
   GitBranchIcon,
   MessageCircleQuestionIcon,
   PinIcon,
@@ -126,9 +128,17 @@ import { useThreadActions } from "../hooks/useThreadActions";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
 import { isCommandPaletteOpen, openCommandPalette } from "../commandPaletteBus";
 import { startNewThreadFromContext } from "../lib/chatThreadActions";
-import { useClientSettings } from "../hooks/useSettings";
+import { useClientSettings, useUpdateClientSettings } from "../hooks/useSettings";
 import { useCopyToClipboard } from "../hooks/useCopyToClipboard";
 import { SidebarTasks } from "./task/SidebarTasks";
+import {
+  SidebarFolders,
+  type SidebarFolderThread,
+  type SidebarFolderThreadSection,
+} from "./folder/SidebarFolders";
+import { readThreadFolderMenuState } from "./folder/folderMenu";
+import { useFolderActions } from "../hooks/useFolderActions";
+import { folderKey, useFolders } from "../state/folders";
 import { useLocalStorage } from "../hooks/useLocalStorage";
 import { useNowMinute } from "../hooks/useNowMinute";
 import { useEnvironments, usePrimaryEnvironmentId } from "../state/environments";
@@ -972,6 +982,8 @@ const dropVerbBadge: Record<SidebarDropVerb, ReactNode> = {
 const SidebarThreadRow = memo(function SidebarThreadRow(props: {
   thread: SidebarThreadSummary;
   variant: "card" | "slim";
+  // Compact view: no branch line, shorter rows.
+  compact: boolean;
   // Slim rows are either settled (action: un-settle) or merely quiet
   // (seen Ready threads — action: settle).
   variantAction: "settle" | "unsettle" | "unsnooze";
@@ -1604,8 +1616,11 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
         {...sortableRootProps}
         {...(fileDropHandlers ?? {})}
         className={cn(
-          // Matches the h-9 row so unrendered rows never shift the list when they paint.
-          "list-none [content-visibility:auto] [contain-intrinsic-size:auto_36px]",
+          // Matches the row height so unrendered rows never shift the list when they paint.
+          "list-none [content-visibility:auto]",
+          props.compact
+            ? "[contain-intrinsic-size:auto_28px]"
+            : "[contain-intrinsic-size:auto_36px]",
           sortable?.isDragging && "relative z-20",
         )}
       >
@@ -1620,7 +1635,12 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
                 aria-current={accessibility.current}
                 data-testid="sidebar-row-slim"
                 aria-busy={isRegeneratingTitle || undefined}
-                className={cn(rowSurfaceClassName, "flex h-9 items-center gap-2.5 px-2.5")}
+                className={cn(
+                  rowSurfaceClassName,
+                  props.compact
+                    ? "flex h-7 items-center gap-2 px-2"
+                    : "flex h-9 items-center gap-2.5 px-2.5",
+                )}
                 onClick={handleClick}
                 onDoubleClick={handleDoubleClick}
                 onKeyDown={handleKeyDown}
@@ -1760,8 +1780,11 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
       {...sortableRootProps}
       {...(fileDropHandlers ?? {})}
       className={cn(
-        // Matches the h-[4.875rem] content box; the py-0.5 padding is added on top.
-        "list-none py-0.5 [content-visibility:auto] [contain-intrinsic-size:auto_78px]",
+        // Matches the content box height; the vertical padding is added on top.
+        "list-none [content-visibility:auto]",
+        props.compact
+          ? "py-px [contain-intrinsic-size:auto_52px]"
+          : "py-0.5 [contain-intrinsic-size:auto_78px]",
         sortable?.isDragging && "relative z-20",
       )}
     >
@@ -1785,7 +1808,12 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
           }
         >
           {accessibleTitle}
-          <div className="relative z-10 h-[4.875rem] px-(--sidebar-row-content-inset) py-(--sidebar-content-inset)">
+          <div
+            className={cn(
+              "relative z-10 px-(--sidebar-row-content-inset)",
+              props.compact ? "h-[3.25rem] py-1.5" : "h-[4.875rem] py-(--sidebar-content-inset)",
+            )}
+          >
             <div className="flex h-5 min-w-0 items-center gap-1.5">
               {draftIndicator}
               {props.project ? (
@@ -1940,68 +1968,73 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
                 </span>
               )}
             </div>
-            <div className="mt-1 flex min-w-0">
+            <div className={cn("flex min-w-0", props.compact ? "items-center gap-1.5" : "mt-1")}>
               {title}
               {isRegeneratingTitle ? (
                 <span role="status" className="sr-only">
                   Regenerating title
                 </span>
               ) : null}
+              {/* Compact rows drop the branch line; its live indicators move up. */}
+              {props.compact ? terminalStatusIcon : null}
+              {props.compact ? prBadge : null}
             </div>
-            <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-secondary-label text-xs">
-              {/* Always the branch. The plan step used to take this slot while
+            {props.compact ? null : (
+              <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-secondary-label text-xs">
+                {/* Always the branch. The plan step used to take this slot while
                   working, but it truncated to a half-sentence and dropped the
                   branch, so the row lost its most stable identifier. */}
-              {thread.branch ? (
-                <>
-                  <ThreadWorktreeIndicator thread={thread} />
-                  <span className="flex min-w-0 flex-1 text-muted-foreground/40">
-                    <MiddleTruncate value={thread.branch} showTitle={false} />
+                {thread.branch ? (
+                  <>
+                    <ThreadWorktreeIndicator thread={thread} />
+                    <span className="flex min-w-0 flex-1 text-muted-foreground/40">
+                      <MiddleTruncate value={thread.branch} showTitle={false} />
+                    </span>
+                  </>
+                ) : (
+                  <span className="flex-1" />
+                )}
+                {terminalStatusIcon}
+                {prBadge}
+                {diff ? (
+                  <span className="shrink-0 font-mono">
+                    <span className="text-diff-addition-foreground">+{diff.insertions}</span>{" "}
+                    <span className="text-diff-deletion-foreground">−{diff.deletions}</span>
                   </span>
-                </>
-              ) : (
-                <span className="flex-1" />
-              )}
-              {terminalStatusIcon}
-              {prBadge}
-              {diff ? (
-                <span className="shrink-0 font-mono">
-                  <span className="text-diff-addition-foreground">+{diff.insertions}</span>{" "}
-                  <span className="text-diff-deletion-foreground">−{diff.deletions}</span>
+                ) : null}
+                <span
+                  aria-hidden
+                  className="pointer-events-none ml-auto inline-flex shrink-0 items-center gap-1"
+                >
+                  {isRemote ? (
+                    <span className="inline-flex shrink-0 items-center text-sidebar-muted-foreground/70">
+                      <EnvironmentMachineIcon
+                        aria-hidden
+                        kind={props.environmentMachine}
+                        className="size-3.5"
+                      />
+                    </span>
+                  ) : null}
+                  {driverKind ? (
+                    <span className="inline-flex shrink-0 items-center">
+                      <ProviderInstanceIcon
+                        driverKind={driverKind}
+                        displayName={
+                          providerEntry?.displayName ??
+                          thread.session?.providerName ??
+                          modelInstanceId
+                        }
+                        accentColor={providerEntry?.accentColor}
+                        showBadge={showInstanceBadge}
+                        // Glyph dims, badge stays saturated; offset matches the composer trigger.
+                        iconClassName="size-3.5 opacity-60"
+                        badgeClassName="right-[-0.1875rem] bottom-[-0.1875rem] h-3 min-w-3 px-0.5 text-5xs"
+                      />
+                    </span>
+                  ) : null}
                 </span>
-              ) : null}
-              <span
-                aria-hidden
-                className="pointer-events-none ml-auto inline-flex shrink-0 items-center gap-1"
-              >
-                {isRemote ? (
-                  <span className="inline-flex shrink-0 items-center text-sidebar-muted-foreground/70">
-                    <EnvironmentMachineIcon
-                      aria-hidden
-                      kind={props.environmentMachine}
-                      className="size-3.5"
-                    />
-                  </span>
-                ) : null}
-                {driverKind ? (
-                  <span className="inline-flex shrink-0 items-center">
-                    <ProviderInstanceIcon
-                      driverKind={driverKind}
-                      displayName={
-                        providerEntry?.displayName ??
-                        thread.session?.providerName ??
-                        modelInstanceId
-                      }
-                      accentColor={providerEntry?.accentColor}
-                      showBadge={showInstanceBadge}
-                      // Glyph dims, badge stays saturated; offset matches the composer trigger.
-                      iconClassName="size-3.5 opacity-60"
-                      badgeClassName="right-[-0.1875rem] bottom-[-0.1875rem] h-3 min-w-3 px-0.5 text-5xs"
-                    />
-                  </span>
-                ) : null}
-              </span>
-            </div>
+              </div>
+            )}
           </div>
           {props.jumpLabel ? <JumpHintBadge label={props.jumpLabel} /> : null}
         </TooltipTrigger>
@@ -2186,6 +2219,13 @@ export default function Sidebar() {
   const sidebarProjectSortOrder = useClientSettings((s) => s.sidebarProjectSortOrder);
   const timestampFormat = useClientSettings((s) => s.timestampFormat);
   const sidebarTasksEnabled = useClientSettings((s) => s.sidebarTasksEnabled);
+  const sidebarCompactThreads = useClientSettings((s) => s.sidebarCompactThreads);
+  const updateClientSettings = useUpdateClientSettings();
+  const folders = useFolders();
+  // Only folders this client knows hide their threads from the list, so a
+  // thread filed in a folder that has not loaded yet never disappears.
+  const liveFolderKeys = useMemo(() => new Set(folders.map(folderKey)), [folders]);
+  const { moveThreadToFolder, moveThreadToNewFolder } = useFolderActions();
   const projectGroupingSettings = useClientSettings(selectProjectGroupingSettings);
   const {
     settleThread,
@@ -2565,6 +2605,7 @@ export default function Sidebar() {
     activeThreads,
     snoozedThreads,
     settledThreads,
+    folderedThreads,
     snoozeNow,
   } = useMemo(() => {
     // Snooze classification uses a REAL clock, not the quantized minute:
@@ -2585,8 +2626,25 @@ export default function Sidebar() {
     const settled: EnvironmentThreadShell[] = [];
     const draggable = new Set<string>();
     const activeReorderable = new Set<string>();
+    // Filed threads leave the sections and render under their folder.
+    const foldered: SidebarFolderThread[] = [];
     for (const thread of visible) {
       const capabilities = serverConfigs.get(thread.environmentId)?.environment.capabilities;
+      if (
+        thread.folderId != null &&
+        liveFolderKeys.has(`${thread.environmentId}:${thread.folderId}`)
+      ) {
+        foldered.push({
+          thread,
+          section:
+            capabilities?.threadSnooze === true && effectiveSnoozed(thread, { now: preciseNow })
+              ? "snoozed"
+              : capabilities?.threadSettlement === true && thread.settledOverride === "settled"
+                ? "settled"
+                : "active",
+        });
+        continue;
+      }
       // Threads on servers without the settlement capability (old server,
       // or descriptor not loaded yet) never classify as settled: the user
       // could neither un-settle nor pin them, so auto-settling them would
@@ -2661,17 +2719,66 @@ export default function Sidebar() {
           firstValidTimestampMs(right.snoozedUntil ?? null),
       ),
       settledThreads: sortSettledThreads(settled),
+      folderedThreads: foldered,
       snoozeNow: preciseNow,
     };
-  }, [nowMinute, optimisticDrop, scopedProjectKeys, serverConfigs, snoozeWakeTick, threads]);
+  }, [
+    liveFolderKeys,
+    nowMinute,
+    optimisticDrop,
+    scopedProjectKeys,
+    serverConfigs,
+    snoozeWakeTick,
+    threads,
+  ]);
+  // Folder rows keep the Threads list order.
+  const threadsByFolder = useMemo(() => {
+    const grouped = new Map<string, SidebarFolderThread[]>();
+    for (const entry of folderedThreads) {
+      const key = `${entry.thread.environmentId}:${entry.thread.folderId}`;
+      const list = grouped.get(key);
+      if (list === undefined) grouped.set(key, [entry]);
+      else list.push(entry);
+    }
+    const sorted = new Map<string, ReadonlyArray<SidebarFolderThread>>();
+    for (const [key, list] of grouped) {
+      const sectionOf = new Map(list.map((entry) => [entry.thread, entry.section] as const));
+      sorted.set(
+        key,
+        sortThreadsForSidebar(list.map((entry) => entry.thread)).map((thread) => ({
+          thread,
+          section: sectionOf.get(thread) ?? "active",
+        })),
+      );
+    }
+    return sorted;
+  }, [folderedThreads]);
+  const folderThreadSectionByKey = useMemo(
+    () =>
+      new Map<string, SidebarFolderThreadSection>(
+        folderedThreads.map((entry) => [
+          scopedThreadKey(scopeThreadRef(entry.thread.environmentId, entry.thread.id)),
+          entry.section,
+        ]),
+      ),
+    [folderedThreads],
+  );
+  const folderThreadSectionByKeyRef = useRef(folderThreadSectionByKey);
+  folderThreadSectionByKeyRef.current = folderThreadSectionByKey;
 
   const threadSearchInputRef = useRef<HTMLInputElement>(null);
   const [threadSearchQuery, setThreadSearchQuery] = useState("");
   const [activeSearchResultIndex, setActiveSearchResultIndex] = useState(0);
   const isSearchingThreads = threadSearchQuery.trim().length > 0;
   const searchableThreads = useMemo(
-    () => [...pinnedThreads, ...activeThreads, ...snoozedThreads, ...settledThreads],
-    [activeThreads, pinnedThreads, settledThreads, snoozedThreads],
+    () => [
+      ...pinnedThreads,
+      ...activeThreads,
+      ...snoozedThreads,
+      ...settledThreads,
+      ...folderedThreads.map((entry) => entry.thread),
+    ],
+    [activeThreads, folderedThreads, pinnedThreads, settledThreads, snoozedThreads],
   );
   const searchEnvironmentIds = useMemo(
     () =>
@@ -2827,12 +2934,12 @@ export default function Sidebar() {
   const threadByKey = useMemo(
     () =>
       new Map(
-        orderedThreads.map(
+        [...orderedThreads, ...folderedThreads.map((entry) => entry.thread)].map(
           (thread) =>
             [scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)), thread] as const,
         ),
       ),
-    [orderedThreads],
+    [folderedThreads, orderedThreads],
   );
   // Handlers read these through refs: depending on per-update Map/Set
   // identities would give every row a fresh callback prop on each shell
@@ -4071,8 +4178,11 @@ export default function Sidebar() {
           serverConfigs.get(thread.environmentId)?.environment.capabilities
             .threadTitleRegeneration === true;
         const isRegeneratingTitle = thread.titleRegeneration != null;
-        const isSettled = settledThreadKeysRef.current.has(threadKey);
-        const isSnoozed = snoozedThreadKeysRef.current.has(threadKey);
+        const folderSection = folderThreadSectionByKeyRef.current.get(threadKey);
+        const isSettled =
+          settledThreadKeysRef.current.has(threadKey) || folderSection === "settled";
+        const isSnoozed =
+          snoozedThreadKeysRef.current.has(threadKey) || folderSection === "snoozed";
         const isPinned = thread.pinnedAt != null;
         // Presets resolve at menu-open time (same as the popover).
         const snoozePresets = resolveSnoozePresets(new Date(), timestampFormat);
@@ -4110,11 +4220,19 @@ export default function Sidebar() {
                 titleRegeneration: supportsTitleRegeneration,
               },
               snoozePresets,
+              folders: readThreadFolderMenuState(thread),
             }),
             position,
           ),
         );
         if (clicked._tag === "Failure") return;
+        if (clicked.value?.startsWith("move-to-folder:")) {
+          void moveThreadToFolder(
+            threadRef,
+            FolderId.make(clicked.value.slice("move-to-folder:".length)),
+          );
+          return;
+        }
         if (clicked.value?.startsWith("snooze:")) {
           const preset =
             clicked.value === "snooze:custom"
@@ -4124,6 +4242,12 @@ export default function Sidebar() {
           return;
         }
         switch (clicked.value) {
+          case "move-to-new-folder":
+            void moveThreadToNewFolder(threadRef);
+            return;
+          case "remove-from-folder":
+            void moveThreadToFolder(threadRef, null);
+            return;
           case "filter-by-project":
             // This item is the only scope control here, so picking the
             // already-scoped project again is the way back to all projects.
@@ -4315,6 +4439,8 @@ export default function Sidebar() {
       deleteThread,
       handleMultiSelectContextMenu,
       markThreadUnread,
+      moveThreadToFolder,
+      moveThreadToNewFolder,
       openProjectSettings,
       projectScopeKey,
       projectByKey,
@@ -4440,6 +4566,95 @@ export default function Sidebar() {
     shortcutLabelForCommand(keybindings, "chat.new") ??
     (projectGroups.length <= 1 ? shortcutLabelForCommand(keybindings, "chat.newLocal") : undefined);
   const newThreadInProjectShortcutLabel = shortcutLabelForCommand(keybindings, "chat.newLocal");
+  const renderThreadRowInner = (
+    thread: EnvironmentThreadShell,
+    section: SidebarSection,
+    sortable?: SortableThreadRowBag,
+  ) => {
+    const threadKey = scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id));
+    // Settled and snoozed are the ONLY things that collapse a
+    // row: every other thread is a full card. Density comes
+    // from users (or the auto rules) actually parking work,
+    // not from the sidebar second-guessing what still matters.
+    const isCard = section === "active" || section === "pinned";
+    const rowVariant = isCard ? "card" : "slim";
+    return (
+      <SidebarThreadRow
+        // Fade between card and compact rows while the outer
+        // sortable wrapper keeps its identity during a drag.
+        key={`${threadKey}:${rowVariant}`}
+        thread={thread}
+        variant={rowVariant}
+        compact={sidebarCompactThreads}
+        // Snoozed rows wake, settled rows un-settle, and cards settle.
+        variantAction={
+          section === "snoozed" ? "unsnooze" : section === "settled" ? "unsettle" : "settle"
+        }
+        settlementSupported={
+          serverConfigs.get(thread.environmentId)?.environment.capabilities.threadSettlement ===
+          true
+        }
+        snoozeSupported={
+          serverConfigs.get(thread.environmentId)?.environment.capabilities.threadSnooze === true
+        }
+        pinningSupported={
+          serverConfigs.get(thread.environmentId)?.environment.capabilities.threadPinning === true
+        }
+        isPinned={thread.pinnedAt != null}
+        sortable={sortable}
+        dropVerb={
+          dragState?.activeKey === threadKey
+            ? resolveSidebarDropVerb(dragState.activeSection, dragTargetSection)
+            : null
+        }
+        dragOverPinned={dragState?.activeKey === threadKey && dragTargetSection === "pinned"}
+        snoozeWakeLabelText={
+          section === "snoozed" && thread.snoozedUntil != null
+            ? snoozeWakeLabel(thread.snoozedUntil, {
+                now: new Date().toISOString(),
+              })
+            : null
+        }
+        // All sections: a woken thread can classify straight
+        // into the settled tail (PR merged while snoozed), and
+        // the wake signal must survive the trip. Still-snoozed
+        // rows resolve to null on their own.
+        wokeAt={threadWokeAt(thread, { now: snoozeNow })}
+        isActive={routeThreadKey === threadKey}
+        openPullRequestsInRightPanel={routeThreadRef !== null}
+        jumpLabel={showThreadJumpHints ? (jumpLabelByKey.get(threadKey) ?? null) : null}
+        currentEnvironmentId={primaryEnvironmentId}
+        environmentLabel={environmentLabelById.get(thread.environmentId) ?? null}
+        environmentMachine={environmentMachineById.get(thread.environmentId) ?? "server"}
+        project={projectByKey.get(`${thread.environmentId}:${thread.projectId}`) ?? null}
+        projectDisplayName={
+          projectDisplayNameByKey.get(`${thread.environmentId}:${thread.projectId}`) ?? null
+        }
+        providerEntryByInstanceId={
+          providerEntriesByEnvironment.get(thread.environmentId) ?? EMPTY_PROVIDER_ENTRIES
+        }
+        timestampFormat={timestampFormat}
+        onThreadClick={handleThreadClick}
+        onThreadActivate={navigateToThread}
+        onStartRename={startThreadRename}
+        onRenameTitleChange={setRenamingTitle}
+        onCommitRename={commitThreadRename}
+        onCancelRename={cancelThreadRename}
+        isRenaming={renamingThreadKey === threadKey}
+        renamingTitle={renamingThreadKey === threadKey ? renamingTitle : ""}
+        onContextMenu={handleThreadContextMenu}
+        onSettle={attemptSettle}
+        onUnsettle={attemptUnsettle}
+        onSnooze={attemptSnooze}
+        onUnsnooze={attemptUnsnooze}
+        onUnpin={attemptUnpin}
+        onAcknowledgeWoke={acknowledgeWoke}
+        onFileDropThreads={handleThreadFileDrop}
+      />
+    );
+  };
+  const renderFolderThread = (entry: SidebarFolderThread) =>
+    renderThreadRowInner(entry.thread, entry.section);
   return (
     <>
       <SidebarChromeHeader isElectron={isElectron} />
@@ -4606,9 +4821,33 @@ export default function Sidebar() {
         }
       >
         {sidebarTasksEnabled ? <SidebarTasks searchQuery={threadSearchQuery} /> : null}
+        {/* Search results already include filed threads. */}
+        {isSearchingThreads ? null : (
+          <SidebarFolders
+            folders={folders}
+            threadsByFolder={threadsByFolder}
+            createEnvironmentId={
+              primaryEnvironmentId !== null &&
+              serverConfigs.get(primaryEnvironmentId)?.environment.capabilities.threadFolders ===
+                true
+                ? primaryEnvironmentId
+                : null
+            }
+            renderThread={renderFolderThread}
+          />
+        )}
         <SidebarGroup className="flex-1" role="presentation">
-          <div className="flex h-8 shrink-0 items-center ps-2 text-sm text-sidebar-muted-foreground/70">
-            Threads
+          <div className="flex h-8 shrink-0 items-center gap-1 ps-2 text-sm text-sidebar-muted-foreground/70">
+            <span className="min-w-0 flex-1">Threads</span>
+            <SidebarHeaderIconButton
+              label={sidebarCompactThreads ? "Show full thread rows" : "Compact thread rows"}
+              aria-pressed={sidebarCompactThreads}
+              onClick={() =>
+                updateClientSettings({ sidebarCompactThreads: !sidebarCompactThreads })
+              }
+            >
+              <FoldVerticalIcon />
+            </SidebarHeaderIconButton>
           </div>
           {isSearchingThreads ? (
             threadSearchResults.length > 0 ? (
@@ -4711,114 +4950,6 @@ export default function Sidebar() {
                     )}
                   >
                     {(() => {
-                      const renderThreadRowInner = (
-                        thread: EnvironmentThreadShell,
-                        section: SidebarSection,
-                        sortable?: SortableThreadRowBag,
-                      ) => {
-                        const threadKey = scopedThreadKey(
-                          scopeThreadRef(thread.environmentId, thread.id),
-                        );
-                        // Settled and snoozed are the ONLY things that collapse a
-                        // row: every other thread is a full card. Density comes
-                        // from users (or the auto rules) actually parking work,
-                        // not from the sidebar second-guessing what still matters.
-                        const isCard = section === "active" || section === "pinned";
-                        const rowVariant = isCard ? "card" : "slim";
-                        return (
-                          <SidebarThreadRow
-                            // Fade between card and compact rows while the outer
-                            // sortable wrapper keeps its identity during a drag.
-                            key={`${threadKey}:${rowVariant}`}
-                            thread={thread}
-                            variant={rowVariant}
-                            // Snoozed rows wake, settled rows un-settle, and cards settle.
-                            variantAction={
-                              section === "snoozed"
-                                ? "unsnooze"
-                                : section === "settled"
-                                  ? "unsettle"
-                                  : "settle"
-                            }
-                            settlementSupported={
-                              serverConfigs.get(thread.environmentId)?.environment.capabilities
-                                .threadSettlement === true
-                            }
-                            snoozeSupported={
-                              serverConfigs.get(thread.environmentId)?.environment.capabilities
-                                .threadSnooze === true
-                            }
-                            pinningSupported={
-                              serverConfigs.get(thread.environmentId)?.environment.capabilities
-                                .threadPinning === true
-                            }
-                            isPinned={thread.pinnedAt != null}
-                            sortable={sortable}
-                            dropVerb={
-                              dragState?.activeKey === threadKey
-                                ? resolveSidebarDropVerb(dragState.activeSection, dragTargetSection)
-                                : null
-                            }
-                            dragOverPinned={
-                              dragState?.activeKey === threadKey && dragTargetSection === "pinned"
-                            }
-                            snoozeWakeLabelText={
-                              section === "snoozed" && thread.snoozedUntil != null
-                                ? snoozeWakeLabel(thread.snoozedUntil, {
-                                    now: new Date().toISOString(),
-                                  })
-                                : null
-                            }
-                            // All sections: a woken thread can classify straight
-                            // into the settled tail (PR merged while snoozed), and
-                            // the wake signal must survive the trip. Still-snoozed
-                            // rows resolve to null on their own.
-                            wokeAt={threadWokeAt(thread, { now: snoozeNow })}
-                            isActive={routeThreadKey === threadKey}
-                            openPullRequestsInRightPanel={routeThreadRef !== null}
-                            jumpLabel={
-                              showThreadJumpHints ? (jumpLabelByKey.get(threadKey) ?? null) : null
-                            }
-                            currentEnvironmentId={primaryEnvironmentId}
-                            environmentLabel={
-                              environmentLabelById.get(thread.environmentId) ?? null
-                            }
-                            environmentMachine={
-                              environmentMachineById.get(thread.environmentId) ?? "server"
-                            }
-                            project={
-                              projectByKey.get(`${thread.environmentId}:${thread.projectId}`) ??
-                              null
-                            }
-                            projectDisplayName={
-                              projectDisplayNameByKey.get(
-                                `${thread.environmentId}:${thread.projectId}`,
-                              ) ?? null
-                            }
-                            providerEntryByInstanceId={
-                              providerEntriesByEnvironment.get(thread.environmentId) ??
-                              EMPTY_PROVIDER_ENTRIES
-                            }
-                            timestampFormat={timestampFormat}
-                            onThreadClick={handleThreadClick}
-                            onThreadActivate={navigateToThread}
-                            onStartRename={startThreadRename}
-                            onRenameTitleChange={setRenamingTitle}
-                            onCommitRename={commitThreadRename}
-                            onCancelRename={cancelThreadRename}
-                            isRenaming={renamingThreadKey === threadKey}
-                            renamingTitle={renamingThreadKey === threadKey ? renamingTitle : ""}
-                            onContextMenu={handleThreadContextMenu}
-                            onSettle={attemptSettle}
-                            onUnsettle={attemptUnsettle}
-                            onSnooze={attemptSnooze}
-                            onUnsnooze={attemptUnsnooze}
-                            onUnpin={attemptUnpin}
-                            onAcknowledgeWoke={acknowledgeWoke}
-                            onFileDropThreads={handleThreadFileDrop}
-                          />
-                        );
-                      };
                       const renderThreadRow = (
                         thread: EnvironmentThreadShell,
                         section: SidebarSection,

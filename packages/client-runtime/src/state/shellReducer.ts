@@ -53,6 +53,26 @@ export function applyShellStreamEvent(
         tasks: Arr.filter(snapshot.tasks ?? [], (t) => t.id !== event.taskId),
         snapshotSequence: event.sequence,
       };
+    case "folder-upserted": {
+      const current = snapshot.folders ?? [];
+      const folders = current.some((f) => f.id === event.folder.id)
+        ? Arr.map(current, (f) => (f.id === event.folder.id ? event.folder : f))
+        : Arr.append(current, event.folder);
+      return { ...snapshot, folders, snapshotSequence: event.sequence };
+    }
+    // A removed folder releases its threads; the server sends no per-thread
+    // upserts for them.
+    case "folder-removed":
+      return {
+        ...snapshot,
+        folders: Arr.filter(snapshot.folders ?? [], (f) => f.id !== event.folderId),
+        threads: snapshot.threads.some((t) => t.folderId === event.folderId)
+          ? Arr.map(snapshot.threads, (t) =>
+              t.folderId === event.folderId ? { ...t, folderId: null } : t,
+            )
+          : snapshot.threads,
+        snapshotSequence: event.sequence,
+      };
     default:
       return snapshot;
   }

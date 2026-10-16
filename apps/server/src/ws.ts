@@ -72,6 +72,7 @@ import {
   RpcClientId,
   EnvironmentAuthorizationError,
   GitCommandError,
+  FolderId,
   TaskId,
   ThreadId,
   type TerminalAttachStreamEvent,
@@ -882,6 +883,16 @@ const makeWsRpcLayer = (
           case "task.created":
           case "task.meta-updated":
             return taskUpsertOrRemove(TaskId.make(event.aggregateId), event.sequence);
+          case "folder.created":
+          case "folder.renamed":
+            return folderUpsertOrRemove(FolderId.make(event.aggregateId), event.sequence);
+          // Clients clear folderId on the folder's threads when it is removed.
+          case "folder.deleted":
+            return Effect.succeedSome({
+              kind: "folder-removed" as const,
+              sequence: event.sequence,
+              folderId: FolderId.make(event.aggregateId),
+            });
           default:
             if (event.aggregateKind !== "thread") {
               return Effect.succeedNone;
@@ -896,7 +907,7 @@ const makeWsRpcLayer = (
       // If both attempts fail, log and drop the stream item; treating an error as
       // a missing row would incorrectly remove a still-active aggregate.
       const retryShellProjectionRead = <A, E>(
-        aggregateKind: "project" | "thread" | "task",
+        aggregateKind: "project" | "thread" | "task" | "folder",
         aggregateId: string,
         read: Effect.Effect<A, E>,
       ): Effect.Effect<Option.Option<A>, never, never> =>
@@ -1008,14 +1019,50 @@ const makeWsRpcLayer = (
           ),
         );
 
-      // Older clients cannot decode task shell events, so only clients that
-      // opt in with `includeTasks` receive them.
-      const withoutTaskShellItems = <E, R>(
-        stream: Stream.Stream<OrchestrationShellStreamItem, E, R>,
-      ): Stream.Stream<OrchestrationShellStreamItem, E, R> =>
-        stream.pipe(
-          Stream.filter((item) => item.kind !== "task-upserted" && item.kind !== "task-removed"),
+      const folderUpsertOrRemove = (
+        folderId: FolderId,
+        sequence: number,
+      ): Effect.Effect<Option.Option<OrchestrationShellStreamEvent>, never, never> =>
+        retryShellProjectionRead(
+          "folder",
+          folderId,
+          projectionSnapshotQuery.getFolderShellById(folderId),
+        ).pipe(
+          Effect.map(
+            Option.map(
+              Option.match({
+                onNone: (): OrchestrationShellStreamEvent => ({
+                  kind: "folder-removed" as const,
+                  sequence,
+                  folderId,
+                }),
+                onSome: (folder): OrchestrationShellStreamEvent => ({
+                  kind: "folder-upserted" as const,
+                  sequence,
+                  folder,
+                }),
+              }),
+            ),
+          ),
         );
+
+      // Older clients cannot decode task or folder shell events, so only
+      // clients that opt in with `includeTasks` / `includeFolders` receive them.
+      const withoutOptInShellItems = <E, R>(
+        stream: Stream.Stream<OrchestrationShellStreamItem, E, R>,
+        input: { readonly includeTasks?: boolean; readonly includeFolders?: boolean },
+      ): Stream.Stream<OrchestrationShellStreamItem, E, R> =>
+        input.includeTasks === true && input.includeFolders === true
+          ? stream
+          : stream.pipe(
+              Stream.filter((item) =>
+                item.kind === "task-upserted" || item.kind === "task-removed"
+                  ? input.includeTasks === true
+                  : item.kind === "folder-upserted" || item.kind === "folder-removed"
+                    ? input.includeFolders === true
+                    : true,
+              ),
+            );
 
       // Turn a batch of domain events into shell stream items, coalescing by
       // aggregate first. `toShellStreamEvent` re-reads the *current* projected
@@ -2357,7 +2404,7 @@ const makeWsRpcLayer = (
             Effect.gen(function* () {
               const visibleShellItems = <E, R>(
                 stream: Stream.Stream<OrchestrationShellStreamItem, E, R>,
-              ) => (input.includeTasks === true ? stream : withoutTaskShellItems(stream));
+              ) => withoutOptInShellItems(stream, input);
               // Coalesce the live shell stream per aggregate over a small window
               // so bursts of high-frequency events (streaming message deltas,
               // activity appends) collapse into a single shell refetch and never

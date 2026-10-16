@@ -167,3 +167,35 @@ describe("buildThreadActionMenuItems", () => {
     expect(archiveItem?.disabled).toBe(true);
   });
 });
+
+describe("buildThreadActionMenuItems folders", () => {
+  it("offers folders only when the menu carries them", () => {
+    expect(allIds(baseState)).not.toContain("move-to-folder");
+    expect(
+      allIds({
+        ...baseState,
+        folders: { currentFolderId: null, options: [{ id: "f1", title: "Later" }] },
+      }),
+    ).toEqual(
+      expect.arrayContaining(["move-to-folder", "move-to-folder:f1", "move-to-new-folder"]),
+    );
+  });
+
+  it("checks the current folder and offers the way back out", () => {
+    const items = buildThreadActionMenuItems({
+      ...baseState,
+      folders: {
+        currentFolderId: "f2",
+        options: [
+          { id: "f1", title: "Later" },
+          { id: "f2", title: "Check back" },
+        ],
+      },
+    });
+    const move = items.find((item) => item.id === "move-to-folder");
+    expect(move?.children?.filter((child) => child.checked).map((child) => child.id)).toEqual([
+      "move-to-folder:f2",
+    ]);
+    expect(items.map((item) => item.id)).toContain("remove-from-folder");
+  });
+});

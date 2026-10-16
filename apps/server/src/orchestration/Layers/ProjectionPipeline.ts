@@ -36,6 +36,7 @@ import {
   type ProjectionThreadProposedPlan,
   ProjectionThreadProposedPlanRepository,
 } from "../../persistence/Services/ProjectionThreadProposedPlans.ts";
+import * as ProjectionFolders from "../../persistence/ProjectionFolders.ts";
 import * as ProjectionTasks from "../../persistence/ProjectionTasks.ts";
 import { applyTaskMetaUpdate } from "../projector.ts";
 import * as ProjectionThreadPullRequests from "../../persistence/ProjectionThreadPullRequests.ts";
@@ -490,6 +491,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
     const projectionThreadPullRequestRepository =
       yield* ProjectionThreadPullRequests.ProjectionThreadPullRequestRepository;
     const projectionTaskRepository = yield* ProjectionTasks.ProjectionTaskRepository;
+    const projectionFolderRepository = yield* ProjectionFolders.ProjectionFolderRepository;
     const projectionThreadActivityRepository = yield* ProjectionThreadActivityRepository;
     const projectionThreadSessionRepository = yield* ProjectionThreadSessionRepository;
     const projectionTurnRepository = yield* ProjectionTurnRepository;
@@ -802,6 +804,27 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
           });
           return;
         }
+
+        case "thread.folder-set": {
+          const existingRow = yield* projectionThreadRepository.getById({
+            threadId: event.payload.threadId,
+          });
+          if (Option.isNone(existingRow)) {
+            return;
+          }
+          yield* projectionThreadRepository.upsert({
+            ...existingRow.value,
+            folderId: event.payload.folderId,
+            updatedAt: event.payload.updatedAt,
+          });
+          return;
+        }
+
+        // Released here rather than in the folder projector so a replay
+        // applies it in order with this projector's thread.folder-set events.
+        case "folder.deleted":
+          yield* projectionFolderRepository.releaseThreads({ folderId: event.payload.folderId });
+          return;
 
         case "thread.pin-reordered": {
           const existingRow = yield* projectionThreadRepository.getById({
@@ -2011,15 +2034,66 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
       },
     );
 
+    const applyFoldersProjection: ProjectorDefinition["apply"] = Effect.fn(
+      "applyFoldersProjection",
+    )(function* (event, _attachmentSideEffects) {
+      switch (event.type) {
+        case "folder.created":
+          yield* projectionFolderRepository.upsert({
+            id: event.payload.folderId,
+            title: event.payload.title,
+            createdAt: event.payload.createdAt,
+            updatedAt: event.payload.updatedAt,
+            deletedAt: null,
+          });
+          return;
+
+        case "folder.renamed": {
+          const existing = yield* projectionFolderRepository.getById({
+            folderId: event.payload.folderId,
+          });
+          if (Option.isNone(existing)) {
+            return;
+          }
+          yield* projectionFolderRepository.upsert({
+            ...existing.value,
+            title: event.payload.title,
+            updatedAt: event.payload.updatedAt,
+          });
+          return;
+        }
+
+        case "folder.deleted": {
+          const existing = yield* projectionFolderRepository.getById({
+            folderId: event.payload.folderId,
+          });
+          if (Option.isNone(existing)) {
+            return;
+          }
+          yield* projectionFolderRepository.upsert({
+            ...existing.value,
+            deletedAt: event.payload.deletedAt,
+            updatedAt: event.payload.deletedAt,
+          });
+          return;
+        }
+
+        default:
+          return;
+      }
+    });
+
     const projectors: ReadonlyArray<ProjectorDefinition> = [
       {
         name: ORCHESTRATION_PROJECTOR_NAMES.projects,
-        // Tasks share the projects cursor: a new cursor would start at zero
-        // and replay the whole event log once for events that cannot exist.
+        // Tasks and folders share the projects cursor: a new cursor would start
+        // at zero and replay the whole event log once for events that cannot exist.
         apply: (event, attachmentSideEffects) =>
           event.aggregateKind === "task"
             ? applyTasksProjection(event, attachmentSideEffects)
-            : applyProjectsProjection(event, attachmentSideEffects),
+            : event.aggregateKind === "folder"
+              ? applyFoldersProjection(event, attachmentSideEffects)
+              : applyProjectsProjection(event, attachmentSideEffects),
       },
       {
         name: ORCHESTRATION_PROJECTOR_NAMES.threadMessages,
@@ -2281,6 +2355,7 @@ export const OrchestrationProjectionPipelineLive = Layer.effect(
   Layer.provideMerge(ProjectionThreadProposedPlanRepositoryLive),
   Layer.provideMerge(ProjectionThreadPullRequests.layer),
   Layer.provideMerge(ProjectionTasks.layer),
+  Layer.provideMerge(ProjectionFolders.layer),
   Layer.provideMerge(ProjectionThreadActivityRepositoryLive),
   Layer.provideMerge(ProjectionThreadSessionRepositoryLive),
   Layer.provideMerge(ProjectionTurnRepositoryLive),

@@ -19,6 +19,7 @@ import type {
   OrchestrationSearchThreadsInput,
   OrchestrationSearchThreadsResult,
   OrchestrationShellSnapshot,
+  OrchestrationFolder,
   OrchestrationTask,
   OrchestrationTaskShell,
   OrchestrationThread,
@@ -27,6 +28,7 @@ import type {
   OrchestrationThreadDetailWindow,
   OrchestrationThreadShell,
   ProjectId,
+  FolderId,
   TaskId,
   ThreadId,
 } from "@t3tools/contracts";
@@ -268,6 +270,11 @@ export interface ProjectionSnapshotQueryShape {
   readonly getTaskShellById: (
     taskId: TaskId,
   ) => Effect.Effect<Option.Option<OrchestrationTaskShell>, ProjectionRepositoryError>;
+
+  /** Read a live (not deleted) folder by id. */
+  readonly getFolderShellById: (
+    folderId: FolderId,
+  ) => Effect.Effect<Option.Option<OrchestrationFolder>, ProjectionRepositoryError>;
 
   /** Read the active thread and session facts used to ingest provider events. */
   readonly getThreadRuntimeContext: (

@@ -63,6 +63,7 @@ import { ProjectionThreadActivity } from "../../persistence/Services/ProjectionT
 import { ProjectionThreadMessage } from "../../persistence/Services/ProjectionThreadMessages.ts";
 import { ProjectionThreadProposedPlan } from "../../persistence/Services/ProjectionThreadProposedPlans.ts";
 import { ProjectionThreadPullRequest } from "../../persistence/ProjectionThreadPullRequests.ts";
+import * as ProjectionFolders from "../../persistence/ProjectionFolders.ts";
 import * as ProjectionTasks from "../../persistence/ProjectionTasks.ts";
 import { ProjectionThreadSession } from "../../persistence/Services/ProjectionThreadSessions.ts";
 import { ProjectionThread } from "../../persistence/Services/ProjectionThreads.ts";
@@ -521,6 +522,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   // Read-only use of the task repository; it shares this SqlClient.
   const projectionTasks = yield* ProjectionTasks.make;
+  const projectionFolders = yield* ProjectionFolders.make;
   const repositoryIdentityResolver = yield* RepositoryIdentityResolver.RepositoryIdentityResolver;
   const repositoryIdentityResolutionConcurrency = 4;
   const resolveRepositoryIdentitiesForProjects = Effect.fn(
@@ -601,6 +603,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           branch,
           worktree_path AS "worktreePath",
           task_id AS "taskId",
+          folder_id AS "folderId",
           origin,
           linked_pull_request_json AS "linkedPullRequest",
           branch_pull_request_json AS "branchPullRequest",
@@ -651,6 +654,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           branch,
           worktree_path AS "worktreePath",
           task_id AS "taskId",
+          folder_id AS "folderId",
           origin,
           linked_pull_request_json AS "linkedPullRequest",
           branch_pull_request_json AS "branchPullRequest",
@@ -728,6 +732,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           branch,
           worktree_path AS "worktreePath",
           task_id AS "taskId",
+          folder_id AS "folderId",
           origin,
           linked_pull_request_json AS "linkedPullRequest",
           branch_pull_request_json AS "branchPullRequest",
@@ -1334,6 +1339,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           branch,
           worktree_path AS "worktreePath",
           task_id AS "taskId",
+          folder_id AS "folderId",
           origin,
           linked_pull_request_json AS "linkedPullRequest",
           branch_pull_request_json AS "branchPullRequest",
@@ -2226,6 +2232,7 @@ pending_approval_requests AS (
             ),
           ),
           projectionTasks.listAll(),
+          projectionFolders.listAll(),
         ]),
       )
       .pipe(
@@ -2242,6 +2249,7 @@ pending_approval_requests AS (
             latestTurnRows,
             stateRows,
             tasks,
+            folders,
           ]) =>
             Effect.gen(function* () {
               const messagesByThread = new Map<string, Array<OrchestrationMessage>>();
@@ -2411,6 +2419,7 @@ pending_approval_requests AS (
                 worktreePath: row.worktreePath,
                 // Omitted unless set, so threads outside tasks cost nothing on the wire.
                 ...(row.taskId != null ? { taskId: row.taskId } : {}),
+                ...(row.folderId != null ? { folderId: row.folderId } : {}),
                 ...(row.origin != null ? { origin: row.origin } : {}),
                 ...mapThreadPullRequests(
                   pullRequestsByThread.get(row.threadId) ?? [],
@@ -2446,6 +2455,7 @@ pending_approval_requests AS (
                 projects,
                 threads,
                 tasks,
+                folders,
                 updatedAt: updatedAt ?? "1970-01-01T00:00:00.000Z",
               };
 
@@ -2525,6 +2535,7 @@ pending_approval_requests AS (
             ),
           ),
           projectionTasks.listAll(),
+          projectionFolders.listAll(),
         ]),
       )
       .pipe(
@@ -2538,6 +2549,7 @@ pending_approval_requests AS (
             latestTurnRows,
             stateRows,
             tasks,
+            folders,
           ]) =>
             Effect.gen(function* () {
               const linkedThreadIds = new Set(pullRequestRows.map((row) => row.threadId));
@@ -2662,6 +2674,7 @@ pending_approval_requests AS (
                   branch: row.branch,
                   worktreePath: row.worktreePath,
                   ...(row.taskId != null ? { taskId: row.taskId } : {}),
+                  ...(row.folderId != null ? { folderId: row.folderId } : {}),
                   ...(row.origin != null ? { origin: row.origin } : {}),
                   ...mapThreadPullRequests(
                     pullRequestsByThread.get(row.threadId) ?? [],
@@ -2698,6 +2711,7 @@ pending_approval_requests AS (
                 projects,
                 threads,
                 tasks,
+                folders,
                 updatedAt: updatedAt ?? "1970-01-01T00:00:00.000Z",
               } satisfies OrchestrationReadModel;
             }),
@@ -2765,6 +2779,7 @@ pending_approval_requests AS (
           ),
           // Archived tasks stay visible as history; only deleted ones leave the shell.
           projectionTasks.listAll(),
+          projectionFolders.listAll(),
         ]),
       )
       .pipe(
@@ -2777,6 +2792,7 @@ pending_approval_requests AS (
             latestTurnRows,
             stateRows,
             tasks,
+            folders,
           ]) =>
             Effect.gen(function* () {
               let updatedAt: string | null = null;
@@ -2836,6 +2852,7 @@ pending_approval_requests AS (
                         branch: row.branch,
                         worktreePath: row.worktreePath,
                         ...(row.taskId != null ? { taskId: row.taskId } : {}),
+                        ...(row.folderId != null ? { folderId: row.folderId } : {}),
                         ...(row.origin != null ? { origin: row.origin } : {}),
                         branchPullRequest: row.branchPullRequest,
                         ...mapThreadPullRequests(
@@ -2871,6 +2888,7 @@ pending_approval_requests AS (
                     : Result.failVoid,
                 ),
                 tasks: tasks.filter((task) => task.deletedAt === null).map(toTaskShell),
+                folders: folders.filter((folder) => folder.deletedAt === null),
                 updatedAt: updatedAt ?? "1970-01-01T00:00:00.000Z",
               } satisfies OrchestrationShellSnapshot;
             }),
@@ -3025,6 +3043,7 @@ pending_approval_requests AS (
                   branch: row.branch,
                   worktreePath: row.worktreePath,
                   ...(row.taskId != null ? { taskId: row.taskId } : {}),
+                  ...(row.folderId != null ? { folderId: row.folderId } : {}),
                   ...(row.origin != null ? { origin: row.origin } : {}),
                   branchPullRequest: row.branchPullRequest,
                   ...mapThreadPullRequests(
@@ -3373,6 +3392,7 @@ pending_approval_requests AS (
         branch: threadRow.value.branch,
         worktreePath: threadRow.value.worktreePath,
         ...(threadRow.value.taskId != null ? { taskId: threadRow.value.taskId } : {}),
+        ...(threadRow.value.folderId != null ? { folderId: threadRow.value.folderId } : {}),
         ...(threadRow.value.origin != null ? { origin: threadRow.value.origin } : {}),
         ...mapThreadPullRequests(
           pullRequestRows.map(mapPullRequestRow),
@@ -3677,6 +3697,7 @@ pending_approval_requests AS (
         branch: threadRow.value.branch,
         worktreePath: threadRow.value.worktreePath,
         ...(threadRow.value.taskId != null ? { taskId: threadRow.value.taskId } : {}),
+        ...(threadRow.value.folderId != null ? { folderId: threadRow.value.folderId } : {}),
         ...(threadRow.value.origin != null ? { origin: threadRow.value.origin } : {}),
         ...mapThreadPullRequests(
           pullRequestRows.map(mapPullRequestRow),
@@ -3911,6 +3932,11 @@ pending_approval_requests AS (
         Effect.map(Option.map(toTaskShell)),
       );
 
+  const getFolderShellById: ProjectionSnapshotQueryShape["getFolderShellById"] = (folderId) =>
+    projectionFolders
+      .getById({ folderId })
+      .pipe(Effect.map(Option.filter((folder) => folder.deletedAt === null)));
+
   return {
     getCommandReadModel,
     getUserInputActivity,
@@ -3934,6 +3960,7 @@ pending_approval_requests AS (
     getThreadShellById,
     getTaskById,
     getTaskShellById,
+    getFolderShellById,
     getThreadRuntimeContext,
     getTurnStartMessage,
     getThreadDetailById,

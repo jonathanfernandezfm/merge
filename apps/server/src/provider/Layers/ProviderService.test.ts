@@ -5107,6 +5107,7 @@ describe("agent browser access", () => {
         getThreadRuntimeContext: () => Effect.die("unused"),
         getTaskById: () => Effect.succeedNone,
         getTaskShellById: () => Effect.succeedNone,
+        getFolderShellById: () => Effect.succeedNone,
         getThreadShellById: (requestedThreadId) =>
           Effect.gen(function* () {
             assert.equal(requestedThreadId, threadId);

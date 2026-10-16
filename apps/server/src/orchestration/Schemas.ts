@@ -34,6 +34,10 @@ import {
   TaskCreatedPayload as ContractsTaskCreatedPayloadSchema,
   TaskMetaUpdatedPayload as ContractsTaskMetaUpdatedPayloadSchema,
   TaskArchivedPayload as ContractsTaskArchivedPayloadSchema,
+  FolderCreatedPayload as ContractsFolderCreatedPayloadSchema,
+  FolderRenamedPayload as ContractsFolderRenamedPayloadSchema,
+  FolderDeletedPayload as ContractsFolderDeletedPayloadSchema,
+  ThreadFolderSetPayload as ContractsThreadFolderSetPayloadSchema,
 } from "@t3tools/contracts";
 
 // Server-internal alias surface, backed by contract schemas as the source of truth.
@@ -79,3 +83,8 @@ export const ThreadSessionStopRequestedPayload = ContractsThreadSessionStopReque
 export const TaskCreatedPayload = ContractsTaskCreatedPayloadSchema;
 export const TaskMetaUpdatedPayload = ContractsTaskMetaUpdatedPayloadSchema;
 export const TaskArchivedPayload = ContractsTaskArchivedPayloadSchema;
+
+export const FolderCreatedPayload = ContractsFolderCreatedPayloadSchema;
+export const FolderRenamedPayload = ContractsFolderRenamedPayloadSchema;
+export const FolderDeletedPayload = ContractsFolderDeletedPayloadSchema;
+export const ThreadFolderSetPayload = ContractsThreadFolderSetPayloadSchema;

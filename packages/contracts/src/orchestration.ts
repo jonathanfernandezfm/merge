@@ -12,6 +12,7 @@ import {
   ClientSurface,
   CommandId,
   EventId,
+  FolderId,
   IsoDateTime,
   MessageId,
   NonNegativeInt,
@@ -812,6 +813,9 @@ export const OrchestrationThread = Schema.Struct({
   // The task this thread works in; its branch/worktreePath are the task
   // workspace's. Optional so payloads from pre-task servers still decode.
   taskId: Schema.optional(Schema.NullOr(TaskId)),
+  // The folder the user parked this thread in. Optional so payloads from
+  // pre-folder servers still decode.
+  folderId: Schema.optional(Schema.NullOr(FolderId)),
   // Absent or null means "user".
   origin: Schema.optional(Schema.NullOr(ThreadOrigin)),
   linkedPullRequest: Schema.optional(Schema.NullOr(ThreadLinkedPullRequest)),
@@ -869,12 +873,27 @@ export const OrchestrationThread = Schema.Struct({
 });
 export type OrchestrationThread = typeof OrchestrationThread.Type;
 
+/**
+ * A user folder for parking threads. Environment-wide: threads of any project
+ * may join it through `OrchestrationThread.folderId`.
+ */
+export const OrchestrationFolder = Schema.Struct({
+  id: FolderId,
+  title: TrimmedNonEmptyString,
+  createdAt: IsoDateTime,
+  updatedAt: IsoDateTime,
+  deletedAt: Schema.NullOr(IsoDateTime),
+});
+export type OrchestrationFolder = typeof OrchestrationFolder.Type;
+
 export const OrchestrationReadModel = Schema.Struct({
   snapshotSequence: NonNegativeInt,
   projects: Schema.Array(OrchestrationProject),
   threads: Schema.Array(OrchestrationThread),
   // Optional so read models from pre-task servers still decode.
   tasks: Schema.optional(Schema.Array(OrchestrationTask)),
+  // Optional so read models from pre-folder servers still decode.
+  folders: Schema.optional(Schema.Array(OrchestrationFolder)),
   updatedAt: IsoDateTime,
 });
 export type OrchestrationReadModel = typeof OrchestrationReadModel.Type;
@@ -908,6 +927,7 @@ export const OrchestrationThreadShell = Schema.Struct({
   branch: Schema.NullOr(TrimmedNonEmptyString),
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
   taskId: Schema.optional(Schema.NullOr(TaskId)),
+  folderId: Schema.optional(Schema.NullOr(FolderId)),
   origin: Schema.optional(Schema.NullOr(ThreadOrigin)),
   linkedPullRequest: Schema.optional(Schema.NullOr(ThreadLinkedPullRequest)),
   pullRequests: Schema.Array(ThreadPullRequestLink).pipe(
@@ -966,6 +986,8 @@ export const OrchestrationShellSnapshot = Schema.Struct({
   threads: Schema.Array(OrchestrationThreadShell),
   // Optional so snapshots from pre-task servers still decode.
   tasks: Schema.optional(Schema.Array(OrchestrationTaskShell)),
+  // Live folders only. Optional so snapshots from pre-folder servers still decode.
+  folders: Schema.optional(Schema.Array(OrchestrationFolder)),
   updatedAt: IsoDateTime,
 });
 export type OrchestrationShellSnapshot = typeof OrchestrationShellSnapshot.Type;
@@ -1003,6 +1025,18 @@ export const OrchestrationShellStreamEvent = Schema.Union([
     sequence: NonNegativeInt,
     taskId: TaskId,
   }),
+  // Only sent to subscribers that pass `includeFolders`. A removed folder
+  // releases its threads: clients clear their `folderId` on receipt.
+  Schema.Struct({
+    kind: Schema.Literal("folder-upserted"),
+    sequence: NonNegativeInt,
+    folder: OrchestrationFolder,
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("folder-removed"),
+    sequence: NonNegativeInt,
+    folderId: FolderId,
+  }),
 ]);
 export type OrchestrationShellStreamEvent = typeof OrchestrationShellStreamEvent.Type;
 
@@ -1035,6 +1069,8 @@ export const OrchestrationSubscribeShellInput = Schema.Struct({
   requestCompletionMarker: Schema.optionalKey(Schema.Boolean),
   /** Opt in to `task-upserted` / `task-removed` events. */
   includeTasks: Schema.optionalKey(Schema.Boolean),
+  /** Opt in to `folder-upserted` / `folder-removed` events. */
+  includeFolders: Schema.optionalKey(Schema.Boolean),
 });
 export type OrchestrationSubscribeShellInput = typeof OrchestrationSubscribeShellInput.Type;
 
@@ -1257,6 +1293,35 @@ const ThreadPinReorderCommand = Schema.Struct({
   // on other servers) are never touched. Clients compute a key that sorts
   // between the dropped position's neighbors.
   orderKey: TrimmedNonEmptyString,
+});
+
+const FolderCreateCommand = Schema.Struct({
+  type: Schema.Literal("folder.create"),
+  commandId: CommandId,
+  folderId: FolderId,
+  title: TrimmedNonEmptyString,
+});
+
+const FolderRenameCommand = Schema.Struct({
+  type: Schema.Literal("folder.rename"),
+  commandId: CommandId,
+  folderId: FolderId,
+  title: TrimmedNonEmptyString,
+});
+
+// Threads in the folder are released, never deleted.
+const FolderDeleteCommand = Schema.Struct({
+  type: Schema.Literal("folder.delete"),
+  commandId: CommandId,
+  folderId: FolderId,
+});
+
+// Null takes the thread out of its folder.
+const ThreadFolderSetCommand = Schema.Struct({
+  type: Schema.Literal("thread.folder.set"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  folderId: Schema.NullOr(FolderId),
 });
 
 const ThreadAutoSettleSetCommand = Schema.Struct({
@@ -1504,6 +1569,10 @@ const DispatchableClientOrchestrationCommand = Schema.Union([
   ThreadConversationRevertCommand,
   ThreadSessionStopCommand,
   TaskMetaUpdateCommand,
+  FolderCreateCommand,
+  FolderRenameCommand,
+  FolderDeleteCommand,
+  ThreadFolderSetCommand,
 ]);
 export type DispatchableClientOrchestrationCommand =
   typeof DispatchableClientOrchestrationCommand.Type;
@@ -1539,6 +1608,10 @@ export const ClientOrchestrationCommand = Schema.Union([
   ThreadConversationRevertCommand,
   ThreadSessionStopCommand,
   TaskMetaUpdateCommand,
+  FolderCreateCommand,
+  FolderRenameCommand,
+  FolderDeleteCommand,
+  ThreadFolderSetCommand,
 ]);
 export type ClientOrchestrationCommand = typeof ClientOrchestrationCommand.Type;
 
@@ -1812,10 +1885,14 @@ export const OrchestrationEventType = Schema.Literals([
   "task.created",
   "task.meta-updated",
   "task.archived",
+  "folder.created",
+  "folder.renamed",
+  "folder.deleted",
+  "thread.folder-set",
 ]);
 export type OrchestrationEventType = typeof OrchestrationEventType.Type;
 
-export const OrchestrationAggregateKind = Schema.Literals(["project", "thread", "task"]);
+export const OrchestrationAggregateKind = Schema.Literals(["project", "thread", "task", "folder"]);
 export type OrchestrationAggregateKind = typeof OrchestrationAggregateKind.Type;
 export const OrchestrationActorKind = Schema.Literals(["client", "server", "provider"]);
 
@@ -2129,6 +2206,35 @@ export const TaskArchivedPayload = Schema.Struct({
 });
 export type TaskArchivedPayload = typeof TaskArchivedPayload.Type;
 
+export const FolderCreatedPayload = Schema.Struct({
+  folderId: FolderId,
+  title: TrimmedNonEmptyString,
+  createdAt: IsoDateTime,
+  updatedAt: IsoDateTime,
+});
+export type FolderCreatedPayload = typeof FolderCreatedPayload.Type;
+
+export const FolderRenamedPayload = Schema.Struct({
+  folderId: FolderId,
+  title: TrimmedNonEmptyString,
+  updatedAt: IsoDateTime,
+});
+export type FolderRenamedPayload = typeof FolderRenamedPayload.Type;
+
+/** Projections clear `folderId` on every thread in the folder. */
+export const FolderDeletedPayload = Schema.Struct({
+  folderId: FolderId,
+  deletedAt: IsoDateTime,
+});
+export type FolderDeletedPayload = typeof FolderDeletedPayload.Type;
+
+export const ThreadFolderSetPayload = Schema.Struct({
+  threadId: ThreadId,
+  folderId: Schema.NullOr(FolderId),
+  updatedAt: IsoDateTime,
+});
+export type ThreadFolderSetPayload = typeof ThreadFolderSetPayload.Type;
+
 /**
  * Which client connection dispatched the command that produced an event.
  * Stamped by the orchestration engine on client-dispatched commands; absent on
@@ -2162,7 +2268,7 @@ const EventBaseFields = {
   sequence: NonNegativeInt,
   eventId: EventId,
   aggregateKind: OrchestrationAggregateKind,
-  aggregateId: Schema.Union([ProjectId, ThreadId, TaskId]),
+  aggregateId: Schema.Union([ProjectId, ThreadId, TaskId, FolderId]),
   occurredAt: IsoDateTime,
   commandId: Schema.NullOr(CommandId),
   causationEventId: Schema.NullOr(EventId),
@@ -2350,6 +2456,26 @@ export const OrchestrationEvent = Schema.Union([
     ...EventBaseFields,
     type: Schema.Literal("task.archived"),
     payload: TaskArchivedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("folder.created"),
+    payload: FolderCreatedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("folder.renamed"),
+    payload: FolderRenamedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("folder.deleted"),
+    payload: FolderDeletedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("thread.folder-set"),
+    payload: ThreadFolderSetPayload,
   }),
 ]);
 export type OrchestrationEvent = typeof OrchestrationEvent.Type;

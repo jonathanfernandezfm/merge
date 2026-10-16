@@ -62,6 +62,7 @@ const makeProjectionSnapshotQueryLayer = (importedWorkspaceRoots: ReadonlyArray<
     getFullThreadDiffContext: () => Effect.die("unused"),
     getTaskById: () => Effect.succeedNone,
     getTaskShellById: () => Effect.succeedNone,
+    getFolderShellById: () => Effect.succeedNone,
     getThreadShellById: () => Effect.die("unused"),
     getThreadRuntimeContext: () => Effect.die("unused"),
     getTurnStartMessage: () => Effect.die("unused"),

@@ -36,6 +36,8 @@ import {
 } from "./Errors.ts";
 import {
   listThreadsByProjectId,
+  requireFolder,
+  requireFolderAbsent,
   requireActiveProjectWorkspaceRootAbsent,
   requireProject,
   requireProjectAbsent,
@@ -2336,6 +2338,92 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           taskId: command.taskId,
           archivedAt: occurredAt,
           updatedAt: occurredAt,
+        },
+      };
+    }
+
+    case "folder.create": {
+      yield* requireFolderAbsent({ readModel, command, folderId: command.folderId });
+      const occurredAt = yield* nowIso;
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "folder",
+          aggregateId: command.folderId,
+          occurredAt,
+          commandId: command.commandId,
+        })),
+        type: "folder.created",
+        payload: {
+          folderId: command.folderId,
+          title: command.title,
+          createdAt: occurredAt,
+          updatedAt: occurredAt,
+        },
+      };
+    }
+
+    case "folder.rename": {
+      yield* requireFolder({ readModel, command, folderId: command.folderId });
+      const occurredAt = yield* nowIso;
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "folder",
+          aggregateId: command.folderId,
+          occurredAt,
+          commandId: command.commandId,
+        })),
+        type: "folder.renamed",
+        payload: {
+          folderId: command.folderId,
+          title: command.title,
+          updatedAt: occurredAt,
+        },
+      };
+    }
+
+    // Threads are released by the projections, never deleted or archived.
+    case "folder.delete": {
+      yield* requireFolder({ readModel, command, folderId: command.folderId });
+      const occurredAt = yield* nowIso;
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "folder",
+          aggregateId: command.folderId,
+          occurredAt,
+          commandId: command.commandId,
+        })),
+        type: "folder.deleted",
+        payload: {
+          folderId: command.folderId,
+          deletedAt: occurredAt,
+        },
+      };
+    }
+
+    case "thread.folder.set": {
+      const thread = yield* requireThread({ readModel, command, threadId: command.threadId });
+      if (thread.deletedAt !== null) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: `Thread '${command.threadId}' is deleted.`,
+        });
+      }
+      if (command.folderId !== null) {
+        yield* requireFolder({ readModel, command, folderId: command.folderId });
+      }
+      // Filing is not activity: updatedAt stays so the thread keeps its place.
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "thread",
+          aggregateId: command.threadId,
+          occurredAt: yield* nowIso,
+          commandId: command.commandId,
+        })),
+        type: "thread.folder-set",
+        payload: {
+          threadId: command.threadId,
+          folderId: command.folderId,
+          updatedAt: thread.updatedAt,
         },
       };
     }

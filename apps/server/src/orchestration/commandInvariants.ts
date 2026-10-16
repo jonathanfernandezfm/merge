@@ -1,5 +1,7 @@
 import type {
+  FolderId,
   OrchestrationCommand,
+  OrchestrationFolder,
   OrchestrationProject,
   OrchestrationReadModel,
   OrchestrationTask,
@@ -236,6 +238,40 @@ export function requireTaskAbsent(input: {
     invariantError(
       input.command.type,
       `Task '${input.taskId}' already exists and cannot be created twice.`,
+    ),
+  );
+}
+
+/** A live folder: created and not deleted. */
+export function requireFolder(input: {
+  readonly readModel: OrchestrationReadModel;
+  readonly command: OrchestrationCommand;
+  readonly folderId: FolderId;
+}): Effect.Effect<OrchestrationFolder, OrchestrationCommandInvariantError> {
+  const folder = input.readModel.folders?.find((entry) => entry.id === input.folderId);
+  if (folder !== undefined && folder.deletedAt === null) {
+    return Effect.succeed(folder);
+  }
+  return Effect.fail(
+    invariantError(
+      input.command.type,
+      `Folder '${input.folderId}' does not exist for command '${input.command.type}'.`,
+    ),
+  );
+}
+
+export function requireFolderAbsent(input: {
+  readonly readModel: OrchestrationReadModel;
+  readonly command: OrchestrationCommand;
+  readonly folderId: FolderId;
+}): Effect.Effect<void, OrchestrationCommandInvariantError> {
+  if (input.readModel.folders?.some((entry) => entry.id === input.folderId) !== true) {
+    return Effect.void;
+  }
+  return Effect.fail(
+    invariantError(
+      input.command.type,
+      `Folder '${input.folderId}' already exists and cannot be created twice.`,
     ),
   );
 }

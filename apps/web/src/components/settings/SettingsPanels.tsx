@@ -576,6 +576,9 @@ export function useSettingsRestore(onRestored?: () => void) {
       ...(settings.sidebarTasksEnabled !== DEFAULT_UNIFIED_SETTINGS.sidebarTasksEnabled
         ? ["Tasks in sidebar"]
         : []),
+      ...(settings.sidebarCompactThreads !== DEFAULT_UNIFIED_SETTINGS.sidebarCompactThreads
+        ? ["Compact thread rows"]
+        : []),
       ...(settings.sidebarAutoSettleAfterDays !==
       DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleAfterDays
         ? ["Auto-settle inactive threads"]
@@ -698,6 +701,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.sidebarAutoSettleOnMerge,
       settings.sidebarProjectGroupingMode,
       settings.sidebarTasksEnabled,
+      settings.sidebarCompactThreads,
       settings.sidebarThreadPreviewCount,
       settings.showSkillsInSlashMenu,
       settings.timestampFormat,
@@ -802,6 +806,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       sidebarThreadPreviewCount: DEFAULT_UNIFIED_SETTINGS.sidebarThreadPreviewCount,
       sidebarProjectGroupingMode: DEFAULT_UNIFIED_SETTINGS.sidebarProjectGroupingMode,
       sidebarTasksEnabled: DEFAULT_UNIFIED_SETTINGS.sidebarTasksEnabled,
+      sidebarCompactThreads: DEFAULT_UNIFIED_SETTINGS.sidebarCompactThreads,
       sidebarAutoSettleAfterDays: DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleAfterDays,
       sidebarAutoSettleOnMerge: DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleOnMerge,
       responseStreamingMode: DEFAULT_UNIFIED_SETTINGS.responseStreamingMode,
@@ -2313,6 +2318,32 @@ export function GeneralSettingsPanel() {
                 updateSettings({ sidebarTasksEnabled: Boolean(checked) })
               }
               aria-label="Tasks in sidebar"
+            />
+          }
+        />
+
+        <SettingsRow
+          {...searchableSetting("sidebar-compact-threads")}
+          description="Hide the branch line and shorten sidebar thread rows so more fit."
+          resetAction={
+            settings.sidebarCompactThreads !== DEFAULT_UNIFIED_SETTINGS.sidebarCompactThreads ? (
+              <SettingResetButton
+                label="compact thread rows"
+                onClick={() =>
+                  updateSettings({
+                    sidebarCompactThreads: DEFAULT_UNIFIED_SETTINGS.sidebarCompactThreads,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Switch
+              checked={settings.sidebarCompactThreads}
+              onCheckedChange={(checked) =>
+                updateSettings({ sidebarCompactThreads: Boolean(checked) })
+              }
+              aria-label="Compact thread rows"
             />
           }
         />

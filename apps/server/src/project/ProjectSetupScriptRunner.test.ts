@@ -54,6 +54,7 @@ const makeProjectionSnapshotQueryLayer = (project: OrchestrationProject) =>
     getTurnStartMessage: () => Effect.die("unused"),
     getTaskById: () => Effect.succeedNone,
     getTaskShellById: () => Effect.succeedNone,
+    getFolderShellById: () => Effect.succeedNone,
     getThreadShellById: () => Effect.die("unused"),
     getThreadDetailById: () => Effect.die("unused"),
     getThreadDetailSnapshot: () => Effect.die("unused"),

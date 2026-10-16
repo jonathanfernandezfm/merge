@@ -622,6 +622,14 @@ describe("ClientSettings sidebar", () => {
     expect(decodeClientSettingsPatch(stored)).toEqual({});
   });
 
+  it("keeps thread rows full height unless compact view is on", () => {
+    expect(decodeClientSettings({}).sidebarCompactThreads).toBe(false);
+    expect(decodeClientSettings({ sidebarCompactThreads: true }).sidebarCompactThreads).toBe(true);
+    expect(decodeClientSettingsPatch({ sidebarCompactThreads: true }).sidebarCompactThreads).toBe(
+      true,
+    );
+  });
+
   it("shows the Tasks section unless turned off", () => {
     expect(decodeClientSettings({}).sidebarTasksEnabled).toBe(true);
     expect(decodeClientSettings({ sidebarTasksEnabled: false }).sidebarTasksEnabled).toBe(false);

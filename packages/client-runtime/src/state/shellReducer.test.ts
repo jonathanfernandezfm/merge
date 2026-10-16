@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { ProjectId, ProviderInstanceId, TaskId, ThreadId } from "@t3tools/contracts";
+import { FolderId, ProjectId, ProviderInstanceId, TaskId, ThreadId } from "@t3tools/contracts";
 import type {
   OrchestrationShellSnapshot,
   OrchestrationShellStreamEvent,
@@ -234,5 +234,38 @@ describe("applyShellStreamEvent", () => {
     });
     expect(removed.tasks).toEqual([]);
     expect(removed.snapshotSequence).toBe(3);
+  });
+});
+
+describe("folder events", () => {
+  const folder = {
+    id: FolderId.make("folder-1"),
+    title: "Later",
+    createdAt: "2026-04-01T00:00:00.000Z",
+    updatedAt: "2026-04-01T00:00:00.000Z",
+    deletedAt: null,
+  };
+
+  it("upserts a folder and releases its threads when it is removed", () => {
+    const withFolder = applyShellStreamEvent(
+      { ...baseSnapshot, threads: [{ ...stubThread, folderId: folder.id }] },
+      { kind: "folder-upserted", sequence: 1, folder },
+    );
+    expect(withFolder.folders).toEqual([folder]);
+
+    const renamed = applyShellStreamEvent(withFolder, {
+      kind: "folder-upserted",
+      sequence: 2,
+      folder: { ...folder, title: "Check back" },
+    });
+    expect(renamed.folders?.map((entry) => entry.title)).toEqual(["Check back"]);
+
+    const removed = applyShellStreamEvent(renamed, {
+      kind: "folder-removed",
+      sequence: 3,
+      folderId: folder.id,
+    });
+    expect(removed.folders).toEqual([]);
+    expect(removed.threads.map((thread) => thread.folderId)).toEqual([null]);
   });
 });

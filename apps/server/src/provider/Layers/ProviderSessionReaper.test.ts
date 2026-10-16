@@ -256,6 +256,7 @@ describe("ProviderSessionReaper", () => {
           getTurnStartMessage: () => Effect.die("unused"),
           getTaskById: () => Effect.succeedNone,
           getTaskShellById: () => Effect.succeedNone,
+          getFolderShellById: () => Effect.succeedNone,
           getThreadShellById: (threadId) =>
             Effect.succeed(
               input.readModel.threads.find((thread) => thread.id === threadId)

@@ -7,7 +7,7 @@ import {
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
 import { canSnooze, effectiveSnoozed } from "@t3tools/client-runtime/state/thread-settled";
-import type { ScopedThreadRef, ThreadId } from "@t3tools/contracts";
+import { FolderId, type ScopedThreadRef, type ThreadId } from "@t3tools/contracts";
 import { useRouter } from "@tanstack/react-router";
 import { useCallback, useMemo } from "react";
 
@@ -41,6 +41,8 @@ import { useCopyToClipboard } from "./useCopyToClipboard";
 import { useNewThreadHandler } from "./useHandleNewThread";
 import { useClientSettings } from "./useSettings";
 import { useThreadActions } from "./useThreadActions";
+import { useFolderActions } from "./useFolderActions";
+import { readThreadFolderMenuState } from "../components/folder/folderMenu";
 
 function failureToast(title: string, error: unknown) {
   toastManager.add(
@@ -93,6 +95,7 @@ export function useThreadActionMenu(input: {
     archiveThread,
     deleteThread,
   } = useThreadActions();
+  const { moveThreadToFolder, moveThreadToNewFolder } = useFolderActions();
   const updateThreadMetadata = useAtomCommand(threadEnvironment.updateMetadata, {
     reportFailure: false,
   });
@@ -155,6 +158,7 @@ export function useThreadActionMenu(input: {
           isRunning: thread.session?.status === "running" && thread.session.activeTurnId != null,
           supports,
           snoozePresets,
+          folders: readThreadFolderMenuState(thread),
         });
         const clicked = await settlePromise(() => api.contextMenu.show(items, position));
         if (clicked._tag === "Failure" || clicked.value === null) return;
@@ -180,7 +184,20 @@ export function useThreadActionMenu(input: {
             failureToast(title, squashAtomCommandFailure(result));
           }
         };
+        if (action.startsWith("move-to-folder:")) {
+          await moveThreadToFolder(
+            threadRef,
+            FolderId.make(action.slice("move-to-folder:".length)),
+          );
+          return;
+        }
         switch (action) {
+          case "move-to-new-folder":
+            await moveThreadToNewFolder(threadRef);
+            return;
+          case "remove-from-folder":
+            await moveThreadToFolder(threadRef, null);
+            return;
           case "project-settings": {
             const project = projects.find(
               (candidate) =>
@@ -327,6 +344,8 @@ export function useThreadActionMenu(input: {
     },
     [
       archiveThread,
+      moveThreadToFolder,
+      moveThreadToNewFolder,
       confirmThreadArchive,
       confirmThreadDelete,
       confirmAndUnpinThread,

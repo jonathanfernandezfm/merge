@@ -100,6 +100,25 @@ If dragging is unavailable for one environment, update the Merge server running 
 environment. Pinned and active reordering require server support. Threads from older servers keep
 their default order until the server is updated.
 
+## Park threads in folders
+
+On web and desktop, use folders to set threads aside without settling them, or to keep
+conversations you want to check back on. Create one with the **New folder** button in the
+sidebar's **Folders** section, or pick **Move to folder → New folder…** from a thread's menu. The
+same menu moves a thread between folders, and **Remove from folder** returns it to **Threads**.
+
+Filed threads leave the **Threads** list and appear under their folder; search still finds them.
+Right-click a folder to rename or delete it. Deleting a folder never deletes its threads: they
+move back to **Threads**. Folders belong to one environment, so a thread can only move into
+folders from its own environment. Mobile does not show folders yet; filed threads appear there
+as usual. If folders are missing for an environment, update the Merge server running there.
+
+## Compact thread rows
+
+On web and desktop, the button next to the **Threads** header toggles compact rows, which hide
+the branch line and shorten each row so more threads fit. The same option is
+**Settings → General → Compact thread rows**.
+
 ## Settle finished work
 
 Choose **Settle thread** from its menu to move finished work out of the active list

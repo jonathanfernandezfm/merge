@@ -8,6 +8,7 @@
  */
 import {
   CommandId,
+  FolderId,
   IsoDateTime,
   ModelSelection,
   NonNegativeInt,
@@ -39,6 +40,7 @@ export const ProjectionThread = Schema.Struct({
   branch: Schema.NullOr(Schema.String),
   worktreePath: Schema.NullOr(Schema.String),
   taskId: Schema.optional(Schema.NullOr(TaskId)),
+  folderId: Schema.optional(Schema.NullOr(FolderId)),
   origin: Schema.optional(Schema.NullOr(ThreadOrigin)),
   linkedPullRequest: Schema.optional(Schema.NullOr(ThreadLinkedPullRequest)),
   branchPullRequest: Schema.optional(Schema.NullOr(ThreadLinkedPullRequest)),
