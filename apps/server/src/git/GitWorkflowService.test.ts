@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 
-import { VcsRepositoryDetectionError } from "@t3tools/contracts";
+import { GitCommandError, VcsRepositoryDetectionError } from "@t3tools/contracts";
 
 import * as GitManager from "./GitManager.ts";
 import * as GitWorkflowService from "./GitWorkflowService.ts";
@@ -164,6 +164,61 @@ describe("GitWorkflowService", () => {
         }),
       ),
     ),
+  );
+
+  it.effect(
+    "fetches the primary remote before a refreshed remote ref list, even if it fails",
+    () => {
+      const calls: Array<string> = [];
+      const listed = {
+        refs: [],
+        isRepo: true,
+        hasPrimaryRemote: true,
+        nextCursor: null,
+        totalCount: 0,
+      };
+      const testLayer = GitWorkflowService.layer.pipe(
+        Layer.provide(
+          Layer.mock(VcsDriverRegistry.VcsDriverRegistry)({
+            detect: () =>
+              Effect.succeed({ kind: "git" } as unknown as VcsDriverRegistry.VcsDriverHandle),
+          }),
+        ),
+        Layer.provide(
+          Layer.mock(GitVcsDriver.GitVcsDriver)({
+            resolvePrimaryRemoteName: () => Effect.succeed("origin"),
+            fetchRemote: (input) =>
+              Effect.sync(() => calls.push(`fetch ${input.remoteName}`)).pipe(
+                Effect.andThen(
+                  Effect.fail(
+                    new GitCommandError({
+                      operation: "fetch",
+                      command: "git fetch",
+                      cwd: "/repo",
+                      detail: "offline",
+                    }),
+                  ),
+                ),
+              ),
+            listRefs: (input) =>
+              Effect.sync(() => calls.push(`list ${input.refKind ?? "all"}`)).pipe(
+                Effect.as(listed),
+              ),
+          }),
+        ),
+        Layer.provide(Layer.mock(GitManager.GitManager)({})),
+      );
+
+      return Effect.gen(function* () {
+        const workflow = yield* GitWorkflowService.GitWorkflowService;
+        assert.deepStrictEqual(
+          yield* workflow.listRefs({ cwd: "/repo", refKind: "remote", refresh: true }),
+          listed,
+        );
+        yield* workflow.listRefs({ cwd: "/repo", refKind: "local", refresh: true });
+        assert.deepStrictEqual(calls, ["fetch origin", "list remote", "list local"]);
+      }).pipe(Effect.provide(testLayer));
+    },
   );
 
   it.effect("structures workflow detection failures without exposing upstream details", () => {

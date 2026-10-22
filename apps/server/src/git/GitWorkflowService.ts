@@ -337,7 +337,16 @@ export const make = Effect.gen(function* () {
     listRefs: (input) =>
       detectGitRepositoryForCommand("GitWorkflowService.listRefs", input.cwd).pipe(
         Effect.flatMap((isGitRepository) =>
-          isGitRepository ? git.listRefs(input) : Effect.succeed(nonRepositoryListRefs()),
+          !isGitRepository
+            ? Effect.succeed(nonRepositoryListRefs())
+            : input.refresh === true && input.refKind === "remote"
+              ? // Fetch first so a branch just pushed elsewhere shows up; offline still lists.
+                git.resolvePrimaryRemoteName(input.cwd).pipe(
+                  Effect.flatMap((remoteName) => git.fetchRemote({ cwd: input.cwd, remoteName })),
+                  Effect.ignore,
+                  Effect.andThen(git.listRefs(input)),
+                )
+              : git.listRefs(input),
         ),
       ),
     createWorktree: (input, options) =>
