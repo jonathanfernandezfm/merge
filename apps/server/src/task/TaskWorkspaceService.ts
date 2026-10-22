@@ -1,3 +1,4 @@
+// @effect-diagnostics nodeBuiltinImport:off
 /**
  * TaskWorkspaceService - creates, prepares and archives the git worktree a
  * task works in.
@@ -36,6 +37,7 @@ import {
   type GitCommandError,
   TaskOperationError,
 } from "@t3tools/contracts";
+import * as NodeFSP from "node:fs/promises";
 import { projectScriptRuntimeEnv } from "@t3tools/shared/projectScripts";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import * as Context from "effect/Context";
@@ -575,7 +577,19 @@ const make = Effect.gen(function* () {
       yield* fs.remove(destination, { recursive: true });
     }
     yield* fs.makeDirectory(path.dirname(destination), { recursive: true });
-    yield* fs.copy(source, destination);
+    // Node's cp rejects sockets, FIFOs and devices (a daemon socket in
+    // `.codegraph`, say), so copy only files, directories and symlinks.
+    yield* Effect.tryPromise({
+      try: () =>
+        NodeFSP.cp(source, destination, {
+          recursive: true,
+          filter: async (entry) => {
+            const stat = await NodeFSP.lstat(entry);
+            return stat.isFile() || stat.isDirectory() || stat.isSymbolicLink();
+          },
+        }),
+      catch: (cause) => failed(`Could not copy ${rule.from}: ${errorDetail(cause)}`, cause),
+    });
     return {
       status: "done",
       log: `Copied ${rule.from} to ${rule.to ?? rule.from}`,

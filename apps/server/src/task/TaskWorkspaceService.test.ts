@@ -1,4 +1,5 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as NodeNet from "node:net";
 import {
   CommandId,
   ProjectId,
@@ -318,6 +319,14 @@ it.layer(NodeServices.layer)("TaskWorkspaceService", (it) => {
           const service = yield* TaskWorkspaceService.TaskWorkspaceService;
           yield* writeFile(path.join(root, ".env.local"), "SECRET=1\n");
           yield* writeFile(path.join(root, "config", "nested", "app.json"), "{}\n");
+          // A live daemon socket inside a copied directory must not fail the copy.
+          const daemon = NodeNet.createServer().unref();
+          yield* Effect.promise(
+            () =>
+              new Promise<void>((resolve) =>
+                daemon.listen(path.join(root, "config", "daemon.sock"), resolve),
+              ),
+          );
           yield* writeFile(
             path.join(root, "t3.json"),
             `{"workspace":{"copy":[{"from":".env.local"},{"from":"config","to":"settings"},{"from":"optional-missing.txt"},{"from":"README.md"}]}}`,
@@ -366,6 +375,8 @@ it.layer(NodeServices.layer)("TaskWorkspaceService", (it) => {
           expect(yield* fs.exists(path.join(workspacePath, "settings", "nested", "app.json"))).toBe(
             true,
           );
+          expect(yield* fs.exists(path.join(workspacePath, "settings", "daemon.sock"))).toBe(false);
+          daemon.close();
           // overwrite defaults to false: the checked-out README stays.
           expect(yield* fs.readFileString(path.join(workspacePath, "README.md"))).toBe("hello\n");
 
