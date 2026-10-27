@@ -1,1 +1,7 @@
-[]
+[
+  {
+    "id": "migrations",
+    "file": "apps/server/src/persistence/Migrations.ts",
+    "purpose": "Move v0.0.10 fork rows out of effect_sql_migrations, then run fork migrations from merge_fork_migrations"
+  }
+]
