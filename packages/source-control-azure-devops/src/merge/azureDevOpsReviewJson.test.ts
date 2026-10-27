@@ -1,12 +1,12 @@
 // @effect-diagnostics nodeBuiltinImport:off -- Reads recorded az fixtures synchronously.
 import * as NodeFS from "node:fs";
 
+import { decodeExpiredPolicyEvaluationIds } from "@t3tools/contracts";
 import * as Result from "effect/Result";
 import { describe, expect, it } from "vite-plus/test";
 
 import { decodeThreadsJson } from "../server/azureDevOpsPullRequestJson.ts";
 import {
-  decodeExpiredPolicyEvaluationIds,
   decodePolicyEvaluationsJson,
   decodeReviewDecisionJson,
   decodeReviewThreadsJson,
@@ -166,8 +166,8 @@ describe("decodeExpiredPolicyEvaluationIds", () => {
       { evaluationId: "eval-live", status: "queued", context: { isExpired: false } },
       { status: "queued", context: { isExpired: true } },
     ]);
-    expect(expectSuccess(decodeExpiredPolicyEvaluationIds(raw))).toEqual(["eval-expired"]);
-    expect(expectSuccess(decodeExpiredPolicyEvaluationIds(""))).toEqual([]);
+    expect(decodeExpiredPolicyEvaluationIds(raw)).toEqual(["eval-expired"]);
+    expect(decodeExpiredPolicyEvaluationIds("")).toEqual([]);
   });
 });
 
