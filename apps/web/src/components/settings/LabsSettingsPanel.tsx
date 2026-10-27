@@ -14,7 +14,11 @@ import { useScopedSettings, useUpdateScopedSettings } from "./useScopedSettings"
 export function LabsSettingsPanel() {
   return (
     <SettingsPageContainer>
-      <SettingsSection id="beta" title="Beta">
+      <SettingsSection
+        id="beta"
+        title="Beta"
+        className={hasCloudPublicConfig() ? undefined : "hidden"} // merge-seam: hosted-services
+      >
         {/* Clerk is only mounted when this build has T3 Connect. */}
         {hasCloudPublicConfig() ? <GuestLinksRowWithSignIn /> : <GuestLinksRow />}
       </SettingsSection>
