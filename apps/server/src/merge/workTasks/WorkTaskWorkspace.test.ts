@@ -120,6 +120,12 @@ const layer = WorkTaskWorkspace.layer.pipe(
   Layer.provide(
     Layer.mock(ProjectionStore.ProjectionStoreV2)({
       getThreadShell: (threadId) => Effect.succeed(shells.get(threadId) ?? null),
+      listActiveSubagentThreadIds: () =>
+        Effect.succeed(
+          [...shells.values()]
+            .filter((shell) => shell.lineage.relationshipToParent === "subagent")
+            .map((shell) => shell.id),
+        ),
     }),
   ),
   Layer.provide(
@@ -203,6 +209,22 @@ it.effect("archiveCheck reports each blocker", () =>
       }),
     );
     assert.deepStrictEqual(yield* prCheck(), ["agent-running"]);
+
+    // An async subagent child still running after its parent's run ended also blocks.
+    shells.set("thread-a", shell("thread-a", { latestRunId: "run-1" as never }));
+    assert.deepStrictEqual(yield* prCheck(), ["pull-request-open"]);
+    shells.set(
+      "child",
+      shell("child", {
+        status: "running",
+        lineage: {
+          rootThreadId: ThreadId.make("thread-a"),
+          parentThreadId: ThreadId.make("thread-a"),
+          relationshipToParent: "subagent",
+        },
+      }),
+    );
+    assert.deepStrictEqual(yield* prCheck(), ["pull-request-open", "agent-running"]);
     NodeFS.rmSync(repo.root, { recursive: true, force: true });
   }).pipe(Effect.provide(layer)),
 );
