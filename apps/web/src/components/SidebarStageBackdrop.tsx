@@ -1,5 +1,7 @@
 import { useAtomValue } from "@effect/atom-react";
 import { useId } from "react";
+import { MergeTextureArt } from "../merge/brandTexture/MergeTextureArt"; // merge-seam: texture
+import { MERGE_TEXTURE_ENABLED } from "../merge/brandTexture/flags"; // merge-seam: texture
 
 import { APP_STAGE_LABEL } from "../branding";
 import { resolveServerBackedAppStageLabel } from "../branding.logic";
@@ -18,6 +20,7 @@ export function resolveSidebarStageBackdropVariant(
   const normalized = stageLabel.trim().toLowerCase();
   if (normalized === "nightly") return "nightly";
   if (normalized === "dev") return "dev";
+  if (MERGE_TEXTURE_ENABLED) return "dev"; // merge-seam: texture
   return null;
 }
 
@@ -56,6 +59,7 @@ export function SidebarStageBackdrop({ variant }: { variant: SidebarStageBackdro
 }
 
 export function StageBackdropArt({ variant }: { variant: SidebarStageBackdropVariant }) {
+  if (variant === "dev") return <MergeTextureArt />; // merge-seam: texture
   return variant === "nightly" ? <NightlySkyArt /> : <DevBlueprintArt />;
 }
 

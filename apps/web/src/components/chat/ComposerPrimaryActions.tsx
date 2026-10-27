@@ -7,6 +7,7 @@ import { formatContextWindowTokens } from "~/lib/contextWindow";
 import { cn } from "~/lib/utils";
 import { useShortcutModifierState } from "../../shortcutModifierState";
 import { StageBackdropButtonArt, useSidebarStageBackdropVariant } from "../SidebarStageBackdrop";
+import { SEND_BUTTON_STAGE_ART_ENABLED } from "../../merge/brandTexture/flags"; // merge-seam: texture
 import { Button } from "../ui/button";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
 import { Spinner } from "../ui/spinner";
@@ -125,7 +126,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
   const alternateAction = alternateComposerDispatchAction(followUpBehavior);
   const isSendDisabled = !canOperateThread || sendDisabledReason !== null;
   const stageBackdropVariant = useSidebarStageBackdropVariant(
-    environmentIdentificationMode === "artwork",
+    environmentIdentificationMode === "artwork" && SEND_BUTTON_STAGE_ART_ENABLED, // merge-seam: texture
   );
 
   const renderStopGenerationButton = (insidePendingAction: boolean) => (

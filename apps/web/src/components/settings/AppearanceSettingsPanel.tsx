@@ -21,6 +21,7 @@ import { useTheme } from "../../hooks/useTheme";
 import { useScopedSettings, useUpdateScopedSettings } from "./useScopedSettings";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Switch } from "../ui/switch";
+import { MERGE_TEXTURE_ENABLED } from "../../merge/brandTexture/flags"; // merge-seam: texture
 import { ThemeLibrary } from "./ThemeSettings";
 import {
   SettingResetButton,
@@ -62,7 +63,8 @@ export function AppearanceSettingsPanel() {
   const updateSettings = useUpdateScopedSettings();
   const environmentStageLabel = useEnvironmentStageLabel();
   const showEnvironmentIdentification =
-    resolveEnvironmentIdentificationPillLabel(environmentStageLabel) !== null;
+    resolveEnvironmentIdentificationPillLabel(environmentStageLabel) !== null ||
+    MERGE_TEXTURE_ENABLED; // merge-seam: texture
   const glassOpacityRatio =
     (settings.glassOpacity - MIN_GLASS_OPACITY) / (MAX_GLASS_OPACITY - MIN_GLASS_OPACITY);
   const glassOpacitySliderStyle = {
