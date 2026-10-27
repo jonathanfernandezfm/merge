@@ -11,6 +11,7 @@ import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 
+import { FolderStore } from "../folders/FolderStore.ts";
 import { requeueExpiredChecks } from "../azureDevOps/requeueExpiredChecks.ts";
 import { gitGraphCommitDiff, gitGraphLog } from "../gitGraph/gitGraph.ts";
 import {
@@ -32,6 +33,21 @@ const workTasksSubscribe = () =>
       );
     }),
   );
+
+const foldersSubscribe = () =>
+  Stream.unwrap(
+    Effect.map(lookup(FolderStore), (store) =>
+      store.changes.pipe(Stream.mapEffect(() => store.snapshot())),
+    ),
+  );
+
+/** Runs one FolderStore call. */
+const folders =
+  <I, A, E>(
+    run: (store: Context.Service.Shape<typeof FolderStore>, input: I) => Effect.Effect<A, E>,
+  ) =>
+  (input: I) =>
+    lookup(FolderStore).pipe(Effect.flatMap((store) => run(store, input)));
 
 type WorkTaskActions = Context.Service.Shape<typeof WorkTaskWorkspace>;
 
@@ -70,6 +86,17 @@ export const mergeRpcHandlers = MergeRpcGroup.of({
   [MERGE_WS_METHODS.workTasksListBranches]: workTasks((actions, input) =>
     actions.listBranches(input),
   ),
+  [MERGE_WS_METHODS.foldersSubscribe]: foldersSubscribe,
+  [MERGE_WS_METHODS.foldersCreate]: folders((store, input) =>
+    store.create(input.title).pipe(Effect.map((folderId) => ({ folderId }))),
+  ),
+  [MERGE_WS_METHODS.foldersRename]: folders((store, input) =>
+    store.rename(input.folderId, input.title),
+  ),
+  [MERGE_WS_METHODS.foldersDelete]: folders((store, input) => store.remove(input.folderId)),
+  [MERGE_WS_METHODS.foldersAssign]: folders((store, input) =>
+    store.assign(input.threadId, input.folderId),
+  ),
 });
 
 /** Spread into `RPC_REQUIRED_SCOPES` at the `rpc-group-scopes` seam. */
@@ -98,6 +125,12 @@ export const MERGE_RPC_REQUIRED_SCOPES = {
   [MERGE_WS_METHODS.workTasksSetAutoHandle]: AuthOrchestrationOperateScope,
   // Same scope as upstream's vcs.listRefs; the fetch only updates remote-tracking refs.
   [MERGE_WS_METHODS.workTasksListBranches]: AuthOrchestrationReadScope,
+  // Same split as Work Tasks: v0.0.10 folders were orchestration commands (operate scope).
+  [MERGE_WS_METHODS.foldersSubscribe]: AuthOrchestrationReadScope,
+  [MERGE_WS_METHODS.foldersCreate]: AuthOrchestrationOperateScope,
+  [MERGE_WS_METHODS.foldersRename]: AuthOrchestrationOperateScope,
+  [MERGE_WS_METHODS.foldersDelete]: AuthOrchestrationOperateScope,
+  [MERGE_WS_METHODS.foldersAssign]: AuthOrchestrationOperateScope,
 } as const;
 
 /** Spread into `RPC_AGGREGATES` at the `rpc-group-aggregates` seam. */
@@ -119,4 +152,9 @@ export const MERGE_RPC_AGGREGATES = {
   [MERGE_WS_METHODS.workTasksSetWaiting]: "merge",
   [MERGE_WS_METHODS.workTasksSetAutoHandle]: "merge",
   [MERGE_WS_METHODS.workTasksListBranches]: "merge",
+  [MERGE_WS_METHODS.foldersSubscribe]: "merge",
+  [MERGE_WS_METHODS.foldersCreate]: "merge",
+  [MERGE_WS_METHODS.foldersRename]: "merge",
+  [MERGE_WS_METHODS.foldersDelete]: "merge",
+  [MERGE_WS_METHODS.foldersAssign]: "merge",
 } as const;
