@@ -36,6 +36,24 @@ NodeTest.test("a removed seam marker is reported with its id", async (t) => {
   });
 });
 
+NodeTest.test("a measured seam needs no marker", async (t) => {
+  const root = await fixture(
+    t,
+    "Layer.mergeAll(\n  MergeServerLayer, // merge-seam: server-layer\n",
+  );
+  await NodeFSP.writeFile(
+    NodePath.join(root, "fork/seams.json"),
+    JSON.stringify([
+      { id: "server-layer", file: "apps/server/src/server.ts", purpose: "layer" },
+      { id: "budget", file: "budget.json", purpose: "measured", check: "measured" },
+      { id: "other", file: "budget.json", purpose: "marked" },
+    ]),
+  );
+  NodeAssert.deepEqual(await checkSeams(root), {
+    missing: [{ id: "other", file: "budget.json" }],
+  });
+});
+
 async function baselineFixture(
   t: { after: (fn: () => Promise<void>) => void },
   baseline: string,
