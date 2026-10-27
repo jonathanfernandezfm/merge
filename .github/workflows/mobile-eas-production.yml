@@ -84,7 +84,8 @@ jobs:
       group: mobile-eas-production
       cancel-in-progress: false
     permissions:
-      contents: read
+      # A manual version override commits and pushes app.config.ts.
+      contents: write
     outputs:
       android_build: ${{ steps.reconcile.outputs.android_build || steps.android_manual.outputs.android_build }}
       android_fingerprint: ${{ steps.reconcile.outputs.android_fingerprint || steps.android_manual.outputs.android_fingerprint }}
@@ -98,6 +99,9 @@ jobs:
     env:
       APP_VARIANT: production
       NODE_OPTIONS: --max-old-space-size=8192
+      # app.config.ts reads the Expo account and project from these.
+      EXPO_OWNER: ${{ vars.EXPO_OWNER }}
+      EAS_PROJECT_ID: ${{ vars.EAS_PROJECT_ID }}
     steps:
       - name: Validate TestFlight inputs
         if: github.event_name == 'workflow_dispatch' && inputs.profile == 'testflight'
@@ -122,21 +126,11 @@ jobs:
             echo "EXPO_PRODUCTION_TOKEN is not available; skipping EAS production job."
           fi
 
-      - id: version_app_token
-        name: Mint release app token for version override
-        if: steps.expo-token.outputs.present == 'true' && github.event_name == 'workflow_dispatch' && inputs.mode == 'build' && inputs.version != '' && inputs.profile != 'testflight'
-        uses: actions/create-github-app-token@v2
-        with:
-          app-id: ${{ secrets.RELEASE_APP_ID }}
-          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
-          owner: ${{ github.repository_owner }}
-
       - name: Checkout
         if: steps.expo-token.outputs.present == 'true'
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          token: ${{ steps.version_app_token.outputs.token || github.token }}
           # No sparse-checkout here: it makes actions/checkout fetch with
           # --filter=blob:none, and eas-cli archives the project via
           # `git clone --depth 1 file://<workspace>`, which fails (exit 128)
@@ -192,10 +186,8 @@ jobs:
           NODE
 
       - name: Apply manual version override
-        if: steps.version_app_token.outcome == 'success'
+        if: steps.expo-token.outputs.present == 'true' && github.event_name == 'workflow_dispatch' && inputs.mode == 'build' && inputs.version != '' && inputs.profile != 'testflight'
         env:
-          GH_TOKEN: ${{ steps.version_app_token.outputs.token }}
-          APP_SLUG: ${{ steps.version_app_token.outputs.app-slug }}
           RELEASE_VERSION: ${{ inputs.version }}
         run: |
           if [ "$GITHUB_REF_TYPE" != "branch" ]; then
@@ -227,9 +219,8 @@ jobs:
             exit 0
           fi
 
-          user_id="$(gh api "/users/${APP_SLUG}[bot]" --jq .id)"
-          git config user.name "${APP_SLUG}[bot]"
-          git config user.email "${user_id}+${APP_SLUG}[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add apps/mobile/app.config.ts
           git commit --no-verify -m "chore(mobile): bump app version to $RELEASE_VERSION"
           git push origin "HEAD:refs/heads/${GITHUB_REF_NAME}"

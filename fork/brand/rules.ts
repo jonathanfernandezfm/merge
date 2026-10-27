@@ -19,6 +19,12 @@ const PROMPT_LINKS = "packages/shared/src/promptLinks.ts";
 const LAUNCHER = "apps/desktop/scripts/electron-launcher.mjs";
 
 export const identity: Array<{ file: string; from: string; to: string }> = [
+  // Nightly and preview release names.
+  {
+    file: "scripts/resolve-nightly-release.ts",
+    from: "name: `T3 Code ${CHANNEL_RELEASE_LABELS[channel]}",
+    to: "name: `Merge ${CHANNEL_RELEASE_LABELS[channel]}",
+  },
   // Installer and app identity.
   {
     file: "apps/desktop/package.json",
