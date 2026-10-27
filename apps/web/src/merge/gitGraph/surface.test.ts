@@ -27,6 +27,18 @@ describe("merge right-panel surfaces", () => {
     });
   });
 
+  it("counts as a user action, so a stale automatic open is refused", () => {
+    const stale = useRightPanelStore.getState().getUserActionRevision(threadRef);
+    openMergeSurface(threadRef, GIT_GRAPH_SURFACE_ID);
+    expect(useRightPanelStore.getState().getUserActionRevision(threadRef)).toBe(stale + 1);
+    expect(
+      useRightPanelStore
+        .getState()
+        .openProactive(threadRef, { kind: "diff", turnId: "r" as never }, stale),
+    ).toBe(false);
+    expect(panel().activeSurfaceId).toBe(GIT_GRAPH_SURFACE_ID);
+  });
+
   it("reopens a closed merge surface", async () => {
     const reopened = await reopenClosedView(
       { kind: "panel-tab", threadRef, surface: { id: GIT_GRAPH_SURFACE_ID, kind: "merge" } },

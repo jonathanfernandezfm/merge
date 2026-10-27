@@ -12,7 +12,8 @@ import * as KnownWorkspaces from "../../workspace/KnownWorkspaces.ts";
 import { gitGraphCommitDiff, gitGraphLog } from "./gitGraph.ts";
 
 const TestLayer = Layer.mergeAll(
-  Layer.mock(KnownWorkspaces.KnownWorkspaces)({ assertContains: () => Effect.void }),
+  Layer.mock(KnownWorkspaces.KnownWorkspaces)({ contains: () => Effect.succeed(true) }),
+  ServerConfig.layerTest(process.cwd(), { prefix: "t3-git-graph-test-" }),
   Layer.mock(VcsDriverRegistry.VcsDriverRegistry)({
     detect: () => Effect.succeed({ kind: "git" } as never),
   }),
@@ -93,6 +94,74 @@ it.layer(TestLayer)("git graph", (it) => {
 
       const bad = yield* gitGraphCommitDiff({ cwd, sha: "--output=x" }).pipe(Effect.flip);
       assert.equal(bad._tag, "GitCommandError");
+    }),
+  );
+
+  const initRepo = (cwd: string) =>
+    Effect.gen(function* () {
+      const driver = yield* GitVcsDriver.GitVcsDriver;
+      yield* driver.initRepo({ cwd });
+      yield* git(cwd, ["config", "user.email", "test@test.com"]);
+      yield* git(cwd, ["config", "user.name", "Test"]);
+    });
+  const commit = (cwd: string, file: string, message: string) =>
+    Effect.gen(function* () {
+      yield* write(cwd, file, `${message}\n`);
+      yield* git(cwd, ["add", "."]);
+      yield* git(cwd, ["commit", "-m", message]);
+      return yield* git(cwd, ["rev-parse", "HEAD"]);
+    });
+
+  it.effect("prefers the branch's recorded t3-merge-base-ref over a stale local base", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const cwd = yield* fs.makeTempDirectoryScoped({ prefix: "git-graph-config-" });
+      yield* initRepo(cwd);
+      const rootSha = yield* commit(cwd, "root.txt", "root");
+      const main = yield* git(cwd, ["symbolic-ref", "--short", "HEAD"]);
+      const remoteTip = yield* commit(cwd, "remote.txt", "remote work");
+      yield* git(cwd, ["checkout", "-b", "feature/x"]);
+      yield* commit(cwd, "feature.txt", "feature work");
+      // Local main is behind the remote-tracking ref the branch was cut from.
+      yield* git(cwd, ["branch", "-f", main, rootSha]);
+      yield* git(cwd, ["update-ref", "refs/remotes/origin/main", remoteTip]);
+
+      const stale = yield* gitGraphLog({ cwd });
+      assert.equal(stale.baseRef, main);
+      assert.equal(stale.commits.length, 2);
+
+      yield* git(cwd, ["config", "branch.feature/x.t3-merge-base-ref", "refs/remotes/origin/main"]);
+      const recorded = yield* gitGraphLog({ cwd });
+      assert.equal(recorded.baseRef, "origin/main");
+      assert.equal(recorded.mergeBase, remoteTip);
+      assert.deepStrictEqual(
+        recorded.commits.map((entry) => entry.subject),
+        ["feature work"],
+      );
+
+      // Only full refs count, and a dangling one falls through to the normal candidates.
+      yield* git(cwd, ["config", "branch.feature/x.t3-merge-base-ref", "refs/remotes/origin/gone"]);
+      assert.equal((yield* gitGraphLog({ cwd })).baseRef, main);
+    }),
+  );
+
+  it.effect("rejects option-like revisions and unknown workspaces", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const cwd = yield* fs.makeTempDirectoryScoped({ prefix: "git-graph-reject-" });
+      yield* initRepo(cwd);
+      yield* commit(cwd, "a.txt", "a");
+      const badBase = yield* gitGraphLog({ cwd, baseRef: "--output=x" }).pipe(Effect.flip);
+      assert.equal(badBase._tag, "GitCommandError");
+
+      const unknown = Effect.provideService(KnownWorkspaces.KnownWorkspaces, {
+        contains: () => Effect.succeed(false),
+        assertContains: () => Effect.void,
+      });
+      const log = yield* gitGraphLog({ cwd }).pipe(unknown, Effect.flip);
+      assert.equal(log._tag, "VcsRepositoryDetectionError");
+      const diff = yield* gitGraphCommitDiff({ cwd, sha: "abcd" }).pipe(unknown, Effect.flip);
+      assert.equal(diff._tag, "VcsRepositoryDetectionError");
     }),
   );
 });

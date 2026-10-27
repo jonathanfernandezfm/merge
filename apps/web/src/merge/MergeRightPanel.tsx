@@ -12,7 +12,14 @@ export function MergeRightPanel(props: {
   readonly workspaceMutationId: string | null;
   readonly workspaceRoot: string | undefined;
 }) {
-  if (props.id === GIT_GRAPH_SURFACE_ID && props.workspaceRoot) {
+  if (props.id === GIT_GRAPH_SURFACE_ID) {
+    if (!props.workspaceRoot) {
+      return (
+        <p className="px-4 py-6 text-center text-xs text-muted-foreground">
+          The Git graph needs a project workspace. Open a thread in a project to use it.
+        </p>
+      );
+    }
     return (
       <GitGraphPanel
         key={`${props.threadRef.environmentId}:${props.threadRef.threadId}`}

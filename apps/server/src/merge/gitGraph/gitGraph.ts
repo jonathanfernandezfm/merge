@@ -9,8 +9,11 @@ import {
 } from "@t3tools/contracts";
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 
+import * as ServerConfig from "../../config.ts";
 import * as GitVcsDriver from "../../vcs/GitVcsDriver.ts";
 import { PATCH_RENDER_PREFIX_ARGS } from "../../vcs/GitVcsDriverCore.ts";
 import * as VcsDriverRegistry from "../../vcs/VcsDriverRegistry.ts";
@@ -38,18 +41,25 @@ const lookup = <I, S>(key: Context.Key<I, S>) =>
 
 /** Resolves the git driver for `cwd` after the same workspace check the review RPCs make. */
 const requireGit = Effect.fn("GitGraph.requireGit")(function* (operation: string, cwd: string) {
+  // Same rule as ReviewService: inside the server's workspace root, or a known workspace.
   const known = yield* lookup(KnownWorkspaces.KnownWorkspaces);
-  yield* known.assertContains(cwd).pipe(
-    Effect.mapError(
-      (cause) =>
-        new VcsRepositoryDetectionError({
-          operation,
-          cwd,
-          detail: "The Git graph cwd must be a known workspace.",
-          cause,
-        }),
-    ),
-  );
+  const config = yield* lookup(ServerConfig.ServerConfig);
+  const fileSystem = yield* lookup(FileSystem.FileSystem);
+  const path = yield* lookup(Path.Path);
+  const reject = (cause?: unknown) =>
+    new VcsRepositoryDetectionError({
+      operation,
+      cwd,
+      detail: "The Git graph cwd must be a known workspace.",
+      cause,
+    });
+  const realCwd = yield* fileSystem.realPath(path.resolve(cwd)).pipe(Effect.mapError(reject));
+  const realRoot = yield* fileSystem
+    .realPath(path.resolve(config.cwd))
+    .pipe(Effect.orElseSucceed(() => path.resolve(config.cwd)));
+  if (!KnownWorkspaces.isWithinRoot(path, realCwd, realRoot) && !(yield* known.contains(realCwd))) {
+    return yield* reject();
+  }
   const registry = yield* lookup(VcsDriverRegistry.VcsDriverRegistry);
   const handle = yield* registry.detect({ cwd, requestedKind: "auto" });
   if (handle?.kind !== "git") {
@@ -98,8 +108,28 @@ export const gitGraphLog = Effect.fn("GitGraph.log")(function* (input: GitGraphL
       "--end-of-options",
       `${ref}^{commit}`,
     ]).pipe(Effect.map((sha) => sha.length > 0));
+  // `ref` goes to git (a full ref when one is recorded), `label` is what the panel shows.
   const automaticBase = Effect.gen(function* () {
     if (branch === null) return null;
+    // A base recorded for this branch comes first; upstream accepts only full refs here.
+    const configured = yield* gitOut(git, `${op}.config`, cwd, [
+      "config",
+      "--get",
+      `branch.${branch}.t3-merge-base-ref`,
+    ]);
+    if (configured.startsWith("refs/heads/") || configured.startsWith("refs/remotes/")) {
+      const exists = yield* git
+        .execute({
+          operation: `${op}.showRef`,
+          cwd,
+          args: ["show-ref", "--verify", "--quiet", configured],
+          allowNonZeroExit: true,
+        })
+        .pipe(Effect.map((result) => result.exitCode === 0));
+      if (exists) {
+        return { ref: configured, label: configured.replace(/^refs\/(heads|remotes)\//, "") };
+      }
+    }
     const recorded = yield* git.readBranchBase(cwd, branch).pipe(Effect.orElseSucceed(() => null));
     const remote = yield* git.resolvePrimaryRemoteName(cwd).pipe(Effect.orElseSucceed(() => null));
     const remoteDefault =
@@ -107,16 +137,27 @@ export const gitGraphLog = Effect.fn("GitGraph.log")(function* (input: GitGraphL
         ? null
         : yield* git.resolveDefaultBranchName(cwd, remote).pipe(Effect.orElseSucceed(() => null));
     for (const candidate of [recorded, remoteDefault, ...FALLBACK_BASE_BRANCHES]) {
-      if (candidate && candidate !== branch && (yield* verifies(candidate))) return candidate;
+      if (candidate && candidate !== branch && (yield* verifies(candidate))) {
+        return { ref: candidate, label: candidate };
+      }
     }
     return null;
   });
-  const baseRef = input.baseRef ?? (yield* automaticBase);
-  const mergeBase = baseRef
+  if (input.baseRef?.startsWith("-")) {
+    return yield* new GitCommandError({
+      operation: op,
+      cwd,
+      command: "git log",
+      detail: "Invalid base revision.",
+    });
+  }
+  const base = input.baseRef ? { ref: input.baseRef, label: input.baseRef } : yield* automaticBase;
+  const baseRef = base?.label ?? null;
+  const mergeBase = base
     ? (yield* gitOut(git, `${op}.mergeBase`, cwd, [
         "merge-base",
         "--end-of-options",
-        baseRef,
+        base.ref,
         "HEAD",
       ])) || null
     : null;
