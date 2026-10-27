@@ -153,5 +153,10 @@
     "id": "storage-cleanup",
     "file": "apps/server/src/storageCleanup.ts",
     "purpose": "Keep a worktree owned by an active Work Task, whatever cleanup rule applies"
+  },
+  {
+    "id": "mcp-tools",
+    "file": "apps/server/src/mcp/McpHttpServer.ts",
+    "purpose": "Register the fork MCP toolkit (create_work_task) in layerTools"
   }
 ]
