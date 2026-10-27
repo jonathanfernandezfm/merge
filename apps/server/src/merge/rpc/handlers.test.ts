@@ -171,3 +171,39 @@ it.effect("merge.gitGraph.log finds its services through the RPC path", () =>
     assert.isTrue(Exit.isFailure(yield* gitGraphLogViaRpc(root, root, [])));
   }),
 );
+
+it.effect("merge.workItems writes need the source-control write scope", () =>
+  Effect.gen(function* () {
+    const update = (scopes: ReadonlyArray<AuthEnvironmentScope>) =>
+      Effect.gen(function* () {
+        const responses = yield* Queue.unbounded<Exit.Exit<unknown, unknown>>();
+        const server = yield* RpcServer.makeNoSerialization(
+          MergeRpcGroup.middleware(RpcScopeAuthorization),
+          {
+            ...WS_RPC_SERVER_OPTIONS,
+            onFromServer: (response) =>
+              response._tag === "Exit" ? Queue.offer(responses, response.exit) : Effect.void,
+          },
+        ).pipe(
+          Effect.provide(
+            Layer.mergeAll(MergeRpcGroup.toLayer(mergeRpcHandlers), RpcAuthorization.layer(scopes)),
+          ),
+        );
+        yield* server.write(0, {
+          _tag: "Request",
+          id: RpcMessage.RequestId("work-item"),
+          tag: MERGE_WS_METHODS.workItemsUpdate,
+          payload: { cwd: "/nowhere", id: 1, state: "Done" },
+          headers: Headers.empty,
+        });
+        return yield* Queue.take(responses);
+      }).pipe(Effect.scoped);
+
+    const denied = yield* update([AuthOrchestrationReadScope]);
+    assert.isTrue(Exit.isFailure(denied));
+    assert.include(
+      String(Exit.isFailure(denied) ? denied.cause : ""),
+      "EnvironmentAuthorizationError",
+    );
+  }),
+);
