@@ -22,7 +22,6 @@ const NullableString = Schema.optional(Schema.NullOr(Schema.String));
  * build and status policies are checks; reviewer, comment and work-item policies are not.
  */
 const RawPolicyEvaluationSchema = Schema.Struct({
-  evaluationId: NullableString,
   /** `queued`, `running`, `approved`, `rejected`, `notApplicable` or `broken`. */
   status: NullableString,
   configuration: Schema.optional(
@@ -154,26 +153,6 @@ export function decodePolicyEvaluationsJson(
     });
   }
   return Result.succeed(checks);
-}
-
-/**
- * The evaluations of a `az repos pr policy list` answer that have expired, which are the ones
- * `az repos pr policy queue` has to be given to run again.
- */
-export function decodeExpiredPolicyEvaluationIds(
-  raw: string,
-): Result.Result<ReadonlyArray<string>, unknown> {
-  const decoded = decodePolicyEvaluationList(raw.trim().length === 0 ? "[]" : raw);
-  if (!Result.isSuccess(decoded)) return Result.fail(decoded.failure);
-  const entries = "value" in decoded.success ? decoded.success.value : decoded.success;
-  const ids: string[] = [];
-  for (const entry of entries) {
-    const decodedEvaluation = decodePolicyEvaluationEntry(entry);
-    if (Exit.isFailure(decodedEvaluation)) continue;
-    const id = trimmed(decodedEvaluation.value.evaluationId);
-    if (id !== null && decodedEvaluation.value.context?.isExpired === true) ids.push(id);
-  }
-  return Result.succeed(ids);
 }
 
 /**

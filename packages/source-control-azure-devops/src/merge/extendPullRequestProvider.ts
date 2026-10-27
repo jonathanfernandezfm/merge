@@ -1,3 +1,4 @@
+import { decodeExpiredPolicyEvaluationIds } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
@@ -10,7 +11,6 @@ import * as AzureDevOpsCli from "../server/AzureDevOpsCli.ts";
 import * as AzureDevOpsPullRequestCli from "../server/AzureDevOpsPullRequestCli.ts";
 import { decodeThreadsJson } from "../server/azureDevOpsPullRequestJson.ts";
 import {
-  decodeExpiredPolicyEvaluationIds,
   decodePolicyEvaluationsJson,
   decodeReviewDecisionJson,
   decodeReviewThreadsJson,
@@ -163,17 +163,17 @@ export const requeueExpiredAzureDevOpsChecks = Effect.fn("MergeAzureDevOps.reque
       azure.execute({ cwd, args: [...args, "--only-show-errors", "--output", "json"] });
     const id = String(number);
     const listed = yield* run(["repos", "pr", "policy", "list", "--detect", "true", "--id", id]);
-    const expired = decodeExpiredPolicyEvaluationIds(listed.stdout.trim());
-    if (!Result.isSuccess(expired)) {
+    const expired = decodeExpiredPolicyEvaluationIds(listed.stdout);
+    if (expired === null) {
       return yield* new AzureDevOpsPullRequestCli.AzureDevOpsPullRequestReadError({
         command: "az",
         cwd,
         operation: "requeueExpiredChecks",
-        cause: expired.failure,
+        cause: "Unreadable policy list.",
       });
     }
     yield* Effect.forEach(
-      expired.success,
+      expired,
       (evaluationId) =>
         run([
           "repos",
@@ -189,6 +189,6 @@ export const requeueExpiredAzureDevOpsChecks = Effect.fn("MergeAzureDevOps.reque
         ]),
       { discard: true },
     );
-    return expired.success.length;
+    return expired.length;
   },
 );
