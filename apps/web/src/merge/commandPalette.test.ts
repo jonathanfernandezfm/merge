@@ -9,13 +9,20 @@ describe("mergeCommandPaletteActions", () => {
     expect(mergeCommandPaletteActions(null, navigate).map((item) => item.title)).toEqual([
       "New Work Task…",
       "Open Work Taskboard",
+      "Toggle compact thread rows",
     ]);
     expect(
       mergeCommandPaletteActions(
         { environmentId: EnvironmentId.make("env"), id: ThreadId.make("thread") },
         navigate,
       ).map((item) => item.title),
-    ).toEqual(["New Work Task…", "Open Work Taskboard", "Open Git graph", "Open work items"]);
+    ).toEqual([
+      "New Work Task…",
+      "Open Work Taskboard",
+      "Toggle compact thread rows",
+      "Open Git graph",
+      "Open work items",
+    ]);
   });
 
   it("opens the Work Taskboard route", async () => {

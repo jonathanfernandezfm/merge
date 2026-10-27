@@ -37,17 +37,22 @@
   {
     "id": "sidebar",
     "file": "apps/web/src/components/Sidebar.tsx",
-    "purpose": "Render fork sidebar sections (Work Tasks) with the sidebar search query"
+    "purpose": "Render fork sidebar sections (Work Tasks, Folders) with the sidebar search query"
   },
   {
     "id": "thread-menu",
     "file": "apps/web/src/components/threadActionMenu.logic.ts",
-    "purpose": "Widen menu id and spread fork thread menu items"
+    "purpose": "Widen menu id, carry the thread ref in the menu state, and spread fork thread menu items"
   },
   {
     "id": "thread-menu",
     "file": "apps/web/src/components/Sidebar.tsx",
-    "purpose": "Delegate fork thread menu clicks"
+    "purpose": "Pass the thread ref to the menu and delegate fork thread menu clicks"
+  },
+  {
+    "id": "thread-menu",
+    "file": "apps/web/src/hooks/useThreadActionMenu.ts",
+    "purpose": "Chat header thread menu: pass the thread ref and delegate fork thread menu clicks"
   },
   {
     "id": "right-panel",
@@ -213,11 +218,21 @@
   {
     "id": "client-subscribe",
     "file": "packages/client-runtime/src/rpc/client.ts",
-    "purpose": "merge.workTasks.subscribe joins the typed subscription tags"
+    "purpose": "merge.workTasks.subscribe and merge.folders.subscribe join the typed subscription tags"
   },
   {
     "id": "work-task-dialogs",
     "file": "apps/web/src/routes/_chat.tsx",
-    "purpose": "Mount the Work Task dialogs host in the always-mounted chat layout"
+    "purpose": "Mount the Work Task dialogs host (which also hosts folder dialogs) in the always-mounted chat layout"
+  },
+  {
+    "id": "folders",
+    "file": "apps/web/src/components/Sidebar.tsx",
+    "purpose": "The Threads list leaves threads filed in a folder to the fork Folders section (v0.0.10 behaviour)"
+  },
+  {
+    "id": "compact-threads",
+    "file": "apps/web/src/components/sidebar/SidebarThreadRow.tsx",
+    "purpose": "Compact thread rows reuse the card's no-meta-line layout, dropping the branch line"
   }
 ]
