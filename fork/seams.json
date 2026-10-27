@@ -70,6 +70,11 @@
     "purpose": "Render MergeRightPanel for merge surfaces"
   },
   {
+    "id": "command-palette",
+    "file": "apps/web/src/components/CommandPalette.tsx",
+    "purpose": "Append fork command palette actions (Open Git graph)"
+  },
+  {
     "id": "settings",
     "file": "apps/web/src/components/settings/settingsSearch.ts",
     "purpose": "Merge settings path, label, nav entry and search scope"
