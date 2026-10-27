@@ -176,6 +176,14 @@ const layer = WorkTaskWorkspace.layer.pipe(
       dispatch: (command) =>
         Effect.sync(() => {
           commands.push(command);
+          // A stopped thread's run ends.
+          if (command.type === "thread.stop") {
+            const stopped = shells.get(command.threadId);
+            if (stopped) shells.set(command.threadId, { ...stopped, status: "idle" });
+          }
+          if (command.type === "thread.archive" && command.threadId === "thread-2") {
+            throw new Error("archive refused");
+          }
           return { sequence: commands.length, storedEvents: [] };
         }),
     }),
@@ -336,6 +344,10 @@ it.effect("create on a remote-only branch tracks origin/<b> and creates no new b
       (yield* Effect.flip(workspace.create(createInput({ branch: "-x" })))).reason,
       "invalid-branch",
     );
+    assert.strictEqual(
+      (yield* Effect.flip(workspace.create(createInput({ remoteName: "nope" })))).reason,
+      "invalid-branch",
+    );
 
     const { taskId, threadId } = yield* workspace.create(createInput());
     const task = (yield* store.get(taskId))!;
@@ -483,11 +495,19 @@ it.effect("createThread launches in the task worktree and links the thread", () 
     const launch = launches.at(-1)!;
     assert.strictEqual(launch.title, "Review feedback");
     assert.strictEqual(launch.projectId, PROJECT_ID);
-    assert.deepStrictEqual(launch.workspaceStrategy, {
-      type: "existing_worktree",
-      worktreePath: path,
-      branch: "feature/widgets",
-    });
+    // Only the first thread runs the project setup script.
+    assert.deepStrictEqual(
+      launches.map((entry) => entry.workspaceStrategy),
+      [
+        { type: "existing_worktree", worktreePath: path, branch: "feature/widgets" },
+        {
+          type: "existing_worktree",
+          worktreePath: path,
+          branch: "feature/widgets",
+          skipSetupScript: true,
+        },
+      ],
+    );
     assert.deepStrictEqual(
       (yield* store.links()).find((link) => link.threadId === threadId),
       { threadId, taskId, origin: "review-feedback" },
@@ -511,21 +531,42 @@ it.effect("archive stops and archives the threads and removes the worktree", () 
     const workspace = yield* WorkTaskWorkspace.WorkTaskWorkspace;
     const repo = projectRepo();
     const { taskId, threadId } = yield* workspace.create(createInput());
+    // thread-2's archive is refused by the orchestrator mock; archive still completes.
+    const second = yield* workspace.createThread({ taskId });
     const path = (yield* store.get(taskId))!.workspace.path!;
     NodeFS.writeFileSync(NodePath.join(path, "dirty.txt"), "x");
+    shells.set(threadId, shell(threadId, { status: "running" }));
+    shells.set(
+      "child",
+      shell("child", {
+        status: "running",
+        lineage: {
+          rootThreadId: threadId,
+          parentThreadId: threadId,
+          relationshipToParent: "subagent",
+        },
+      }),
+    );
 
     const blocked = yield* Effect.flip(workspace.archive({ taskId }));
     assert.strictEqual(blocked.reason, "archive-blocked");
-    assert.deepStrictEqual(blocked.blockers, ["uncommitted-changes"]);
+    assert.deepStrictEqual(blocked.blockers, ["uncommitted-changes", "agent-running"]);
     assert.isTrue(NodeFS.existsSync(path));
 
     yield* workspace.archive({ taskId, force: true });
     assert.isFalse(NodeFS.existsSync(path));
+    // Every holder, the subagent included, is stopped before the worktree goes.
     assert.deepStrictEqual(
-      commands.map((command) => [command.type, "threadId" in command ? command.threadId : null]),
+      commands.map((command): [string, string | null] => [
+        command.type,
+        "threadId" in command ? command.threadId : null,
+      ]),
       [
         ["thread.stop", threadId],
+        ["thread.stop", second.threadId],
+        ["thread.stop", "child"],
         ["thread.archive", threadId],
+        ["thread.archive", second.threadId],
       ],
     );
     assert.isNotNull((yield* store.get(taskId))!.archivedAt);
@@ -534,6 +575,27 @@ it.effect("archive stops and archives the threads and removes the worktree", () 
     assert.include(repo.git(repo.clone, "branch", "--format=%(refname:short)"), "feature/widgets");
     assert.strictEqual((yield* Effect.flip(workspace.createThread({ taskId }))).reason, "archived");
     yield* workspace.archive({ taskId });
+    NodeFS.rmSync(repo.root, { recursive: true, force: true });
+  }).pipe(Effect.provide(layer)),
+);
+
+it.effect("archive without force surfaces git's refusal and keeps the task", () =>
+  Effect.gen(function* () {
+    reset();
+    const store = yield* WorkTaskStore.WorkTaskStore;
+    const workspace = yield* WorkTaskWorkspace.WorkTaskWorkspace;
+    const repo = projectRepo();
+    const { taskId } = yield* workspace.create(createInput());
+    const path = (yield* store.get(taskId))!.workspace.path!;
+    // Clean, so no blocker; but a locked worktree makes `git worktree remove` refuse.
+    repo.run("worktree", "lock", path);
+
+    const refused = yield* Effect.flip(workspace.archive({ taskId }));
+    assert.strictEqual(refused.reason, "failed");
+    assert.include(refused.message, "Git refused to remove the worktree");
+    assert.isTrue(NodeFS.existsSync(path));
+    assert.isNull((yield* store.get(taskId))!.archivedAt);
+    repo.run("worktree", "unlock", path);
     NodeFS.rmSync(repo.root, { recursive: true, force: true });
   }).pipe(Effect.provide(layer)),
 );

@@ -7,6 +7,7 @@ import {
   WorkTaskId,
   WorkTaskOperationError,
   workTaskStatusInputs,
+  workTaskThreadState,
   type OrchestrationV2Actor,
   type OrchestrationV2CreationSource,
   type OrchestrationV2ServerCommand,
@@ -544,6 +545,8 @@ export const make = Effect.gen(function* () {
     project: Project,
     options: Omit<WorkTaskCreateThreadOptions, "taskId">,
     launcher: WorkTaskLauncher,
+    /** Only a task's first thread runs the project setup script; later ones share its result. */
+    first: boolean,
   ) {
     const worktreePath = task.workspace.path;
     if (worktreePath === null || task.workspace.setup.status !== "ready") {
@@ -569,6 +572,7 @@ export const make = Effect.gen(function* () {
           type: "existing_worktree",
           worktreePath,
           branch: task.workspace.branch,
+          ...(first ? {} : { skipSetupScript: true }),
         },
         createdBy: launcher.createdBy,
         creationSource: launcher.creationSource,
@@ -637,7 +641,13 @@ export const make = Effect.gen(function* () {
     const live = shells.filter(
       (shell) => linked.has(shell.id) && shell.archivedAt === null && shell.deletedAt === null,
     );
-    return { blockers, live };
+    const descendants = shells.filter(
+      (shell) =>
+        shell.lineage.relationshipToParent === "subagent" &&
+        linked.has(shell.lineage.rootThreadId) &&
+        shell.deletedAt === null,
+    );
+    return { blockers, live, descendants };
   });
 
   const dispatchQuietly = (command: OrchestrationV2ServerCommand) =>
@@ -646,6 +656,15 @@ export const make = Effect.gen(function* () {
       Effect.catchCause((cause) =>
         Effect.logWarning(`Work Task archive could not ${command.type}`, { cause }),
       ),
+    );
+
+  /** True while any of the threads still has a live run. */
+  const anyRunning = (threadIds: ReadonlyArray<ThreadId>) =>
+    Effect.forEach(threadIds, (id) => projections.getThreadShell(id), { concurrency: 8 }).pipe(
+      Effect.map((shells) =>
+        shells.some((shell) => shell !== null && workTaskThreadState(shell) === "running"),
+      ),
+      Effect.orElseSucceed(() => false),
     );
 
   const create = Effect.fn("WorkTaskWorkspace.create")(function* (
@@ -662,10 +681,14 @@ export const make = Effect.gen(function* () {
     const remoteName =
       input.remoteName ??
       (yield* git.resolvePrimaryRemoteName(root).pipe(Effect.orElseSucceed(() => "origin")));
-    if (remoteName.startsWith("-")) {
+    if (
+      remoteName.startsWith("-") ||
+      (input.remoteName !== undefined &&
+        !(yield* git.remoteExists({ cwd: root, remoteName }).pipe(Effect.mapError(gitFailed))))
+    ) {
       return yield* new WorkTaskOperationError({
         reason: "invalid-branch",
-        message: `'${remoteName}' is not a valid remote name.`,
+        message: `'${remoteName}' is not a remote of this project.`,
       });
     }
     const isLocal = (yield* git
@@ -749,7 +772,7 @@ export const make = Effect.gen(function* () {
       taskId,
       Effect.gen(function* () {
         const task = yield* runSetup(taskId, root, rules);
-        const { threadId } = yield* launchThread(task, project, { origin: "user" }, launcher);
+        const { threadId } = yield* launchThread(task, project, { origin: "user" }, launcher, true);
         return { taskId, threadId };
       }),
     );
@@ -786,7 +809,7 @@ export const make = Effect.gen(function* () {
         }));
         const ready = yield* runSetup(taskId, project.workspaceRoot, rules);
         if (!(yield* store.links()).some((link) => link.taskId === taskId)) {
-          yield* launchThread(ready, project, { origin: "user" }, USER_LAUNCHER);
+          yield* launchThread(ready, project, { origin: "user" }, USER_LAUNCHER, true);
         }
       }),
     ).pipe(Effect.withSpan("WorkTaskWorkspace.retrySetup"));
@@ -800,7 +823,7 @@ export const make = Effect.gen(function* () {
       Effect.gen(function* () {
         const task = yield* requireActiveTask(input.taskId);
         const project = yield* requireProject(task.projectId);
-        return yield* launchThread(task, project, input, launcher);
+        return yield* launchThread(task, project, input, launcher, false);
       }),
     ).pipe(Effect.withSpan("WorkTaskWorkspace.createThread"));
 
@@ -815,7 +838,7 @@ export const make = Effect.gen(function* () {
       Effect.gen(function* () {
         const task = yield* requireTask(input.taskId);
         if (task.archivedAt !== null) return;
-        const { blockers, live } = yield* inspect(task);
+        const { blockers, live, descendants } = yield* inspect(task);
         if (blockers.length > 0 && input.force !== true) {
           return yield* new WorkTaskOperationError({
             reason: "archive-blocked",
@@ -824,7 +847,8 @@ export const make = Effect.gen(function* () {
           });
         }
         // Release what holds the worktree open; terminal history stays for the transcript.
-        for (const shell of live) {
+        const holders = [...live, ...descendants];
+        for (const shell of holders) {
           yield* dispatchQuietly({
             type: "thread.stop",
             commandId: yield* commandId("stop"),
@@ -835,6 +859,20 @@ export const make = Effect.gen(function* () {
             .close({ threadId: shell.id, deleteHistory: false })
             .pipe(Effect.ignoreCause({ log: true }));
         }
+        // Stopping is asynchronous: give runs a few seconds to end before files go away.
+        const holderIds = holders.map((shell) => shell.id);
+        for (let attempt = 0; attempt < 10 && (yield* anyRunning(holderIds)); attempt++) {
+          yield* Effect.sleep("300 millis");
+        }
+        if (yield* anyRunning(holderIds)) {
+          yield* Effect.logWarning(
+            "Work Task archive removes the worktree while a run is still stopping",
+            {
+              taskId: task.id,
+            },
+          );
+        }
+        const force = input.force === true;
         const worktreePath = task.workspace.path;
         if (worktreePath !== null) {
           const root = (yield* requireProject(task.projectId)).workspaceRoot;
@@ -844,22 +882,42 @@ export const make = Effect.gen(function* () {
               if (yield* exists(worktreePath)) {
                 // Closed terminals exit asynchronously and can hold files for a moment.
                 yield* git
-                  .removeWorktree({ cwd: root, path: worktreePath, force: true })
-                  .pipe(Effect.retry({ times: 4, schedule: Schedule.spaced("500 millis") }));
+                  .removeWorktree({ cwd: root, path: worktreePath, force })
+                  .pipe(
+                    Effect.retry({ times: force ? 4 : 0, schedule: Schedule.spaced("500 millis") }),
+                  );
               }
               yield* git.pruneWorktrees({ cwd: root });
             }),
           ).pipe(
             Effect.mapError((cause) =>
-              failed(`Could not remove the worktree: ${detail(cause)}`, cause),
+              failed(
+                force
+                  ? `Could not remove the worktree: ${detail(cause)}`
+                  : `Git refused to remove the worktree: ${detail(cause)} Archive anyway to force it.`,
+                cause,
+              ),
             ),
           );
         }
+        const notArchived: Array<{ readonly threadId: ThreadId; readonly cause: unknown }> = [];
         for (const shell of live) {
-          yield* dispatchQuietly({
-            type: "thread.archive",
-            commandId: yield* commandId("archive"),
-            threadId: shell.id,
+          yield* orchestrator
+            .dispatch({
+              type: "thread.archive",
+              commandId: yield* commandId("archive"),
+              threadId: shell.id,
+            })
+            .pipe(
+              Effect.catchCause((cause) =>
+                Effect.sync(() => void notArchived.push({ threadId: shell.id, cause })),
+              ),
+            );
+        }
+        if (notArchived.length > 0) {
+          yield* Effect.logWarning("Work Task archive could not archive some threads", {
+            taskId: task.id,
+            threads: notArchived,
           });
         }
         yield* store.update(task.id, { archivedAt: yield* nowIso });

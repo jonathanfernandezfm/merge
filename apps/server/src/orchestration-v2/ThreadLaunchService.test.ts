@@ -2235,3 +2235,38 @@ it.effect("replays an accepted send after the project disables the instance", ()
     }
   }).pipe(Effect.provide(Layer.mergeAll(harness.layer, layerFiles)));
 });
+
+// merge-seam: thread-launch-setup
+it.effect("skips the setup script for an existing worktree that asks to", () => {
+  const harness = makeHarness();
+  return Effect.gen(function* () {
+    const launches = yield* ThreadLaunch.ThreadLaunchService;
+    const first = yield* launches.launch(
+      launchInput({
+        command: "command:launch:task-first",
+        thread: "thread:launch:task-first",
+        message: "First",
+        workspace: { type: "existing_worktree", worktreePath: "/repo-worktrees/task" },
+      }),
+    );
+    yield* preparationSettled(first.threadId);
+    const second = yield* launches.launch(
+      launchInput({
+        command: "command:launch:task-second",
+        thread: "thread:launch:task-second",
+        message: "Second",
+        workspace: {
+          type: "existing_worktree",
+          worktreePath: "/repo-worktrees/task",
+          skipSetupScript: true,
+        },
+      }),
+    );
+    const settled = yield* preparationSettled(second.threadId);
+    assert.equal(settled.runs[0]?.status, "starting");
+    assert.deepEqual(
+      harness.runSetup.mock.calls.map(([input]) => input.threadId),
+      [first.threadId],
+    );
+  }).pipe(Effect.provide(harness.layer));
+});

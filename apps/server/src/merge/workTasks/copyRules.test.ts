@@ -80,3 +80,29 @@ it.effect("applyCopyRule copies, keeps, overwrites and refuses as configured", (
     NodeFS.rmSync(dir, { recursive: true, force: true });
   }).pipe(Effect.provide(NodeServices.layer)),
 );
+
+it.effect("applyCopyRule refuses paths that escape through symlinks", () =>
+  Effect.gen(function* () {
+    const { dir, root, worktree, write } = fixture();
+    const outside = NodePath.join(dir, "outside");
+    write(NodePath.join(outside, "secret"), "outside\n");
+    write(NodePath.join(root, ".env"), "SECRET=1\n");
+    const apply = (rule: Parameters<typeof applyCopyRule>[2]) =>
+      applyCopyRule(root, worktree, rule);
+
+    // Source side: a symlinked parent directory that leaves the project.
+    NodeFS.symlinkSync(outside, NodePath.join(root, "linked"));
+    assert.strictEqual((yield* apply({ from: "linked/secret" })).status, "failed");
+
+    // Destination side: a symlinked parent directory that leaves the worktree.
+    NodeFS.symlinkSync(outside, NodePath.join(worktree, "out"));
+    assert.strictEqual((yield* apply({ from: ".env", to: "out/.env" })).status, "failed");
+    assert.isFalse(NodeFS.existsSync(NodePath.join(outside, ".env")));
+
+    // A destination that is itself a symlink is never removed or written through.
+    NodeFS.symlinkSync(NodePath.join(outside, "secret"), NodePath.join(worktree, ".env"));
+    assert.strictEqual((yield* apply({ from: ".env", overwrite: true })).status, "failed");
+    assert.strictEqual(NodeFS.readFileSync(NodePath.join(outside, "secret"), "utf8"), "outside\n");
+    NodeFS.rmSync(dir, { recursive: true, force: true });
+  }).pipe(Effect.provide(NodeServices.layer)),
+);

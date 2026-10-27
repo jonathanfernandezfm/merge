@@ -84,6 +84,28 @@ export const applyCopyRule = Effect.fn("WorkTaskCopyRules.apply")(
         ? failure(`Required file '${rule.from}' is missing from the project.`)
         : ({ status: "skipped", log: `${rule.from} not found` } as const);
     }
+    // Lexical checks miss symlinks: re-check against real paths, resolving the deepest
+    // existing ancestor of a destination that does not exist yet.
+    const canonical = Effect.fnUntraced(function* (target: string) {
+      const missing: Array<string> = [];
+      let existing = target;
+      while (!(yield* exists(existing)) && path.dirname(existing) !== existing) {
+        missing.unshift(path.basename(existing));
+        existing = path.dirname(existing);
+      }
+      return path.join(yield* fs.realPath(existing), ...missing);
+    });
+    if (!inside(yield* fs.realPath(root), yield* fs.realPath(source))) {
+      return failure(`Copy source '${rule.from}' resolves outside the project.`);
+    }
+    if (!inside(yield* fs.realPath(worktreePath), yield* canonical(destination))) {
+      return failure(`Copy destination '${to}' resolves outside the worktree.`);
+    }
+    const destinationLink = yield* Effect.tryPromise(() => NodeFSP.lstat(destination)).pipe(
+      Effect.map((stat) => stat.isSymbolicLink()),
+      Effect.orElseSucceed(() => false),
+    );
+    if (destinationLink) return failure(`Copy destination '${to}' is a symbolic link.`);
     if (yield* exists(destination)) {
       if (rule.overwrite !== true) {
         return { status: "skipped", log: `${to} already exists, kept it` } as const;

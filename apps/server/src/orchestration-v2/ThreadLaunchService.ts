@@ -57,6 +57,7 @@ export type ThreadLaunchWorkspaceStrategy =
       readonly type: "existing_worktree";
       readonly worktreePath: string;
       readonly branch?: string | undefined;
+      readonly skipSetupScript?: boolean; // merge-seam: thread-launch-setup
     }
   | {
       readonly type: "worktree";
@@ -562,7 +563,9 @@ const make = Effect.gen(function* () {
       }
       yield* setupTracker.stageStatus(threadId, "setup-script", "running");
       const setup =
-        worktreePath === null
+        worktreePath === null || // merge-seam: thread-launch-setup
+        (input.workspaceStrategy.type === "existing_worktree" && // merge-seam: thread-launch-setup
+          input.workspaceStrategy.skipSetupScript === true) // merge-seam: thread-launch-setup
           ? ({ status: "no-script" } as const)
           : yield* setupScripts
               .runForThread({

@@ -6,15 +6,18 @@ interface Seam {
   readonly id: string;
   readonly file: string;
   readonly purpose: string;
+  /** `measured`: a generated value (JSON) that cannot carry a marker; see SYNC.md. */
+  readonly check?: "measured";
 }
 
-/** Every `fork/seams.json` entry needs a `merge-seam: <id>` marker in its file. */
+/** Every `fork/seams.json` entry needs a `merge-seam: <id>` marker in its file, except measured ones. */
 export async function checkSeams(root: string) {
   const seams: Seam[] = JSON.parse(
     await NodeFSP.readFile(NodePath.join(root, "fork/seams.json"), "utf8"),
   );
   const missing: Array<{ id: string; file: string }> = [];
-  for (const { id, file } of seams) {
+  for (const { id, file, check } of seams) {
+    if (check === "measured") continue;
     const source = await NodeFSP.readFile(NodePath.join(root, file), "utf8").catch(() => "");
     const ids = new Set(Array.from(source.matchAll(/merge-seam: ([\w-]+)/g), (match) => match[1]));
     if (!ids.has(id)) missing.push({ id, file });

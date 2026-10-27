@@ -158,5 +158,21 @@
     "id": "mcp-tools",
     "file": "apps/server/src/mcp/McpHttpServer.ts",
     "purpose": "Register the fork MCP toolkit (create_work_task) in layerTools"
+  },
+  {
+    "id": "thread-launch-setup",
+    "file": "apps/server/src/orchestration-v2/ThreadLaunchService.ts",
+    "purpose": "existing_worktree launches can skip the project setup script, so only a Work Task's first thread runs it"
+  },
+  {
+    "id": "thread-launch-setup",
+    "file": "apps/server/src/orchestration-v2/ThreadLaunchService.test.ts",
+    "purpose": "Test that skipSetupScript skips the setup script"
+  },
+  {
+    "id": "context-budget",
+    "file": "apps/server/src/provider/agentContextBudget.json",
+    "purpose": "mcpToolListJsonBytes includes create_work_task",
+    "check": "measured"
   }
 ]
