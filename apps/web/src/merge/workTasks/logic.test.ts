@@ -1,12 +1,13 @@
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
 import {
-  EnvironmentId,
   ProjectId,
   WORK_TASK_STATUSES,
   WorkTaskId,
   type ThreadPullRequestLink,
   type WorkTaskLink,
 } from "@t3tools/contracts";
+import * as Cause from "effect/Cause";
+import { AsyncResult } from "effect/reactivity";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
@@ -14,6 +15,7 @@ import {
   groupSidebarWorkTasks,
   groupWorkTaskboard,
   linkedWorkTasksByKey,
+  loadedWorkTasks,
   remoteBranchOf,
   workTaskboardColumnForStatus,
   workTaskKey,
@@ -325,16 +327,33 @@ describe("workTaskMenuItems", () => {
 });
 
 describe("workTaskOwnsWorktreePath", () => {
-  it("matches live tasks of the environment, ignoring trailing slashes", () => {
+  it("matches live tasks, ignoring trailing slashes", () => {
     const tasks = [
       workTask({ id: "live" }),
       workTask({ id: "old", archivedAt: "2026-10-01T12:00:00.000Z" }),
     ];
-    expect(workTaskOwnsWorktreePath(tasks, ENV, "/tmp/live")).toBe(true);
-    expect(workTaskOwnsWorktreePath(tasks, ENV, " /tmp/live/ ")).toBe(true);
-    expect(workTaskOwnsWorktreePath(tasks, ENV, "/tmp/live/sub")).toBe(false);
-    expect(workTaskOwnsWorktreePath(tasks, ENV, "/tmp/old")).toBe(false);
-    expect(workTaskOwnsWorktreePath(tasks, EnvironmentId.make("other"), "/tmp/live")).toBe(false);
+    expect(workTaskOwnsWorktreePath(tasks, "/tmp/live")).toBe(true);
+    expect(workTaskOwnsWorktreePath(tasks, " /tmp/live/ ")).toBe(true);
+    expect(workTaskOwnsWorktreePath(tasks, "/tmp/live/sub")).toBe(false);
+    expect(workTaskOwnsWorktreePath(tasks, "/tmp/old")).toBe(false);
+    expect(workTaskOwnsWorktreePath([], "/tmp/live")).toBe(false);
+  });
+
+  it("treats every worktree as owned while the snapshot has not loaded", () => {
+    expect(workTaskOwnsWorktreePath(null, "/tmp/anything")).toBe(true);
+    const loading = loadedWorkTasks(AsyncResult.initial(true));
+    expect(loading).toBeNull();
+    expect(workTaskOwnsWorktreePath(loading, "/tmp/anything")).toBe(true);
+  });
+
+  it("reads a loaded snapshot, and no tasks once the stream failed", () => {
+    const tasks = [workTask({ id: "live" })];
+    const loaded = loadedWorkTasks(AsyncResult.success({ tasks, links: [] }));
+    expect(workTaskOwnsWorktreePath(loaded, "/tmp/live")).toBe(true);
+    expect(workTaskOwnsWorktreePath(loaded, "/tmp/other")).toBe(false);
+    const failed = loadedWorkTasks(AsyncResult.failure(Cause.fail("no merge rpc")));
+    expect(failed).toEqual([]);
+    expect(workTaskOwnsWorktreePath(failed, "/tmp/live")).toBe(false);
   });
 });
 
