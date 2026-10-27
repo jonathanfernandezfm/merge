@@ -57,7 +57,10 @@ const columnsOf = (table: string) =>
     return rows.map((row) => row.name);
   });
 
-const insertThread = (threadId: string, links: { taskId?: string; folderId?: string } = {}) =>
+const insertThread = (
+  threadId: string,
+  links: { taskId?: string; folderId?: string; origin?: string } = {},
+) =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
     yield* sql`INSERT INTO projection_threads (thread_id, project_id, title, model_selection_json, runtime_mode, interaction_mode, created_at, updated_at)
@@ -67,6 +70,9 @@ const insertThread = (threadId: string, links: { taskId?: string; folderId?: str
     }
     if (links.folderId) {
       yield* sql`UPDATE projection_threads SET folder_id = ${links.folderId} WHERE thread_id = ${threadId}`;
+    }
+    if (links.origin) {
+      yield* sql`UPDATE projection_threads SET origin = ${links.origin} WHERE thread_id = ${threadId}`;
     }
   });
 
@@ -171,9 +177,9 @@ describe("runMigrations with fork migrations", () => {
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;
         yield* seedLegacyFork({ withFolders: true });
-        yield* insertThread("in-task", { taskId: "task-1" });
+        yield* insertThread("in-task", { taskId: "task-1", origin: "review-feedback" });
         yield* insertThread("in-folder", { folderId: "folder-1" });
-        yield* insertThread("in-both", { taskId: "task-1", folderId: "folder-1" });
+        yield* insertThread("in-both", { taskId: "task-1", folderId: "folder-1", origin: "user" });
         yield* insertThread("unlinked");
 
         yield* runMigrations();
@@ -182,8 +188,9 @@ describe("runMigrations with fork migrations", () => {
           readonly thread_id: string;
           readonly task_id: string | null;
           readonly folder_id: string | null;
+          readonly origin: string | null;
           readonly updated_at: string;
-        }>`SELECT thread_id, task_id, folder_id, updated_at FROM merge_thread_links ORDER BY thread_id`;
+        }>`SELECT thread_id, task_id, folder_id, origin, updated_at FROM merge_thread_links ORDER BY thread_id`;
         assert.deepStrictEqual(
           links.map((row) => ({ ...row })),
           [
@@ -191,18 +198,21 @@ describe("runMigrations with fork migrations", () => {
               thread_id: "in-both",
               task_id: "task-1",
               folder_id: "folder-1",
+              origin: "user",
               updated_at: "2026-01-02T00:00:00.000Z",
             },
             {
               thread_id: "in-folder",
               task_id: null,
               folder_id: "folder-1",
+              origin: null,
               updated_at: "2026-01-02T00:00:00.000Z",
             },
             {
               thread_id: "in-task",
               task_id: "task-1",
               folder_id: null,
+              origin: "review-feedback",
               updated_at: "2026-01-02T00:00:00.000Z",
             },
           ],
@@ -262,6 +272,17 @@ describe("runMigrations with fork migrations", () => {
             SELECT COUNT(*) AS count FROM projection_threads WHERE task_id IS NOT NULL
           `;
           assert.strictEqual(yield* count("merge_thread_links"), linked[0]?.count);
+          const origins = yield* sql<{ readonly origin: string; readonly count: number }>`
+            SELECT origin, COUNT(*) AS count FROM merge_thread_links
+            WHERE origin IS NOT NULL GROUP BY origin ORDER BY origin
+          `;
+          assert.deepStrictEqual(
+            origins.map((row) => [row.origin, row.count]),
+            [
+              ["review-feedback", 26],
+              ["user", 99],
+            ],
+          );
         }).pipe(Effect.provide(layerDatabase));
         assert.isTrue(NodeFS.readFileSync(sourcePath).equals(original), "state.sqlite changed");
       }).pipe(
