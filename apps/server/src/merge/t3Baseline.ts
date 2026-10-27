@@ -1,7 +1,8 @@
 /**
  * Provider compatibility manifests gate on upstream T3 Code versions (`t3CodeRange`), while Merge
  * versions on its own line. Match them against the upstream release this fork tracks.
- * Bump this when syncing upstream; the bundled-manifest test fails if it drifts.
+ * Bump this when syncing upstream: `node fork/check-seams.ts` compares it with `upstream/main`.
+ * The bundled-manifest test only proves each driver still matches a policy.
  */
 export const T3_CODE_BASELINE_VERSION = "0.1.3";
 

@@ -264,6 +264,24 @@ export const identity: Array<{ file: string; from: string; to: string }> = [
     to: 'return shouldUseDarkColors ? "#0a0c0f" : "#f5f4ef";',
   },
 
+  // Mobile's fallback for a missing or unknown stored theme matches v0.0.10: Merge.
+  {
+    file: "apps/mobile/src/lib/mobileTheme.ts",
+    from: "    : DEFAULT_MOBILE_THEME_ID;",
+    to: '    : "merge";',
+  },
+  {
+    file: "apps/mobile/src/lib/mobileTheme.test.ts",
+    from: '      light: DEFAULT_MOBILE_THEME_ID,\n      dark: "grove",',
+    to: '      light: "merge",\n      dark: "grove",',
+  },
+  // The environment identification row is always visible, so its copy covers every build.
+  {
+    file: "apps/web/src/components/settings/AppearanceSettingsPanel.tsx",
+    from: "Choose how Dev and Nightly environments are identified.",
+    to: "Choose how the sidebar header identifies this build.",
+  },
+
   // Hosted T3 services (Connect, relay, guest sharing, webhook relay) switch on only when a build
   // bakes in the Clerk key and relay URL, so shipping no defaults keeps every entry point hidden.
   {

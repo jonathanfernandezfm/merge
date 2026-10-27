@@ -4,7 +4,9 @@ import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import * as NodeTest from "node:test";
 
-import { checkSeams } from "./check-seams.ts";
+import * as NodeChild from "node:child_process";
+
+import { checkBaseline, checkSeams } from "./check-seams.ts";
 
 async function fixture(t: { after: (fn: () => Promise<void>) => void }, serverSource: string) {
   const root = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "merge-seams-"));
@@ -32,4 +34,43 @@ NodeTest.test("a removed seam marker is reported with its id", async (t) => {
   NodeAssert.deepEqual(await checkSeams(root), {
     missing: [{ id: "server-layer", file: "apps/server/src/server.ts" }],
   });
+});
+
+async function baselineFixture(
+  t: { after: (fn: () => Promise<void>) => void },
+  baseline: string,
+  upstreamRef: boolean,
+) {
+  const root = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "merge-baseline-"));
+  t.after(() => NodeFSP.rm(root, { recursive: true, force: true }));
+  await NodeFSP.mkdir(NodePath.join(root, "apps/server/src/merge"), { recursive: true });
+  await NodeFSP.writeFile(
+    NodePath.join(root, "apps/server/src/merge/t3Baseline.ts"),
+    `export const T3_CODE_BASELINE_VERSION = "${baseline}";\n`,
+  );
+  await NodeFSP.writeFile(
+    NodePath.join(root, "apps/server/package.json"),
+    JSON.stringify({ version: "1.2.3" }),
+  );
+  const git = (...args: string[]) => NodeChild.execFileSync("git", ["-C", root, ...args]);
+  git("init", "-q");
+  git("add", "-A");
+  git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "x");
+  if (upstreamRef) git("update-ref", "refs/remotes/upstream/main", "HEAD");
+  return root;
+}
+
+NodeTest.test("a baseline equal to upstream/main is in sync", async (t) => {
+  NodeAssert.equal(await checkBaseline(await baselineFixture(t, "1.2.3", true)), null);
+});
+
+NodeTest.test("a stale baseline is reported with both versions", async (t) => {
+  NodeAssert.deepEqual(await checkBaseline(await baselineFixture(t, "1.2.0", true)), {
+    baseline: "1.2.0",
+    upstream: "1.2.3",
+  });
+});
+
+NodeTest.test("without an upstream/main ref the baseline check is skipped", async (t) => {
+  NodeAssert.equal(await checkBaseline(await baselineFixture(t, "1.2.0", false)), null);
 });
