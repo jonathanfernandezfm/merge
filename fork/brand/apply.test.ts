@@ -85,3 +85,23 @@ NodeTest.test("reports an overlay whose upstream blob no longer matches the lock
   NodeAssert.deepEqual(result.driftedOverlays, [ICON]);
   NodeAssert.equal(await read(ICON), "upstream-icon-v2");
 });
+
+NodeTest.test(
+  "identity anchors also apply to a sibling test file, without requiring them",
+  async (t) => {
+    const { root, put, read } = await fixture(t);
+    const sibling = "apps/desktop/src/app/DesktopEnvironment.test.ts";
+    await put(sibling, 'assert.equal(id, "com.t3tools.t3code");\n');
+
+    const first = await applyBrand({ root, check: false, rules });
+    NodeAssert.deepEqual(first.missingAnchors, []);
+    NodeAssert.ok(first.changed.includes(sibling));
+    NodeAssert.equal(
+      await read(sibling),
+      'assert.equal(id, "io.github.jonathanfernandezfm.merge");\n',
+    );
+
+    const second = await applyBrand({ root, check: true, rules });
+    NodeAssert.deepEqual(second, { changed: [], missingAnchors: [], driftedOverlays: [] });
+  },
+);

@@ -16,6 +16,7 @@ const USER_DATA = "apps/desktop/src/app/DesktopUserData.ts";
 const PROTOCOL = "apps/desktop/src/electron/ElectronProtocol.ts";
 const AUTH_HANDOFF = "packages/shared/src/codexAuthHandoff.ts";
 const PROMPT_LINKS = "packages/shared/src/promptLinks.ts";
+const LAUNCHER = "apps/desktop/scripts/electron-launcher.mjs";
 
 export const identity: Array<{ file: string; from: string; to: string }> = [
   // Installer and app identity.
@@ -76,9 +77,35 @@ export const identity: Array<{ file: string; from: string; to: string }> = [
   },
   { file: MOBILE_CONFIG, from: "com.t3tools.t3code", to: APP_ID },
   { file: MOBILE_CONFIG, from: 'slug: "t3-code",', to: 'slug: "merge",' },
+  // EAS project and owner come from the environment, as in v0.0.10.
+  {
+    file: MOBILE_CONFIG,
+    from: 'url: "https://u.expo.dev/d763fcb8-d37c-41ea-a773-b54a0ab4a454",',
+    to: "...(process.env.EAS_PROJECT_ID\n      ? { url: `https://u.expo.dev/${process.env.EAS_PROJECT_ID}` }\n      : {}),",
+  },
+  {
+    file: MOBILE_CONFIG,
+    from: 'eas: {\n      projectId: "d763fcb8-d37c-41ea-a773-b54a0ab4a454",\n    },',
+    to: "...(process.env.EAS_PROJECT_ID ? { eas: { projectId: process.env.EAS_PROJECT_ID } } : {}),",
+  },
+  {
+    file: MOBILE_CONFIG,
+    from: 'owner: "pingdotgg",',
+    to: "...(process.env.EXPO_OWNER ? { owner: process.env.EXPO_OWNER } : {}),",
+  },
+  {
+    file: LAUNCHER,
+    from: 'const APP_DISPLAY_NAME = isDevelopment ? "T3 Code (Dev)" : "T3 Code (Beta)";',
+    to: 'const APP_DISPLAY_NAME = isDevelopment ? "Merge (Dev)" : "Merge (Alpha)";',
+  },
+  {
+    file: LAUNCHER,
+    from: '? `com.t3tools.t3code.dev.${devBundleIdSuffix || "local"}`\n  : "com.t3tools.t3code";',
+    to: `? \`${APP_ID}.dev.\${devBundleIdSuffix || "local"}\`\n  : "${APP_ID}";`,
+  },
 
-  // Data paths. Upstream's V1 profiles belong to T3 Code: point every legacy probe at our own
-  // profile so Merge never reads or imports T3 Code's Electron data.
+  // Data paths. Mirror upstream's V1/V2 split on our own names: V2 runs in `merge-v2` and only
+  // imports from v0.0.10's `merge` profile, never from T3 Code's.
   {
     file: "apps/desktop/src/app/DesktopStatePaths.ts",
     from: 'input.joinPath(input.homeDirectory, ".t3"),',
@@ -102,7 +129,7 @@ export const identity: Array<{ file: string; from: string; to: string }> = [
   {
     file: USER_DATA,
     from: '{ current: "t3code-v2", legacy: "T3 Code (Alpha)" }',
-    to: '{ current: "merge", legacy: "merge" }',
+    to: '{ current: "merge-v2", legacy: "merge" }',
   },
   {
     file: USER_DATA,
@@ -112,7 +139,7 @@ export const identity: Array<{ file: string; from: string; to: string }> = [
   {
     file: "apps/desktop/src/app/DesktopLegacyLocalStorage.ts",
     from: 'const V1_PROFILE_NAMES = ["T3 Code (Alpha)", "t3code"];',
-    to: "const V1_PROFILE_NAMES: string[] = [];",
+    to: 'const V1_PROFILE_NAMES = ["merge"];',
   },
 
   // URL schemes.
@@ -127,7 +154,7 @@ export const identity: Array<{ file: string; from: string; to: string }> = [
     to: 'DESKTOP_DEVELOPMENT_SCHEME = "merge-dev";',
   },
   {
-    file: "apps/desktop/scripts/electron-launcher.mjs",
+    file: LAUNCHER,
     from: 'APP_PROTOCOL_SCHEMES = isDevelopment ? ["t3code-dev"] : ["t3code"];',
     to: 'APP_PROTOCOL_SCHEMES = isDevelopment ? ["merge-dev"] : ["merge"];',
   },
@@ -209,6 +236,62 @@ export const identity: Array<{ file: string; from: string; to: string }> = [
     from: '"Created in [T3 Code](https://t3.codes).",',
     to: `"Created in [Merge](${REPO_URL}).",`,
   },
+  // Upstream tests whose literals differ from the source anchors (siblings get those for free).
+  {
+    file: "apps/desktop/src/app/DesktopAppIdentity.test.ts",
+    from: "/T3 Code \\((Alpha|Dev)\\)/.test(path)",
+    to: "/\\/merge(-dev)?$/.test(path)",
+  },
+  {
+    file: "apps/desktop/src/app/DesktopAppIdentity.test.ts",
+    from: "Application Support/t3code-v2",
+    to: "Application Support/merge-v2",
+  },
+  {
+    file: "apps/desktop/src/app/DesktopAppIdentity.test.ts",
+    from: "Application Support/T3 Code (Dev)",
+    to: "Application Support/merge-dev",
+  },
+  {
+    file: "apps/desktop/src/app/DesktopEnvironment.test.ts",
+    from: '"/Users/alice/.t3/',
+    to: '"/Users/alice/.merge/',
+  },
+  {
+    file: "apps/desktop/src/app/DesktopUserData.test.ts",
+    from: 'it.effect.each(["t3code", "T3 Code (Alpha)"])(',
+    to: 'it.effect.each(["merge"])(',
+  },
+  {
+    file: "apps/desktop/src/app/DesktopUserData.test.ts",
+    from: 'path.join(directory, "t3code-v2")',
+    to: 'path.join(directory, "merge-v2")',
+  },
+  {
+    file: "apps/desktop/src/app/DesktopUserData.test.ts",
+    from: 'path.join(directory, "T3 Code (Alpha)")',
+    to: 'path.join(directory, "merge")',
+  },
+  {
+    file: "packages/shared/src/promptLinks.test.ts",
+    from: 'promptLinkAppPath("t3code',
+    to: 'promptLinkAppPath("merge',
+  },
+  {
+    file: "packages/shared/src/providerAuthReturnUrl.test.ts",
+    from: 'it.each(["t3code", "t3code-dev"])(',
+    to: 'it.each(["merge", "merge-dev"])(',
+  },
+  {
+    file: "apps/web/src/components/desktopUpdate.logic.test.ts",
+    from: "https://github.com/pingdotgg/t3code/releases",
+    to: `${REPO_URL}/releases`,
+  },
+  {
+    file: "apps/mobile/src/features/connection/pairing.test.ts",
+    from: '"t3code://pair?',
+    to: '"merge://pair?',
+  },
 ];
 
 export const copy = {
@@ -231,8 +314,6 @@ export const copy = {
   exclude: [
     // Verbatim quotes from T3 Code users.
     "apps/marketing/src/lib/tweets.ts",
-    // Exercises the T3 Code legacy profile import that the identity anchors switch off.
-    "apps/desktop/src/app/DesktopUserData.test.ts",
   ],
 };
 

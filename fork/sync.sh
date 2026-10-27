@@ -18,7 +18,7 @@ git rebase upstream/main
 node fork/check-seams.ts
 node fork/brand/apply.ts
 # Copy shortens lines, so let the formatter rejoin them before committing.
-git diff --name-only -z | xargs -0 vp fmt --no-error-on-unmatched-pattern
+git diff --name-only -z | xargs -0 -r vp fmt --no-error-on-unmatched-pattern
 # The tree was clean, so everything here is overlay output, including new asset files.
 git add -A
 git commit -m "$SUBJECT"
