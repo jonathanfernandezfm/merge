@@ -18,11 +18,7 @@ describe("layoutGitGraph", () => {
   });
 
   it("opens a lane for a merged side branch and closes it at the fork", () => {
-    //  m
-    //  |\
-    //  x y
-    //  |/
-    //  a
+    // m merges x and y, which both fork from a.
     const { rows, laneCount } = layoutGitGraph([
       { sha: "m", parents: ["x", "y"] },
       { sha: "x", parents: ["a"] },

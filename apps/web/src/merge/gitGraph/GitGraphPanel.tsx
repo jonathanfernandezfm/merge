@@ -1,6 +1,6 @@
 import type { GitGraphCommit, ScopedThreadRef } from "@t3tools/contracts";
 import { ArrowRightIcon, CheckIcon, CopyIcon, GitGraphIcon } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 
 import { type DraftId } from "~/composerDraftStore";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
@@ -53,7 +53,7 @@ export function GitGraphPanel(props: {
   );
   const data = commitsQuery.data;
   const commits = data?.commits;
-  const graph = useMemo(() => layoutGitGraph(commits ?? []), [commits]);
+  const graph = layoutGitGraph(commits ?? []);
   const graphWidth = gitGraphWidth(graph.laneCount);
   const [selectedSha, setSelectedSha] = useState<string | null>(null);
   // Until the reader picks one (or when theirs is gone after a rebase), show the newest commit.
@@ -67,15 +67,14 @@ export function GitGraphPanel(props: {
     refresh,
     resourceKey: `git-graph:${threadRef.environmentId}:${threadRef.threadId}`,
   });
+  // oxlint-disable-next-line t3code/react-effect-budget -- subscribes to window focus, an external event, for the panel's lifetime
   useEffect(() => {
     window.addEventListener("focus", refresh);
     return () => window.removeEventListener("focus", refresh);
   }, [refresh]);
 
-  const selectBaseRef = useCallback(
-    (baseRef: string | null) => useGitGraphBaseRefStore.getState().setBaseRef(threadKey, baseRef),
-    [threadKey],
-  );
+  const selectBaseRef = (baseRef: string | null) =>
+    useGitGraphBaseRefStore.getState().setBaseRef(threadKey, baseRef);
 
   const moveSelection = (event: KeyboardEvent<HTMLDivElement>) => {
     if (!commits?.length) return;

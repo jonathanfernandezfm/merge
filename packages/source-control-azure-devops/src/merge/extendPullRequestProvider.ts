@@ -157,7 +157,7 @@ export const extendAzureDevOpsPullRequestProvider = Effect.fn(
  * Queues each expired policy evaluation of pull request `number` again and returns how many. The
  * list is read fresh so no evaluation id has to travel to the client and back.
  */
-export const requeueExpiredAzureDevOpsChecks = Effect.fn("MergeAzureDevOps.requeueExpiredChecks")(
+const requeueExpiredAzureDevOpsChecks = Effect.fn("MergeAzureDevOps.requeueExpiredChecks")(
   function* (azure: AzureDevOpsCli.AzureDevOpsCli["Service"], cwd: string, number: number) {
     const run = (args: ReadonlyArray<string>) =>
       azure.execute({ cwd, args: [...args, "--only-show-errors", "--output", "json"] });

@@ -7,7 +7,7 @@ const MID = "oklch(0.17 0.012 124)";
 const BOTTOM = "oklch(0.145 0.003 286)";
 const ACCENT = "oklch(0.888 0.205 122.5)";
 
-export const MERGE_TEXTURE_STYLE: CSSProperties = {
+const MERGE_TEXTURE_STYLE: CSSProperties = {
   background: [
     `radial-gradient(circle at center, color-mix(in oklch, ${ACCENT} 7%, transparent) 0.5px, transparent 0.75px) 0 0 / 6px 6px`,
     `radial-gradient(ellipse 120% 160% at 85% 0%, color-mix(in oklch, ${ACCENT} 14%, transparent), transparent 70%)`,
