@@ -2767,6 +2767,114 @@ it.layer(layerTest)("OrchestrationV2LayerLive lifecycle", (it) => {
     }),
   );
 
+  // merge-seam: pr-watch-resume (test: a resumed re-watch delivers held remarks exactly once)
+  it.effect("delivers remarks from an unwatched gap once only when the re-watch resumes", () =>
+    Effect.gen(function* () {
+      const orchestrator = yield* Orchestrator.OrchestratorV2;
+      const threadId = ThreadId.make("runtime-pull-request-watch-resume");
+      const projectId = ProjectId.make("pr-watch-resume-project");
+      yield* seedProject({
+        projectId,
+        title: "Watch resume",
+        workspaceRoot: "/workspace/watch-resume",
+        defaultModelSelection: null,
+        createdAt: "2026-10-01T00:00:00.000Z",
+      });
+      yield* orchestrator.dispatch({
+        type: "thread.create",
+        createdBy: "user",
+        creationSource: "web",
+        commandId: CommandId.make("pr-watch-resume-create"),
+        threadId,
+        projectId,
+        title: "Watch resume",
+        modelSelection,
+        runtimeMode: "full-access",
+        interactionMode: "default",
+        branch: null,
+        worktreePath: null,
+      });
+      const watch = (on: boolean, id: string, resume?: boolean) =>
+        orchestrator.dispatch({
+          type: "thread.pull-request.watch",
+          commandId: CommandId.make(`pr-watch-resume-${id}`),
+          threadId,
+          host: "github.com",
+          repository: "pingdotgg/t3code",
+          number: 14,
+          watching: on,
+          ...(resume === undefined ? {} : { resumeRemarksFromEndedWatch: resume }),
+          link: { url: "https://github.com/pingdotgg/t3code/pull/14", source: "agent" },
+        });
+      yield* watch(true, "start");
+      const startedAt = (yield* orchestrator.getThreadShell(threadId))?.pullRequests?.[0]?.watch
+        ?.startedAt;
+      assert.isDefined(startedAt);
+      if (startedAt === undefined) return;
+      const at = (minutes: number) =>
+        DateTime.formatIso(DateTime.add(DateTime.makeUnsafe(startedAt), { minutes }));
+      const comments: Array<{ readonly body: string; readonly createdAt: string }> = [
+        { body: "before-watch", createdAt: at(-1) },
+      ];
+      const host = Layer.mergeAll(
+        NodeServices.layer,
+        Layer.mock(PullRequestService.PullRequestService)({
+          detail: () =>
+            Effect.sync(() => ({
+              ...watchedPullRequestDetail({ projectId, number: 14, at: startedAt }),
+              checks: [{ name: "lint", status: "success" as const, description: null, url: null }],
+            })),
+          activity: () =>
+            Effect.sync(() => ({
+              comments: comments.map((comment) => ({
+                id: comment.body,
+                kind: "issue-comment" as const,
+                author: { login: "reviewer", name: null, avatarUrl: null },
+                body: comment.body,
+                createdAt: comment.createdAt,
+                url: null,
+                path: null,
+                reviewState: null,
+              })),
+              commentCount: comments.length,
+              commentsTruncated: false,
+              reviewThreads: [],
+              commits: [],
+            })),
+        }),
+      );
+      const told = (body: string) =>
+        Effect.map(
+          orchestrator.getThreadRecords(threadId, ["messages"]),
+          ({ messages }) => messages.filter((message) => message.text.includes(body)).length,
+        );
+      const reactor = yield* PullRequestWatchReactor.make.pipe(Effect.provide(host));
+      const sweepLater = Effect.andThen(TestClock.adjust("10 minutes"), reactor.sweep);
+
+      comments.push({ body: "while-watched", createdAt: at(5) });
+      yield* sweepLater;
+      yield* watch(false, "hold");
+      comments.push({ body: "during-hold", createdAt: at(15) });
+      yield* TestClock.adjust("10 minutes");
+      yield* watch(true, "resume", true);
+      yield* sweepLater;
+      yield* sweepLater;
+      assert.equal(yield* told("before-watch"), 0);
+      assert.equal(yield* told("while-watched"), 1);
+      assert.equal(yield* told("during-hold"), 1);
+
+      // Without the flag, upstream keeps its rule: a re-watch starts at now.
+      yield* watch(false, "gap");
+      comments.push({ body: "during-gap", createdAt: at(35) });
+      yield* TestClock.adjust("10 minutes");
+      yield* watch(true, "plain");
+      yield* sweepLater;
+      assert.equal(yield* told("during-gap"), 0);
+      assert.equal(yield* told("during-hold"), 1);
+      yield* watch(false, "end");
+    }),
+  ); // merge-seam: pr-watch-resume
+
   it.effect("finishes owed checks once after pending sweeps, a restart, and a re-watch", () =>
     Effect.gen(function* () {
       const orchestrator = yield* Orchestrator.OrchestratorV2;
