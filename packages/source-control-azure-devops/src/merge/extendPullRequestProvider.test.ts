@@ -34,9 +34,25 @@ const PULL_REQUEST = {
 
 const REF = { cwd: "/w", repository: "acme/web", host: "dev.azure.com", number: 42 };
 
-/** Recorded az answers by subcommand; `fail` makes every az call fail. */
-function provide(options: { readonly fail?: boolean } = {}) {
+const EXPIRED_POLICIES = JSON.stringify([
+  { evaluationId: "e1", status: "queued", context: { isExpired: true } },
+  { evaluationId: "e2", status: "approved", context: { isExpired: false } },
+]);
+
+/**
+ * Recorded az answers by subcommand. `fail` fails every az call, `failQueue` only the requeue,
+ * `policies` overrides the policy list answer.
+ */
+function provide(
+  options: {
+    readonly fail?: boolean;
+    readonly failQueue?: boolean;
+    readonly policies?: string;
+    readonly withAzure?: boolean;
+  } = {},
+) {
   const calls: Array<ReadonlyArray<string>> = [];
+  const actions: Array<string> = [];
   const output = (stdout: string) => ({
     exitCode: 0 as never,
     stdout,
@@ -47,7 +63,7 @@ function provide(options: { readonly fail?: boolean } = {}) {
   const azure = Layer.mock(AzureDevOpsCli.AzureDevOpsCli)({
     execute: (input) => {
       calls.push(input.args);
-      if (options.fail) {
+      if (options.fail || (options.failQueue && input.args.includes("queue"))) {
         return Effect.fail(
           new AzureDevOpsCli.AzureDevOpsCommandFailedError({
             operation: "execute",
@@ -58,11 +74,16 @@ function provide(options: { readonly fail?: boolean } = {}) {
           }),
         );
       }
+      const args = input.args.join(" ");
       return Effect.succeed(
         output(
-          input.args.includes("policy")
-            ? fixture("azureDevOpsPolicyList.json")
-            : fixture("azureDevOpsThreads.json"),
+          args.startsWith("repos pr policy list")
+            ? (options.policies ?? fixture("azureDevOpsPolicyList.json"))
+            : args.startsWith("repos pr show")
+              ? fixture("azureDevOpsPullRequestShow.json")
+              : args.startsWith("devops invoke")
+                ? fixture("azureDevOpsThreads.json")
+                : "{}",
         ),
       );
     },
@@ -71,8 +92,13 @@ function provide(options: { readonly fail?: boolean } = {}) {
     getPullRequest: () => Effect.succeed(PULL_REQUEST),
     listIterations: () => Effect.succeed([]),
     listThreads: () => Effect.succeed([]),
+    runPullRequestAction: (input) => Effect.sync(() => void actions.push(input.action)),
   });
-  return { calls, layer: Layer.merge(azure, cli) };
+  return {
+    calls,
+    actions,
+    layer: options.withAzure === false ? cli : Layer.merge(azure, cli),
+  };
 }
 
 describe("Azure DevOps pull request extensions", () => {
@@ -88,20 +114,18 @@ describe("Azure DevOps pull request extensions", () => {
         ["sonarcloud/quality-gate", "pending"],
         ["Docs build", "skipped"],
       ]);
-      expect(calls).toEqual([
-        [
-          "repos",
-          "pr",
-          "policy",
-          "list",
-          "--detect",
-          "true",
-          "--id",
-          "42",
-          "--only-show-errors",
-          "--output",
-          "json",
-        ],
+      expect(calls).toContainEqual([
+        "repos",
+        "pr",
+        "policy",
+        "list",
+        "--detect",
+        "true",
+        "--id",
+        "42",
+        "--only-show-errors",
+        "--output",
+        "json",
       ]);
     }),
   );
@@ -153,6 +177,67 @@ describe("Azure DevOps pull request extensions", () => {
       const activity = yield* provider.getChangeRequestActivity(REF);
       expect(activity.reviewThreads).toEqual([]);
       expect(activity.comments).toEqual([]);
+    }),
+  );
+
+  it.effect("reads the reviewers' votes as the detail's review decision", () =>
+    Effect.gen(function* () {
+      const provider = yield* make.pipe(Effect.provide(provide().layer));
+      const detail = yield* provider.getChangeRequest(REF);
+      // Julius approved as the required reviewer, but Sarah is waiting for the author.
+      expect(detail.reviewDecision).toBe("changes-requested");
+    }),
+  );
+
+  it.effect("re-queues expired builds after auto-complete is turned on, and only then", () =>
+    Effect.gen(function* () {
+      const { calls, actions, layer } = provide({ policies: EXPIRED_POLICIES });
+      const provider = yield* make.pipe(Effect.provide(layer));
+      yield* provider.runAction({ ...REF, action: "enable-auto-merge" });
+      expect(actions).toEqual(["enable-auto-merge"]);
+      expect(calls.filter((args) => args.includes("queue"))).toEqual([
+        [
+          "repos",
+          "pr",
+          "policy",
+          "queue",
+          "--detect",
+          "true",
+          "--id",
+          "42",
+          "--evaluation-id",
+          "e1",
+          "--only-show-errors",
+          "--output",
+          "json",
+        ],
+      ]);
+
+      calls.length = 0;
+      yield* provider.runAction({ ...REF, action: "disable-auto-merge" });
+      expect(calls).toEqual([]);
+    }),
+  );
+
+  it.effect("keeps auto-complete on when re-queuing fails", () =>
+    Effect.gen(function* () {
+      const { actions, layer } = provide({ policies: EXPIRED_POLICIES, failQueue: true });
+      const provider = yield* make.pipe(Effect.provide(layer));
+      yield* provider.runAction({ ...REF, action: "enable-auto-merge" });
+      expect(actions).toEqual(["enable-auto-merge"]);
+    }),
+  );
+
+  // Guard: once upstream fills these itself, this fails and the fork enrichment should go.
+  it.effect("upstream alone still leaves Azure checks and review threads empty", () =>
+    Effect.gen(function* () {
+      const { layer } = provide({ withAzure: false });
+      const provider = yield* make.pipe(Effect.provide(layer));
+      const detail = yield* provider.getChangeRequest(REF);
+      const activity = yield* provider.getChangeRequestActivity(REF);
+      expect(detail.checks).toEqual([]);
+      expect(detail.reviewDecision).toBeUndefined();
+      expect(activity.reviewThreads).toEqual([]);
     }),
   );
 });

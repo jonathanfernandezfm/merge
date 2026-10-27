@@ -138,5 +138,15 @@
     "id": "work-items",
     "file": "apps/web/src/components/chat/ChatHeader.tsx",
     "purpose": "Header chip for the branch's Azure Boards work item; opens the work items panel"
+  },
+  {
+    "id": "scm-ado",
+    "file": "packages/source-control-azure-devops/src/server/AzureDevOpsCli.ts",
+    "purpose": "URL-encode --source-branch so branches like feature/#123-x find their pull request"
+  },
+  {
+    "id": "scm-ado",
+    "file": "apps/web/src/components/pullRequest/PullRequestDetailPanel.tsx",
+    "purpose": "Re-queue button for expired Azure DevOps build policies"
   }
 ]

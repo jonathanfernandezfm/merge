@@ -410,7 +410,7 @@ export const make = Effect.gen(function* () {
           "--detect",
           "true",
           "--source-branch",
-          SourceControlProvider.sourceBranch(input),
+          encodeURIComponent(SourceControlProvider.sourceBranch(input)), // merge-seam: scm-ado
           "--status",
           toAzureStatus(input.state),
           "--top",

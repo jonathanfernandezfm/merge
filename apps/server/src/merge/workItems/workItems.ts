@@ -47,7 +47,7 @@ const requireWorkspace = (operation: string, cwd: string) =>
   );
 
 /** Runs `az … --output json` as argv, never through a shell. */
-const azJson = Effect.fn("WorkItems.az")(function* (
+export const azJson = Effect.fn("WorkItems.az")(function* (
   operation: string,
   cwd: string,
   args: ReadonlyArray<string>,
@@ -69,7 +69,7 @@ const azJson = Effect.fn("WorkItems.az")(function* (
   return result.stdout.trim();
 });
 
-const decoded = <A>(operation: string, result: Result.Result<A, unknown>) =>
+export const decoded = <A>(operation: string, result: Result.Result<A, unknown>) =>
   Result.isSuccess(result)
     ? Effect.succeed(result.success)
     : Effect.fail(failure(operation, "Azure CLI returned an unreadable answer.", result.failure));
@@ -215,13 +215,13 @@ export const linkBranchWorkItem = Effect.fn("WorkItems.link")(function* (
     );
 });
 
-const requireAzureDevOps = Effect.fn("WorkItems.requireAzureDevOps")(function* (
+export const requireAzureDevOps = Effect.fn("WorkItems.requireAzureDevOps")(function* (
   operation: string,
   cwd: string,
 ) {
   yield* requireWorkspace(operation, cwd);
   if (!(yield* isAzureDevOps(cwd))) {
-    return yield* failure(operation, "Work items need an Azure DevOps repository.");
+    return yield* failure(operation, "This needs an Azure DevOps repository.");
   }
 });
 

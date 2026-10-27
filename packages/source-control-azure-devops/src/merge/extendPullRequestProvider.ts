@@ -9,7 +9,12 @@ import type {
 import * as AzureDevOpsCli from "../server/AzureDevOpsCli.ts";
 import * as AzureDevOpsPullRequestCli from "../server/AzureDevOpsPullRequestCli.ts";
 import { decodeThreadsJson } from "../server/azureDevOpsPullRequestJson.ts";
-import { decodePolicyEvaluationsJson, decodeReviewThreadsJson } from "./azureDevOpsReviewJson.ts";
+import {
+  decodeExpiredPolicyEvaluationIds,
+  decodePolicyEvaluationsJson,
+  decodeReviewDecisionJson,
+  decodeReviewThreadsJson,
+} from "./azureDevOpsReviewJson.ts";
 
 /** Same bound upstream gives its own thread read. */
 const THREADS_MAX_OUTPUT_BYTES = 8 * 1024 * 1024;
@@ -17,10 +22,9 @@ const THREADS_MAX_OUTPUT_BYTES = 8 * 1024 * 1024;
 const REST_API_VERSION = "7.1";
 
 /**
- * Fills in what upstream leaves empty for Azure DevOps: branch policies as checks on the detail,
- * and file threads as review threads on the activity. Called once at the `scm-ado` seam, after
- * upstream built `provider`; it swaps those two methods in place so the seam stays one line.
- * Without the az services in context (upstream's own tests) it leaves the provider alone.
+ * Fills what upstream leaves empty for Azure DevOps (policy checks, vote decision, review threads)
+ * and re-queues expired builds after auto-complete. Called once at the `scm-ado` seam; swaps those
+ * methods on the built provider. Without the az services in context it does nothing.
  */
 export const extendAzureDevOpsPullRequestProvider = Effect.fn(
   "MergeAzureDevOps.extendPullRequestProvider",
@@ -34,6 +38,7 @@ export const extendAzureDevOpsPullRequestProvider = Effect.fn(
   const cli = cliOption.value;
   const getChangeRequest = provider.getChangeRequest;
   const getChangeRequestActivity = provider.getChangeRequestActivity;
+  const runAction = provider.runAction;
 
   const executeJson = (cwd: string, args: ReadonlyArray<string>, maxOutputBytes?: number) =>
     azure
@@ -44,7 +49,7 @@ export const extendAzureDevOpsPullRequestProvider = Effect.fn(
       })
       .pipe(Effect.map((result) => result.stdout.trim()));
 
-  // A failed policy read leaves the checks unknown rather than losing the detail.
+  // A failed read leaves its part unknown rather than losing the detail.
   const readPolicies = (cwd: string, number: number) =>
     executeJson(cwd, [
       "repos",
@@ -56,17 +61,53 @@ export const extendAzureDevOpsPullRequestProvider = Effect.fn(
       "--id",
       String(number),
     ]).pipe(Effect.option);
+  const readPullRequest = (cwd: string, number: number) =>
+    executeJson(cwd, ["repos", "pr", "show", "--detect", "true", "--id", String(number)]).pipe(
+      Effect.option,
+    );
+
+  const requeueExpiredChecks = (cwd: string, number: number) =>
+    requeueExpiredAzureDevOpsChecks(azure, cwd, number);
 
   Object.assign(provider, {
     getChangeRequest: (input) =>
-      Effect.all([getChangeRequest(input), readPolicies(input.cwd, input.number)], {
-        concurrency: 2,
-      }).pipe(
-        Effect.map(([detail, raw]) => {
-          if (Option.isNone(raw)) return detail;
-          const checks = decodePolicyEvaluationsJson(raw.value, detail.url);
-          return Result.isSuccess(checks) ? { ...detail, checks: checks.success } : detail;
+      Effect.all(
+        [
+          getChangeRequest(input),
+          readPolicies(input.cwd, input.number),
+          readPullRequest(input.cwd, input.number),
+        ],
+        { concurrency: 3 },
+      ).pipe(
+        Effect.map(([detail, policies, shown]) => {
+          // Upstream's own values win once it reads them itself.
+          const checks =
+            detail.checks.length === 0 && Option.isSome(policies)
+              ? decodePolicyEvaluationsJson(policies.value, detail.url)
+              : Result.succeed(detail.checks);
+          const reviewDecision =
+            detail.reviewDecision == null && Option.isSome(shown)
+              ? decodeReviewDecisionJson(shown.value)
+              : Result.succeed(detail.reviewDecision);
+          return {
+            ...detail,
+            checks: Result.isSuccess(checks) ? checks.success : detail.checks,
+            ...(Result.isSuccess(reviewDecision) && reviewDecision.success != null
+              ? { reviewDecision: reviewDecision.success }
+              : {}),
+          };
         }),
+      ),
+
+    // Azure never re-runs an expired build by itself, so auto-complete would wait on it forever.
+    // Queuing them is best effort: auto-complete is already set either way.
+    runAction: (input) =>
+      runAction(input).pipe(
+        Effect.andThen(
+          input.action === "enable-auto-merge"
+            ? requeueExpiredChecks(input.cwd, input.number).pipe(Effect.ignore)
+            : Effect.void,
+        ),
       ),
 
     // One threads read gives both the timeline and the review threads. Anything that goes wrong
@@ -111,3 +152,43 @@ export const extendAzureDevOpsPullRequestProvider = Effect.fn(
     ),
   } satisfies Partial<PullRequestProviderApi>);
 });
+
+/**
+ * Queues each expired policy evaluation of pull request `number` again and returns how many. The
+ * list is read fresh so no evaluation id has to travel to the client and back.
+ */
+export const requeueExpiredAzureDevOpsChecks = Effect.fn("MergeAzureDevOps.requeueExpiredChecks")(
+  function* (azure: AzureDevOpsCli.AzureDevOpsCli["Service"], cwd: string, number: number) {
+    const run = (args: ReadonlyArray<string>) =>
+      azure.execute({ cwd, args: [...args, "--only-show-errors", "--output", "json"] });
+    const id = String(number);
+    const listed = yield* run(["repos", "pr", "policy", "list", "--detect", "true", "--id", id]);
+    const expired = decodeExpiredPolicyEvaluationIds(listed.stdout.trim());
+    if (!Result.isSuccess(expired)) {
+      return yield* new AzureDevOpsPullRequestCli.AzureDevOpsPullRequestReadError({
+        command: "az",
+        cwd,
+        operation: "requeueExpiredChecks",
+        cause: expired.failure,
+      });
+    }
+    yield* Effect.forEach(
+      expired.success,
+      (evaluationId) =>
+        run([
+          "repos",
+          "pr",
+          "policy",
+          "queue",
+          "--detect",
+          "true",
+          "--id",
+          id,
+          "--evaluation-id",
+          evaluationId,
+        ]),
+      { discard: true },
+    );
+    return expired.success.length;
+  },
+);

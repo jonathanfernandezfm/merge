@@ -154,6 +154,7 @@ import {
 import { PullRequestGuideTab } from "./PullRequestGuideTab";
 import { guideRunKey, useGuideRunStore } from "./guide/guideRunStore";
 import { useReviewGuideWriter } from "./guide/useReviewGuideWriter";
+import { RequeueExpired } from "../../merge/pullRequests/RequeueExpired"; // merge-seam: scm-ado
 
 const actionFailureLabels = (term: string): Record<PullRequestAction, string> => ({
   merge: `Could not merge this ${term}`,
@@ -1678,6 +1679,7 @@ export function PullRequestDetailPanel({
             ) : null}
           </PullRequestDetailTabBar>
         ) : null}
+        <RequeueExpired env={environmentId} detail={detail} /* merge-seam: scm-ado */ />
       </div>
 
       <div
