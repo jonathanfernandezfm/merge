@@ -16,7 +16,6 @@ import * as PubSub from "effect/PubSub";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as SqlClient from "effect/sql/SqlClient";
-import * as SqlSchema from "effect/sql/SqlSchema";
 
 /** `projection_tasks` as v0.0.10 wrote it; `auto_handle_ci_failures` is unused. */
 const WorkTaskDbRow = Schema.Struct({
@@ -99,10 +98,23 @@ export const make = Effect.gen(function* () {
   const changed = yield* PubSub.sliding<void>(1);
   const notify = PubSub.publish(changed, undefined).pipe(Effect.asVoid);
 
-  const selectRows = SqlSchema.findAll({
-    Request: Schema.Struct({ id: Schema.optional(WorkTaskId) }),
-    Result: WorkTaskDbRow,
-    execute: ({ id }) => sql`
+  // One bad row is logged and skipped, so it never hides the other tasks.
+  const decodeEach =
+    <S extends Schema.Decoder<unknown>>(schema: S, what: string) =>
+    (rows: ReadonlyArray<unknown>) => {
+      const decode = Schema.decodeUnknownEffect(schema);
+      return Effect.forEach(rows, (row) =>
+        decode(row).pipe(
+          Effect.map((value) => [value]),
+          Effect.catch((cause) =>
+            Effect.logWarning(`Skipping an unreadable ${what} row.`, cause).pipe(Effect.as([])),
+          ),
+        ),
+      ).pipe(Effect.map((decoded) => decoded.flat()));
+    };
+
+  const selectRows = ({ id }: { readonly id?: WorkTaskId }) =>
+    sql`
       SELECT
         task_id AS "id",
         project_id AS "projectId",
@@ -123,22 +135,18 @@ export const make = Effect.gen(function* () {
         ...(id === undefined ? [] : [sql`task_id = ${id}`]),
       ])}
       ORDER BY created_at ASC, task_id ASC
-    `,
-  });
+    `.pipe(Effect.flatMap(decodeEach(WorkTaskDbRow, "projection_tasks")));
 
-  const selectLinks = SqlSchema.findAll({
-    Request: Schema.Void,
-    Result: WorkTaskLinkDbRow,
-    execute: () => sql`
+  const selectLinks = (_: void) =>
+    sql`
       SELECT thread_id AS "threadId", task_id AS "taskId", origin
       FROM merge_thread_links
       WHERE task_id IS NOT NULL
       ORDER BY thread_id
-    `,
-  });
+    `.pipe(Effect.flatMap(decodeEach(WorkTaskLinkDbRow, "merge_thread_links")));
 
-  /** `pull_request_json` is written on insert only; it is legacy and never updated. */
-  const write = (task: WorkTask, mode: "insert" | "update") =>
+  /** The only write of `pull_request_json`, which is legacy and never updated. */
+  const insertRow = (task: WorkTask) =>
     encodeRow(task).pipe(
       Effect.flatMap(
         (row) => sql`
@@ -152,20 +160,6 @@ export const make = Effect.gen(function* () {
             ${row.legacyPullRequest}, ${row.autoHandleReviewFeedback}, ${row.waitingForUserReason},
             ${row.createdAt}, ${row.updatedAt}, ${row.mergedAt}, ${row.archivedAt}, ${row.deletedAt}
           )
-          ${
-            mode === "insert"
-              ? sql``
-              : sql`ON CONFLICT (task_id) DO UPDATE SET
-            title = excluded.title,
-            description = excluded.description,
-            workspace_json = excluded.workspace_json,
-            auto_handle_review_feedback = excluded.auto_handle_review_feedback,
-            waiting_for_user_reason = excluded.waiting_for_user_reason,
-            updated_at = excluded.updated_at,
-            merged_at = excluded.merged_at,
-            archived_at = excluded.archived_at,
-            deleted_at = excluded.deleted_at`
-          }
         `,
       ),
     );
@@ -179,27 +173,48 @@ export const make = Effect.gen(function* () {
     );
 
   const insert = Effect.fn("WorkTaskStore.insert")(function* (task: WorkTask) {
-    yield* write(task, "insert").pipe(Effect.mapError(failed("Could not save the Work Task.")));
+    yield* insertRow(task).pipe(Effect.mapError(failed("Could not save the Work Task.")));
     yield* notify;
   });
 
+  const encodeWorkspace = Schema.encodeEffect(Schema.fromJsonString(WorkTaskWorkspace));
+
+  /** Writes only the patched columns, so concurrent patches to different fields all survive. */
   const update = Effect.fn("WorkTaskStore.update")(function* (
     id: WorkTaskId,
     patch: WorkTaskPatch,
   ) {
-    const current = yield* get(id);
-    if (current === null) {
+    const columns = {
+      ...(patch.title === undefined ? {} : { title: patch.title }),
+      ...(patch.description === undefined ? {} : { description: patch.description }),
+      ...(patch.workspace === undefined
+        ? {}
+        : {
+            workspace_json: yield* encodeWorkspace(patch.workspace).pipe(
+              Effect.mapError(failed("Could not save the Work Task.")),
+            ),
+          }),
+      ...(patch.autoHandleReviewFeedback === undefined
+        ? {}
+        : { auto_handle_review_feedback: patch.autoHandleReviewFeedback ? 1 : 0 }),
+      ...(patch.waitingForUserReason === undefined
+        ? {}
+        : { waiting_for_user_reason: patch.waitingForUserReason }),
+      ...(patch.mergedAt === undefined ? {} : { merged_at: patch.mergedAt }),
+      ...(patch.archivedAt === undefined ? {} : { archived_at: patch.archivedAt }),
+      updated_at: DateTime.formatIso(yield* DateTime.now),
+    };
+    yield* sql`
+      UPDATE projection_tasks SET ${sql.update(columns)}
+      WHERE task_id = ${id} AND deleted_at IS NULL
+    `.pipe(Effect.mapError(failed("Could not save the Work Task.")));
+    const next = yield* get(id);
+    if (next === null) {
       return yield* new WorkTaskOperationError({
         reason: "not-found",
         message: "Work Task not found.",
       });
     }
-    const next: WorkTask = {
-      ...current,
-      ...patch,
-      updatedAt: DateTime.formatIso(yield* DateTime.now),
-    };
-    yield* write(next, "update").pipe(Effect.mapError(failed("Could not save the Work Task.")));
     yield* notify;
     return next;
   });

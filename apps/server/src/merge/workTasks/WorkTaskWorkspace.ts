@@ -87,9 +87,15 @@ export const make = Effect.gen(function* () {
     }
 
     const links = (yield* store.links()).filter((link) => link.taskId === taskId);
-    const shells = (yield* Effect.forEach(links, (link) =>
-      projections.getThreadShell(link.threadId),
-    ).pipe(Effect.mapError(failed("Could not read the Work Task threads.")))).filter(
+    // Async subagent children can outlive their parent's run, so they are read too;
+    // workTaskStatusInputs keeps only the ones rooted in this task's threads.
+    const shells = (yield* Effect.gen(function* () {
+      const subagents = yield* projections.listActiveSubagentThreadIds();
+      const ids = [...links.map((link) => link.threadId), ...subagents];
+      return yield* Effect.forEach(ids, (id) => projections.getThreadShell(id), {
+        concurrency: 8,
+      });
+    }).pipe(Effect.mapError(failed("Could not read the Work Task threads.")))).filter(
       (shell) => shell !== null,
     );
     const { threads, pullRequest } = workTaskStatusInputs({ taskId, task, links, shells });

@@ -182,6 +182,41 @@ describe("WorkTaskStore", () => {
     }).pipe(Effect.provide(layer)),
   );
 
+  it.effect("concurrent updates to different fields both survive", () =>
+    Effect.gen(function* () {
+      const store = yield* WorkTaskStore.WorkTaskStore;
+      yield* insertLegacyTask("task-1");
+      const id = WorkTaskId.make("task-1");
+      yield* Effect.all(
+        [
+          store.update(id, { title: "Renamed" }),
+          store.update(id, { waitingForUserReason: "Pick a base" }),
+          store.update(id, { autoHandleReviewFeedback: false }),
+        ],
+        { concurrency: "unbounded" },
+      );
+      const task = yield* store.get(id);
+      assert.strictEqual(task?.title, "Renamed");
+      assert.strictEqual(task?.waitingForUserReason, "Pick a base");
+      assert.isFalse(task?.autoHandleReviewFeedback);
+    }).pipe(Effect.provide(layer)),
+  );
+
+  it.effect("skips a corrupt row instead of failing the list", () =>
+    Effect.gen(function* () {
+      const store = yield* WorkTaskStore.WorkTaskStore;
+      const sql = yield* SqlClient.SqlClient;
+      yield* insertLegacyTask("good");
+      yield* insertLegacyTask("bad");
+      yield* sql`UPDATE projection_tasks SET workspace_json = '{"path":' WHERE task_id = 'bad'`;
+      assert.deepStrictEqual(
+        (yield* store.list()).map((task) => task.id),
+        ["good"],
+      );
+      assert.isNull(yield* store.get(WorkTaskId.make("bad")));
+    }).pipe(Effect.provide(layer)),
+  );
+
   it.effect("ownsWorktree ignores archived and deleted tasks", () =>
     Effect.gen(function* () {
       const store = yield* WorkTaskStore.WorkTaskStore;

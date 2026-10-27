@@ -149,6 +149,26 @@ describe("workTaskThreadState", () => {
         }),
       ),
     ).toBe("waiting");
+    const question = (blocking: boolean) => ({
+      id: "req" as never,
+      kind: "user_input" as const,
+      createdAt: undefined as never,
+      blocking,
+    });
+    // A non-blocking question while the run works is not a wait; once the run stops it is.
+    expect(
+      workTaskThreadState(
+        shell("t", { ...ran, status: "running", pendingRuntimeRequest: question(false) }),
+      ),
+    ).toBe("running");
+    expect(
+      workTaskThreadState(shell("t", { ...ran, pendingRuntimeRequest: question(false) })),
+    ).toBe("waiting");
+    expect(
+      workTaskThreadState(
+        shell("t", { ...ran, status: "running", pendingRuntimeRequest: question(true) }),
+      ),
+    ).toBe("waiting");
     expect(
       workTaskThreadState(
         shell("t", { ...ran, pendingBackgroundTasks: [{ kind: "monitor" } as never] }),
@@ -232,6 +252,23 @@ describe("workTaskStatusInputs", () => {
     expect(derive([shell("a", ran), child])).toBe("working");
     // Threads of other tasks never count.
     expect(derive([shell("a", ran), shell("other", { ...ran, status: "running" })])).toBe("idle");
+  });
+
+  it("ignores fork children, which share the root and copy its pull requests", () => {
+    const fork = shell("fork", {
+      ...ran,
+      status: "running",
+      lineage: {
+        rootThreadId: threadId("review"),
+        parentThreadId: threadId("review"),
+        relationshipToParent: "fork",
+      },
+      pullRequests: [prLink(snapshot({ reviewDecision: "approved" }))],
+    });
+    expect(derive([shell("a", ran), fork])).toBe("idle");
+    expect(
+      workTaskStatusInputs({ taskId, task: task(), links, shells: [shell("a", ran), fork] }),
+    ).toEqual({ threads: [{ origin: "user", state: "idle" }], pullRequest: null });
   });
 
   it("shows a running review-feedback thread as addressing comments", () => {

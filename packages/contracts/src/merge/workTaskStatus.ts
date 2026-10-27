@@ -79,8 +79,13 @@ const LIVE_RUN_STATUSES: ReadonlySet<OrchestrationV2ThreadShell["status"]> = new
 ]);
 
 export function workTaskThreadState(shell: WorkTaskStatusShell): WorkTaskThreadState {
-  if (shell.pendingRuntimeRequest !== null) return "waiting";
-  if (shell.activeRunId !== null || LIVE_RUN_STATUSES.has(shell.status)) return "running";
+  const live = shell.activeRunId !== null || LIVE_RUN_STATUSES.has(shell.status);
+  const request = shell.pendingRuntimeRequest;
+  // Same rule as client-runtime `hasPendingUserInput`: a non-blocking question while the run works is not a wait.
+  if (request !== null && !(request.kind === "user_input" && request.blocking === false && live)) {
+    return "waiting";
+  }
+  if (live) return "running";
   if ((shell.pendingBackgroundTasks?.length ?? 0) > 0) return "monitoring";
   return shell.latestRunId === null ? "new" : "idle";
 }
@@ -114,11 +119,16 @@ export function workTaskStatusInputs(input: {
       .filter((link) => link.taskId === input.taskId)
       .map((link) => [link.threadId as string, link.origin] as const),
   );
-  const members = input.shells.filter(
-    (shell) => origins.has(shell.id) || origins.has(shell.lineage.rootThreadId),
-  );
+  // Forks share rootThreadId and copy pullRequests too, so only subagent descendants join.
+  const rootOf = (shell: WorkTaskStatusShell) =>
+    origins.has(shell.id)
+      ? shell.id
+      : shell.lineage.relationshipToParent === "subagent" && origins.has(shell.lineage.rootThreadId)
+        ? shell.lineage.rootThreadId
+        : null;
+  const members = input.shells.filter((shell) => rootOf(shell) !== null);
   const threads = members.map((shell) => ({
-    origin: origins.get(shell.id) ?? origins.get(shell.lineage.rootThreadId) ?? null,
+    origin: origins.get(rootOf(shell) ?? "") ?? null,
     state: workTaskThreadState(shell),
   }));
   const snapshot = members
