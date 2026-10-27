@@ -3,6 +3,8 @@ import type { ScopedThreadRef } from "@t3tools/contracts";
 import type { DraftId } from "~/composerDraftStore";
 import { GitGraphPanel } from "./gitGraph/GitGraphPanel";
 import { GIT_GRAPH_SURFACE_ID } from "./gitGraph/surface";
+import { WORK_ITEMS_SURFACE_ID } from "./workItems/state";
+import { WorkItemsPanel } from "./workItems/WorkItemsPanel";
 
 /** Body of a `{ kind: "merge" }` right-panel surface. */
 export function MergeRightPanel(props: {
@@ -30,10 +32,24 @@ export function MergeRightPanel(props: {
       />
     );
   }
+  if (props.id === WORK_ITEMS_SURFACE_ID) {
+    if (!props.workspaceRoot) {
+      return (
+        <p className="px-4 py-6 text-center text-xs text-muted-foreground">
+          Work items need a project workspace. Open a thread in a project to use them.
+        </p>
+      );
+    }
+    return (
+      <WorkItemsPanel environmentId={props.threadRef.environmentId} cwd={props.workspaceRoot} />
+    );
+  }
   return null;
 }
 
 /** Tab label of a `{ kind: "merge" }` right-panel surface. */
 export function mergeRightPanelLabel(id: string): string {
-  return id === GIT_GRAPH_SURFACE_ID ? "Git graph" : id;
+  if (id === GIT_GRAPH_SURFACE_ID) return "Git graph";
+  if (id === WORK_ITEMS_SURFACE_ID) return "Work items";
+  return id;
 }

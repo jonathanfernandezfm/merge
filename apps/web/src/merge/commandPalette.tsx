@@ -1,9 +1,10 @@
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
-import { GitGraphIcon } from "lucide-react";
+import { GitGraphIcon, ListTodoIcon } from "lucide-react";
 
 import { ITEM_ICON_CLASS, type CommandPaletteActionItem } from "~/components/CommandPalette.logic";
 import { GIT_GRAPH_SURFACE_ID, openMergeSurface } from "./gitGraph/surface";
+import { WORK_ITEMS_SURFACE_ID } from "./workItems/state";
 
 /** Fork actions for the command palette, appended at the `command-palette` seam. */
 export function mergeCommandPaletteActions(
@@ -19,6 +20,14 @@ export function mergeCommandPaletteActions(
       title: "Open Git graph",
       icon: <GitGraphIcon className={ITEM_ICON_CLASS} />,
       run: async () => openMergeSurface(threadRef, GIT_GRAPH_SURFACE_ID),
+    },
+    {
+      kind: "action",
+      value: "action:open-work-items",
+      searchTerms: ["work items", "azure boards", "azure devops", "subtasks", "ticket"],
+      title: "Open work items",
+      icon: <ListTodoIcon className={ITEM_ICON_CLASS} />,
+      run: async () => openMergeSurface(threadRef, WORK_ITEMS_SURFACE_ID),
     },
   ];
 }
