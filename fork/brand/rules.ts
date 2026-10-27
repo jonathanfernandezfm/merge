@@ -17,6 +17,9 @@ const PROTOCOL = "apps/desktop/src/electron/ElectronProtocol.ts";
 const AUTH_HANDOFF = "packages/shared/src/codexAuthHandoff.ts";
 const PROMPT_LINKS = "packages/shared/src/promptLinks.ts";
 const LAUNCHER = "apps/desktop/scripts/electron-launcher.mjs";
+const CLERK_TEST = "apps/desktop/src/app/DesktopClerk.test.ts";
+const LINUX_URL_TEST = "apps/desktop/src/app/DesktopLinuxUrlHandler.test.ts";
+const PRE_READY_TEST = "apps/desktop/src/app/DesktopPreReadyPlatform.test.ts";
 
 export const identity: Array<{ file: string; from: string; to: string }> = [
   // Nightly and preview release names.
@@ -271,6 +274,12 @@ export const identity: Array<{ file: string; from: string; to: string }> = [
   },
 
   // Mobile's fallback for a missing or unknown stored theme matches v0.0.10: Merge.
+  // The stock theme keeps a name of its own; copy would label it "Merge", like the Merge theme.
+  {
+    file: "apps/mobile/src/lib/mobileTheme.ts",
+    from: '{ id: DEFAULT_MOBILE_THEME_ID, label: "T3 Code" },',
+    to: '{ id: DEFAULT_MOBILE_THEME_ID, label: "Classic" },',
+  },
   {
     file: "apps/mobile/src/lib/mobileTheme.ts",
     from: "    : DEFAULT_MOBILE_THEME_ID;",
@@ -361,6 +370,75 @@ export const identity: Array<{ file: string; from: string; to: string }> = [
     from: '"t3code://pair?',
     to: '"merge://pair?',
   },
+  // Release feed (cliRelease.ts).
+  {
+    file: "apps/mobile/src/features/settings/environment-maintenance.test.ts",
+    from: "pingdotgg/t3code",
+    to: REPO,
+  },
+  // URL schemes (ElectronProtocol.ts), userData (DesktopUserData.ts) and the Linux desktop entry
+  // name (DesktopEarlyElectronStartup.ts).
+  { file: CLERK_TEST, from: '"t3code://', to: '"merge://' },
+  { file: CLERK_TEST, from: '"t3code-dev://', to: '"merge-dev://' },
+  { file: CLERK_TEST, from: "/tmp/app-data/t3code-v2", to: "/tmp/app-data/merge-v2" },
+  { file: CLERK_TEST, from: '/tmp/app-data/t3code-dev"', to: '/tmp/app-data/merge-dev"' },
+  { file: LINUX_URL_TEST, from: 'scheme: "t3code",', to: 'scheme: "merge",' },
+  { file: LINUX_URL_TEST, from: "x-scheme-handler/t3code", to: "x-scheme-handler/merge" },
+  {
+    file: PRE_READY_TEST,
+    from: "com.t3tools.T3Code.desktop",
+    to: "io.github.jonathanfernandezfm.Merge.desktop",
+  },
+  { file: PRE_READY_TEST, from: "x-scheme-handler/t3code", to: "x-scheme-handler/merge" },
+  // These launcher paths test Exec quoting, so they keep a space after copy would drop "T3 Code".
+  { file: LINUX_URL_TEST, from: "/opt/T3 Code/t3code", to: "/opt/Merge App/merge" },
+  { file: PRE_READY_TEST, from: "/opt/T3 Code/t3code", to: "/opt/Merge App/merge" },
+  // The expected app id; the test's own passkey configuration keeps its id.
+  {
+    file: "scripts/build-desktop-artifact.test.ts",
+    from: 'appId: "com.t3tools.t3code",\n      teamId',
+    to: `appId: "${APP_ID}",\n      teamId`,
+  },
+  {
+    file: "scripts/build-desktop-artifact.test.ts",
+    from: "<string>ABC1234567.com.t3tools.t3code</string>",
+    to: `<string>ABC1234567.${APP_ID}</string>`,
+  },
+  // Copy renames the client label (authClientMetadata.ts) but not its form-encoded copy.
+  {
+    file: "packages/client-runtime/src/authorization/remote.test.ts",
+    from: "client_label=T3+Code+Mobile",
+    to: "client_label=Merge+Mobile",
+  },
+  // Data home (os-jank.ts), release feed (cliRelease.ts) and app origin (httpCors.ts).
+  {
+    file: "apps/server/src/cli/app.test.ts",
+    from: 'NodePath.join(root, ".t3")',
+    to: 'NodePath.join(root, ".merge")',
+  },
+  {
+    file: "apps/server/src/cli/update.test.ts",
+    from: "/repos/pingdotgg/t3code/releases",
+    to: `/repos/${REPO}/releases`,
+  },
+  {
+    file: "apps/server/src/auth/EnvironmentAuth.test.ts",
+    from: 'origin: "t3code://app"',
+    to: 'origin: "merge://app"',
+  },
+  // Copy shortens the agent instructions ("T3 Code" -> "Merge"); the budget measures what ships.
+  {
+    file: "apps/server/src/provider/agentContextBudget.json",
+    from: '"claudeSystemAppendBytes": 4857,',
+    to: '"claudeSystemAppendBytes": 4851,',
+  },
+  {
+    file: "apps/server/src/provider/agentContextBudget.json",
+    from: '"codexAdditionalContextBytes": 5409,',
+    to: '"codexAdditionalContextBytes": 5399,',
+  },
+  // The mock agent's page text, which AcpAdapterV2.test.ts expects after copy.
+  { file: "apps/server/scripts/acp-mock-agent.ts", from: '"T3 Code page"', to: '"Merge page"' },
 ];
 
 export const copy = {
@@ -383,6 +461,9 @@ export const copy = {
   exclude: [
     // Verbatim quotes from T3 Code users.
     "apps/marketing/src/lib/tweets.ts",
+    // "T3 Code" here is test data (a thread title, an MCP server prefix), not copy.
+    "packages/shared/src/paletteSearch.test.ts",
+    "packages/shared/src/t3McpToolPresentation.test.ts",
   ],
 };
 
