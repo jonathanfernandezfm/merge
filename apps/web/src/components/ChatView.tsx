@@ -371,6 +371,7 @@ const EMPTY_PROVIDERS: ServerProvider[] = [];
 const EMPTY_PROVIDER_MODELS: ServerProvider["models"] = [];
 const EMPTY_USAGE_LIMIT_SOURCES: UsageLimitSourceSnapshots = [];
 import type { CodexArtifactTemplate } from "@t3tools/shared/codexArtifactTemplates";
+import { MergeChatHeader } from "../merge/MergeChatHeader"; // merge-seam: chat-header
 
 const EMPTY_FEEDBACK_SUBMISSIONS: ReadonlyArray<CodexFeedbackSubmission> = [];
 const EMPTY_PROVIDER_SKILLS: ServerProvider["skills"] = [];
@@ -3174,6 +3175,7 @@ export default function ChatView(props: ChatViewProps) {
               : {})}
           />
         </header>
+        <MergeChatHeader threadRef={activeThreadRef} /* merge-seam: chat-header */ />
 
         <div className="relative flex min-h-0 min-w-0 flex-1">
           <ThreadFindCanvas
