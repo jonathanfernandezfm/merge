@@ -7,17 +7,12 @@ import {
   type GitGraphLogInput,
   type GitGraphLogResult,
 } from "@t3tools/contracts";
-import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Option from "effect/Option";
-import * as Path from "effect/Path";
 
-import * as ServerConfig from "../../config.ts";
 import * as GitVcsDriver from "../../vcs/GitVcsDriver.ts";
 import { PATCH_RENDER_PREFIX_ARGS } from "../../vcs/GitVcsDriverCore.ts";
 import * as VcsDriverRegistry from "../../vcs/VcsDriverRegistry.ts";
-import * as KnownWorkspaces from "../../workspace/KnownWorkspaces.ts";
+import { lookup, requireKnownWorkspace } from "../workspaceGuard.ts";
 import { GIT_GRAPH_LOG_FORMAT, parseGitGraphLog, sumNumstat } from "./parseLog.ts";
 
 const COMMIT_LIMIT = 200;
@@ -25,41 +20,18 @@ const METADATA_MAX_OUTPUT_BYTES = 16 * 1024 * 1024;
 const PATCH_MAX_OUTPUT_BYTES = 2 * 1024 * 1024;
 const FALLBACK_BASE_BRANCHES = ["main", "master", "develop"];
 
-/**
- * Looks the service up when a request runs instead of in the handler's type, so the fork RPC
- * handlers add no requirements to upstream's WS test harnesses. The server layer always has them.
- */
-const lookup = <I, S>(key: Context.Key<I, S>) =>
-  Effect.serviceOption(key).pipe(
-    Effect.flatMap(
-      Option.match({
-        onNone: () => Effect.die(new Error(`Git graph: ${key.key} is not provided.`)),
-        onSome: Effect.succeed,
-      }),
-    ),
-  );
-
 /** Resolves the git driver for `cwd` after the same workspace check the review RPCs make. */
 const requireGit = Effect.fn("GitGraph.requireGit")(function* (operation: string, cwd: string) {
-  // Same rule as ReviewService: inside the server's workspace root, or a known workspace.
-  const known = yield* lookup(KnownWorkspaces.KnownWorkspaces);
-  const config = yield* lookup(ServerConfig.ServerConfig);
-  const fileSystem = yield* lookup(FileSystem.FileSystem);
-  const path = yield* lookup(Path.Path);
-  const reject = (cause?: unknown) =>
-    new VcsRepositoryDetectionError({
-      operation,
-      cwd,
-      detail: "The Git graph cwd must be a known workspace.",
-      cause,
-    });
-  const realCwd = yield* fileSystem.realPath(path.resolve(cwd)).pipe(Effect.mapError(reject));
-  const realRoot = yield* fileSystem
-    .realPath(path.resolve(config.cwd))
-    .pipe(Effect.orElseSucceed(() => path.resolve(config.cwd)));
-  if (!KnownWorkspaces.isWithinRoot(path, realCwd, realRoot) && !(yield* known.contains(realCwd))) {
-    return yield* reject();
-  }
+  yield* requireKnownWorkspace(
+    cwd,
+    (cause?: unknown) =>
+      new VcsRepositoryDetectionError({
+        operation,
+        cwd,
+        detail: "The Git graph cwd must be a known workspace.",
+        cause,
+      }),
+  );
   const registry = yield* lookup(VcsDriverRegistry.VcsDriverRegistry);
   const handle = yield* registry.detect({ cwd, requestedKind: "auto" });
   if (handle?.kind !== "git") {

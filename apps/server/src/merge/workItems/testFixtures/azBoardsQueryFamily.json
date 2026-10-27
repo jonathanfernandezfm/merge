@@ -1,0 +1,49 @@
+[
+  {
+    "fields": {
+      "Microsoft.VSTS.Common.AcceptanceCriteria": "<ul><li>Removed languages no longer show in the picker</li></ul>",
+      "Microsoft.VSTS.Common.Priority": 2,
+      "Microsoft.VSTS.Common.StateChangeDate": "2026-10-01T08:10:00.000Z",
+      "System.AssignedTo": {
+        "_links": {
+          "avatar": { "href": "https://dev.azure.com/acme/_apis/GraphProfile/MemberAvatars/aad.x" }
+        },
+        "descriptor": "aad.x",
+        "displayName": "Sarah Lin",
+        "id": "5a6b7c8d-5555-4e9f-8a0b-1c2d3e4f5a6b",
+        "uniqueName": "sarah@acme.dev"
+      },
+      "System.ChangedDate": "2026-10-04T12:00:00.000Z",
+      "System.CreatedDate": "2026-09-20T09:00:00.000Z",
+      "System.Description": "<div>Languages removed in <b>Admin UI</b> still show up.</div>",
+      "System.Id": 605892,
+      "System.IterationPath": "WorkHub\\Sprints\\Sprint 91",
+      "System.State": "Committed",
+      "System.Tags": "2026.Q3; groomed",
+      "System.TeamProject": "WorkHub",
+      "System.Title": "Remove languages",
+      "System.WorkItemType": "Product Backlog Item"
+    },
+    "id": 605892,
+    "relations": null,
+    "rev": 14,
+    "url": "https://dev.azure.com/acme/0c9a2f1e-1111-4a5b-9c3d-2e4f6a8b0c1d/_apis/wit/workItems/605892"
+  },
+  {
+    "fields": {
+      "System.ChangedDate": "2026-10-03T10:00:00.000Z",
+      "System.CreatedDate": "2026-09-21T09:00:00.000Z",
+      "System.Id": 605901,
+      "System.IterationPath": "WorkHub\\Sprints\\Sprint 91",
+      "System.Parent": 605892,
+      "System.State": "To Do",
+      "System.TeamProject": "WorkHub",
+      "System.Title": "Tests",
+      "System.WorkItemType": "Task"
+    },
+    "id": 605901,
+    "relations": null,
+    "rev": 2,
+    "url": "https://dev.azure.com/acme/0c9a2f1e-1111-4a5b-9c3d-2e4f6a8b0c1d/_apis/wit/workItems/605901"
+  }
+]
