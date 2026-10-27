@@ -10,7 +10,7 @@ import type {
 } from "@t3tools/contracts";
 import { scopedThreadKey } from "@t3tools/client-runtime/environment";
 import { lazy, Suspense } from "react";
-import { MergeRightPanel } from "../../merge/MergeRightPanel";
+import { MergeRightPanel } from "../../merge/MergeRightPanel"; // merge-seam: right-panel
 import type { ComposerImageAttachment, DraftId } from "../../composerDraftStore";
 import type { ShortcutMatchContext } from "../../keybindings";
 import { type RightPanelSurface, useRightPanelStore } from "../../rightPanelStore";

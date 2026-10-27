@@ -265,7 +265,7 @@ import {
 import * as AgentSessionScanner from "./project/AgentSessionScanner.ts";
 import * as AgentSessionImporter from "./project/AgentSessionImporter.ts";
 import * as UsageLimitSources from "./usage/UsageLimitSources.ts";
-import { mergeRpcHandlers } from "./merge/rpc/handlers.ts";
+import { mergeRpcHandlers } from "./merge/rpc/handlers.ts"; // merge-seam: rpc-group-handlers
 
 const CONFIG_DISCOVERY_TIMEOUT = Duration.seconds(5);
 const isProviderUploadFeedbackError = Schema.is(ProviderUploadFeedbackError);

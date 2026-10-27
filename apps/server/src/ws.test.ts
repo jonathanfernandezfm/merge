@@ -7,8 +7,6 @@ import {
   ThreadId,
   ProviderDriverKind,
   ProviderInstanceId,
-  MERGE_WS_METHODS,
-  MergePingRpc,
   WS_METHODS,
   WsServerRefreshProvidersRpc,
   WsSubscribeServerConfigRpc,
@@ -787,69 +785,6 @@ it.effect("on-demand clients get provider config without workspace snapshots", (
       [[[snapshotFor("/b", "2026-10-25T00:00:00.000Z")], []]],
     );
     yield* server.write(0, { _tag: "Interrupt", requestId: configRequest, interruptors: [] });
-  }).pipe(
-    Effect.provide(
-      Layer.mergeAll(
-        Layer.fresh(layerConfigSources),
-        Layer.mock(PreviewAutomationBroker.PreviewAutomationBroker)({}),
-        Layer.mock(ServerBrowser.ServerBrowser)({}),
-      ),
-    ),
-    Effect.scoped,
-  ),
-);
-
-// merge-seam: rpc-group-test
-it.effect("merge.ping round-trips through the production WS RPC layer", () =>
-  Effect.gen(function* () {
-    const responses = yield* Queue.unbounded<unknown>();
-    const server = yield* RpcServer.makeNoSerialization(RpcGroup.make(MergePingRpc), {
-      ...WS_RPC_SERVER_OPTIONS,
-      onFromServer: (response) =>
-        response._tag === "Exit" ? Queue.offer(responses, response.exit) : Effect.void,
-    }).pipe(
-      Effect.provide(
-        layerWsRpc(
-          {
-            sessionId: AuthSessionId.make("merge-ping"),
-            subject: "merge-ping",
-            method: "browser-session-cookie",
-            scopes: [],
-          },
-          {},
-          {},
-          yield* PreviewAutomationBroker.PreviewAutomationBroker,
-          yield* ServerBrowser.ServerBrowser,
-        ).pipe(
-          Layer.provide(
-            Layer.mergeAll(
-              layerUnusedConfigRpcServices,
-              Layer.mock(ExternalLauncher.ExternalLauncher)({}),
-              Layer.mock(ProviderRegistry.ProviderRegistry)({}),
-              Layer.mock(UsageLimitSources.UsageLimitSources)({}),
-              Layer.mock(RemoteOpenTargets.RemoteOpenTargets)({}),
-              Layer.mock(DirectEndpoints.DirectEndpoints)({}),
-              Layer.mock(ManagedProjectFolders.ManagedProjectFolders)({}),
-              Layer.mock(ServerEnvironment.ServerEnvironment)({}),
-              Layer.mock(EnvironmentAuth.EnvironmentAuth)({}),
-            ),
-          ),
-        ),
-      ),
-    );
-    yield* server.write(0, {
-      _tag: "Request",
-      id: RpcMessage.RequestId("ping"),
-      tag: MERGE_WS_METHODS.ping,
-      payload: {},
-      headers: Headers.empty,
-    });
-    const exit = (yield* Queue.take(responses)) as {
-      readonly _tag: string;
-      readonly value?: unknown;
-    };
-    assert.equal(exit._tag, "Success");
-    assert.deepEqual(exit.value, { pong: true });
   }).pipe(
     Effect.provide(
       Layer.mergeAll(

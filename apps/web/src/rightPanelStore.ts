@@ -34,6 +34,7 @@ export interface DeviceTabTarget {
 }
 
 export type RightPanelSurface =
+  | { id: `merge:${string}`; kind: "merge" } // merge-seam: right-panel
   | { id: `browser:${string}`; kind: "preview"; resourceId: string }
   | { id: "browser:new"; kind: "preview"; resourceId: null }
   | { id: "device" | `device:${string}`; kind: "device"; target?: DeviceTabTarget; title?: string }
@@ -74,8 +75,7 @@ export type RightPanelSurface =
       url?: string;
       detailTab?: PullRequestDetailTab;
     }
-  | { id: "pull-requests"; kind: "pull-requests" }
-  | { id: `merge:${string}`; kind: "merge" }; // merge-seam: right-panel
+  | { id: "pull-requests"; kind: "pull-requests" };
 
 const RIGHT_PANEL_STORAGE_KEY = "t3code:right-panel-state:v2";
 const RIGHT_PANEL_STORAGE_VERSION = 14;
@@ -1175,6 +1175,7 @@ export function selectActiveRightPanel(
   byThreadKey: Record<string, ThreadRightPanelState>,
   ref: ScopedThreadRef | null | undefined,
 ): RightPanelKind | "merge" | null {
+  // merge-seam: right-panel
   const state = selectThreadRightPanelState(byThreadKey, ref);
   if (!state.isOpen) return null;
   return state.surfaces.find((surface) => surface.id === state.activeSurfaceId)?.kind ?? null;

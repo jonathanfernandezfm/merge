@@ -7,8 +7,8 @@ import {
   moveThreadContextDrag as moveThreadContextDragGhost,
 } from "./chat/threadContextDrag";
 import { discardComposerDraft } from "../lib/discardComposerDraft";
-import { MergeSidebarSections } from "../merge/MergeSidebarSections";
-import { handleMergeThreadMenu } from "../merge/threadMenu";
+import { MergeSidebarSections } from "../merge/MergeSidebarSections"; // merge-seam: sidebar
+import { handleMergeThreadMenu } from "../merge/threadMenu"; // merge-seam: thread-menu
 import { requestCustomSnooze } from "./CustomSnoozeDialog";
 import { useAtomValue } from "@effect/atom-react";
 import * as Option from "effect/Option";

@@ -1,3 +1,4 @@
+// merge-seam: routes
 import { createFileRoute } from "@tanstack/react-router";
 
 import { MergeSettings } from "../merge/settings/MergeSettings";

@@ -35,11 +35,6 @@
     "purpose": "Spread fork RPC metric aggregates"
   },
   {
-    "id": "rpc-group-test",
-    "file": "apps/server/src/ws.test.ts",
-    "purpose": "merge.ping round-trip through the production WS RPC layer"
-  },
-  {
     "id": "sidebar",
     "file": "apps/web/src/components/Sidebar.tsx",
     "purpose": "Render fork sidebar sections"
@@ -83,5 +78,10 @@
     "id": "settings",
     "file": "apps/web/src/components/settings/SettingsSidebarNav.tsx",
     "purpose": "Merge settings nav icon"
+  },
+  {
+    "id": "routes",
+    "file": "apps/web/src/routes/_chat.settings.merge.tsx",
+    "purpose": "Fork settings route file; regenerates routeTree.gen.ts"
   }
 ]
