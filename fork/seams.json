@@ -128,5 +128,10 @@
     "id": "provider-baseline",
     "file": "apps/server/src/provider/providerCompatibility.ts",
     "purpose": "Evaluate manifest t3CodeRange against the upstream release the fork tracks, not Merge's own version"
+  },
+  {
+    "id": "scm-ado",
+    "file": "packages/source-control-azure-devops/src/server/AzureDevOpsPullRequestProvider.ts",
+    "purpose": "Fill Azure DevOps checks from branch policies and review threads from file threads"
   }
 ]
