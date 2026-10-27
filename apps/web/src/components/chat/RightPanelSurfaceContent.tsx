@@ -11,6 +11,7 @@ import type {
 import { scopedThreadKey } from "@t3tools/client-runtime/environment";
 import { lazy, Suspense } from "react";
 import SideChatPane from "./SideChatPane";
+import { MergeRightPanel } from "../../merge/MergeRightPanel";
 import type { ComposerImageAttachment, DraftId } from "../../composerDraftStore";
 import type { ShortcutMatchContext } from "../../keybindings";
 import type { SideChatParentPanel } from "../../lib/sideChatPane";
@@ -171,6 +172,8 @@ export function RightPanelSurfaceContent(props: {
         />
       );
     }
+    case "merge":
+      return <MergeRightPanel id={surface.id} />; // merge-seam: right-panel
     case "pull-requests":
       return <ThreadPullRequestsPanel threadRef={threadRef} />;
     case "side-chat":

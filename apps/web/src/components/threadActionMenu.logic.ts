@@ -1,5 +1,6 @@
 import type { ContextMenuItem } from "@t3tools/contracts";
 import type { SnoozePreset } from "@t3tools/client-runtime/state/thread-settled";
+import { mergeThreadMenuItems } from "../merge/threadMenu";
 
 export type ThreadActionMenuId =
   | "find"
@@ -27,7 +28,8 @@ export type ThreadActionMenuId =
   | "copy-thread"
   | "copy-thread-id"
   | "archive"
-  | "delete";
+  | "delete"
+  | `merge:${string}`; // merge-seam: thread-menu
 
 export type DraftActionMenuId =
   | "copy"
@@ -224,6 +226,7 @@ export function buildThreadActionMenuItems(
           },
         ]
       : []),
+    ...mergeThreadMenuItems(state), // merge-seam: thread-menu
     {
       id: "copy",
       label: "Copy",

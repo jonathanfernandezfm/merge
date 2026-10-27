@@ -63,6 +63,7 @@ import {
 import { isElectron } from "~/env";
 import type { DesktopPreviewOverlay } from "~/previewStateStore";
 import type { RightPanelSurface } from "~/rightPanelStore";
+import { mergeRightPanelLabel } from "~/merge/MergeRightPanel";
 import { cn } from "~/lib/utils";
 import { resolveShortcutCommand, type ShortcutMatchContext } from "~/keybindings";
 import { readLocalApi } from "~/localApi";
@@ -590,6 +591,8 @@ function surfaceTitle(
       );
     case "pull-request":
       return `#${surface.number}`;
+    case "merge":
+      return mergeRightPanelLabel(surface.id); // merge-seam: right-panel
     case "pull-requests":
       return "Pull requests";
     case "device":
