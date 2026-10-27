@@ -1,4 +1,6 @@
 # On-demand Windows test lane. Manual only: nothing in the suite passes on
+# merge-seam: windows-tests-fork
+# Fork: GitHub-hosted runners, no hosted-T3 (Clerk/relay/npm/Vercel/Discord/AUR), GITHUB_TOKEN.
 # Windows yet, so this exists to give contributors (and agents) a cloud Windows
 # box to iterate against. Once the suite is green here, fold it into ci.yml.
 #
@@ -26,7 +28,7 @@ permissions:
 jobs:
   test:
     name: Test (${{ inputs.package || 'all non-server' }})
-    runs-on: blacksmith-8vcpu-windows-2025
+    runs-on: windows-2025
     timeout-minutes: 45
     steps:
       - name: Checkout

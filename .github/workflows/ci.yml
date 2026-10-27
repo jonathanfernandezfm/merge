@@ -1,4 +1,6 @@
 name: CI
+# merge-seam: ci-hosted
+# Fork: GitHub-hosted runners, no Blacksmith apt mirror, no hosted-T3 config.
 
 on:
   pull_request:
@@ -22,7 +24,7 @@ jobs:
   # open: if the diff cannot be resolved, everything runs.
   changes:
     name: Changes
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
       typecheck: ${{ steps.detect.outputs.typecheck }}
@@ -64,7 +66,7 @@ jobs:
       contents: read
       id-token: write
     name: Lint
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Checkout
@@ -120,7 +122,7 @@ jobs:
     name: Build and Typecheck
     needs: changes
     if: ${{ !cancelled() && (needs.changes.outputs.build != 'false' || needs.changes.outputs.typecheck != 'false') }}
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Checkout
@@ -132,18 +134,11 @@ jobs:
             !/apps/mobile/modules/t3-terminal/Vendor/**/*.a
           sparse-checkout-cone-mode: false
 
-      - uses: ./.github/actions/setup-apt-mirrors
-        if: needs.changes.outputs.build != 'false'
-
       # Runs in the background while Vite+ installs; the step before the build waits for it.
       # Xvfb is for the desktop launch check below.
       - name: Start installing browser secret helper build libraries
         if: needs.changes.outputs.build != 'false'
         run: |
-          # Fetch only the indexes these main and universe packages need. The full set is ~42 MB,
-          # which a slow mirror can stretch past the wait below.
-          sudo sed -i -e 's|http://|https://|g' -e 's/^Components: .*/Components: main universe/' \
-            /etc/apt/blacksmith-ubuntu-mirrors.txt /etc/apt/sources.list.d/ubuntu.sources
           (
             set +e
             sudo apt-get update -o Acquire::Languages=none \
@@ -275,7 +270,7 @@ jobs:
     name: Test
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.test != 'false' }}
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Checkout
@@ -287,16 +282,10 @@ jobs:
             !/apps/mobile/modules/t3-terminal/Vendor/**/*.a
           sparse-checkout-cone-mode: false
 
-      - uses: ./.github/actions/setup-apt-mirrors
-
       # The desktop tests compile the browser secret helper. The install runs in
       # the background while Vite+ installs; the step before the tests waits for it.
       - name: Start installing browser secret helper build libraries
         run: |
-          # Fetch only the indexes these main and universe packages need. The full set is ~42 MB,
-          # which a slow mirror can stretch past the wait below.
-          sudo sed -i -e 's|http://|https://|g' -e 's/^Components: .*/Components: main universe/' \
-            /etc/apt/blacksmith-ubuntu-mirrors.txt /etc/apt/sources.list.d/ubuntu.sources
           (
             set +e
             sudo apt-get update -o Acquire::Languages=none \
@@ -322,11 +311,8 @@ jobs:
       - name: Ensure Electron runtime is installed
         run: vp run --filter @t3tools/desktop ensure:electron
 
-      - name: Test preview artifact validation
-        run: python3 -B .github/scripts/stage-preview-bundle.test.py
-
       - name: Test release checks
-        run: node --test .github/scripts/check-nightly-release.test.cjs .github/scripts/vercel-deployment-output.test.cjs .github/scripts/mobile-preview-comment.test.cjs .github/scripts/test-delta.test.cjs
+        run: node --test .github/scripts/check-nightly-release.test.cjs .github/scripts/mobile-preview-comment.test.cjs .github/scripts/test-delta.test.cjs
 
       - name: Finish installing browser secret helper build libraries
         timeout-minutes: 5
@@ -365,7 +351,7 @@ jobs:
     name: Test Web ${{ matrix.shard }}
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.test_web != 'false' }}
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     strategy:
       fail-fast: false
@@ -427,7 +413,7 @@ jobs:
       contents: read
       id-token: write
     name: Test Server ${{ matrix.shard }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     # Shards take 2-5 minutes. When the shared task cache throttles reads, each
     # failed fetch stalls vp for 15-90s, which pushed shards past 10 minutes.
     timeout-minutes: 20
@@ -517,8 +503,7 @@ jobs:
 
       # integration/transferBudgetV2.integration.test.ts writes the report; exactly one shard
       # produces these files. Gating the upload on their presence keeps a
-      # single `thread-transfer-results` artifact per run, which is the name
-      # thread-transfer-report.yml resolves.
+      # single `thread-transfer-results` artifact per run.
       - name: Detect transfer budget report
         id: transfer_budget
         if: always()
@@ -553,7 +538,7 @@ jobs:
     name: Rust
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.rust != 'false' }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Checkout
@@ -586,7 +571,7 @@ jobs:
     name: Mobile Native Static Analysis
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.mobile_native != 'false' }}
-    runs-on: blacksmith-6vcpu-macos-26
+    runs-on: macos-15
     timeout-minutes: 10
     steps:
       - name: Checkout
@@ -619,7 +604,7 @@ jobs:
     name: Release Smoke
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.release_smoke != 'false' }}
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - name: Checkout
@@ -638,6 +623,34 @@ jobs:
 
       - name: Exercise release-only workflow steps
         run: node scripts/release-smoke.ts
+
+  # merge-seam: ci-fork-checks
+  # Fork guardrails: seam markers, baseline version, fork unit tests and the
+  # brand overlay. The overlay check passes only on a branch that carries the
+  # generated brand commit (see fork/SYNC.md).
+  fork:
+    name: Fork checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version-file: package.json
+
+      - name: Fork tests
+        run: node --test 'fork/**/*.test.ts'
+
+      - name: Seams and baseline
+        run: node fork/check-seams.ts
+
+      - name: Brand overlay applied
+        run: node fork/brand/apply.ts --check
 
   # Branch protection requires this job by its name, `Check`. It fails when any
   # other job fails, is cancelled, or is skipped without a reason, so splitting
@@ -658,8 +671,9 @@ jobs:
         rust,
         mobile_native_static_analysis,
         release_smoke,
+        fork,
       ]
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - name: Require every job to pass
@@ -677,8 +691,7 @@ jobs:
                 or (.value.result == "skipped"
                   and (($renamed[.key] // [.key]) | all(.[]; $gates[.] == "false"))))' > /dev/null
 
-      # thread-transfer-report.yml reads this artifact after CI, so a run whose
-      # server tests ran must have produced it.
+      # A run whose server tests ran must have produced this artifact.
       - name: Require transfer measurements
         if: needs.test_server.result == 'success' && needs.changes.outputs.test_server != 'false'
         uses: actions/download-artifact@v8

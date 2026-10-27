@@ -240,5 +240,50 @@
     "id": "compact-threads",
     "file": "apps/web/src/components/sidebar/SidebarThreadHeader.tsx",
     "purpose": "Compact rows toggle beside New thread in the thread list header (v0.0.10 placement)"
+  },
+  {
+    "id": "ci-hosted",
+    "file": ".github/workflows/ci.yml",
+    "purpose": "GitHub-hosted runners, drop Blacksmith apt mirror setup"
+  },
+  {
+    "id": "ci-fork-checks",
+    "file": ".github/workflows/ci.yml",
+    "purpose": "fork job: fork tests, check-seams, brand --check; added to the Check gate"
+  },
+  {
+    "id": "release-fork",
+    "file": ".github/workflows/release.yml",
+    "purpose": "hosted runners, GITHUB_TOKEN finalize, no schedule/relay/Clerk/npm/AUR/Vercel/marketing/Discord jobs, Merge release name and notes"
+  },
+  {
+    "id": "release-desktop-fork",
+    "file": ".github/workflows/release-desktop.yml",
+    "purpose": "drop Clerk/relay inputs and env, apt mirror step, Clerk passkey var"
+  },
+  {
+    "id": "windows-tests-fork",
+    "file": ".github/workflows/windows-tests.yml",
+    "purpose": "GitHub-hosted Windows runner"
+  },
+  {
+    "id": "mobile-eas-preview-fork",
+    "file": ".github/workflows/mobile-eas-preview.yml",
+    "purpose": "GitHub-hosted runner"
+  },
+  {
+    "id": "mobile-eas-production-fork",
+    "file": ".github/workflows/mobile-eas-production.yml",
+    "purpose": "GitHub-hosted runner, drop upstream-repo guard"
+  },
+  {
+    "id": "release-smoke-fork",
+    "file": "scripts/release-smoke.ts",
+    "purpose": "Drop the relay-state-output test that reads the removed relay release job"
+  },
+  {
+    "id": "knip-fork",
+    "file": "knip.jsonc",
+    "purpose": "Drop the knip entry for the removed thread-transfer-report script"
   }
 ]
