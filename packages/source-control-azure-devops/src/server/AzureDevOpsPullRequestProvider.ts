@@ -34,6 +34,7 @@ import type {
   AzureDevOpsRepositoryLocation,
 } from "./azureDevOpsPullRequestJson.ts";
 import { definition } from "../shared/definition.ts";
+import { extendAzureDevOpsPullRequestProvider } from "../merge/extendPullRequestProvider.ts"; // merge-seam: scm-ado
 
 /** Each file pays for two Python startups. */
 const DIFF_FILE_CONCURRENCY = 4;
@@ -578,5 +579,6 @@ export const make = Effect.gen(function* () {
     setReaction: () => unsupported("setReaction"),
   };
 
+  yield* extendAzureDevOpsPullRequestProvider(provider); // merge-seam: scm-ado
   return provider;
 });
