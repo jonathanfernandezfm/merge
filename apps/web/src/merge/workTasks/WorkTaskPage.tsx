@@ -1,4 +1,8 @@
-import type { EnvironmentId, WorkTaskId } from "@t3tools/contracts";
+import {
+  AuthOrchestrationOperateScope,
+  type EnvironmentId,
+  type WorkTaskId,
+} from "@t3tools/contracts";
 import { Link, Navigate } from "@tanstack/react-router";
 import { MessageSquarePlusIcon } from "lucide-react";
 
@@ -20,6 +24,7 @@ import {
 import { WorkspacePageHeader } from "~/components/WorkspacePageHeader";
 import { isElectron } from "~/env";
 import { useAllEnvironmentShellsBootstrapped } from "~/state/entities";
+import { useEnvironmentScope } from "~/state/session";
 import { useCreateWorkTaskThread } from "./actions";
 import { useWorkTaskView } from "./state";
 import { WorkTaskChrome } from "./WorkTaskChrome";
@@ -38,6 +43,7 @@ export function WorkTaskPage({
   const bootstrapped = useAllEnvironmentShellsBootstrapped();
   const view = useWorkTaskView(environmentId, taskId);
   const { createWorkTaskThread, pending } = useCreateWorkTaskThread();
+  const canOperate = useEnvironmentScope(environmentId, AuthOrchestrationOperateScope);
 
   if (view?.latestThread) {
     return (
@@ -93,7 +99,7 @@ export function WorkTaskPage({
                 <EmptyContent>
                   <Button
                     size="sm"
-                    disabled={pending}
+                    disabled={pending || !canOperate}
                     onClick={() => void createWorkTaskThread(task)}
                   >
                     {pending ? <Spinner /> : <MessageSquarePlusIcon />}

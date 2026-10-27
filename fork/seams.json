@@ -37,7 +37,7 @@
   {
     "id": "sidebar",
     "file": "apps/web/src/components/Sidebar.tsx",
-    "purpose": "Render fork sidebar sections (Work Tasks, dialogs host) with the sidebar search query"
+    "purpose": "Render fork sidebar sections (Work Tasks) with the sidebar search query"
   },
   {
     "id": "thread-menu",
@@ -204,5 +204,20 @@
     "id": "routes",
     "file": "apps/web/src/routes/_chat.work-tasks.$environmentId.$taskId.tsx",
     "purpose": "Work Task page route file; regenerates routeTree.gen.ts"
+  },
+  {
+    "id": "thread-delete-worktree",
+    "file": "apps/web/src/hooks/useThreadActions.ts",
+    "purpose": "Deleting a thread never offers to remove a worktree a live Work Task owns"
+  },
+  {
+    "id": "client-subscribe",
+    "file": "packages/client-runtime/src/rpc/client.ts",
+    "purpose": "merge.workTasks.subscribe joins the typed subscription tags"
+  },
+  {
+    "id": "work-task-dialogs",
+    "file": "apps/web/src/routes/_chat.tsx",
+    "purpose": "Mount the Work Task dialogs host in the always-mounted chat layout"
   }
 ]

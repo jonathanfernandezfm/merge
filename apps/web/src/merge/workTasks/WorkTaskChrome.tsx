@@ -1,7 +1,11 @@
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { threadRuntimeCanArchive } from "@t3tools/client-runtime/state/models";
 import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
-import type { ScopedThreadRef, ThreadId } from "@t3tools/contracts";
+import {
+  AuthOrchestrationOperateScope,
+  type ScopedThreadRef,
+  type ThreadId,
+} from "@t3tools/contracts";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { BotIcon, EllipsisIcon, GitBranchIcon, HandIcon, PlusIcon, XIcon } from "lucide-react";
 import { memo, useEffect, useRef, useState } from "react";
@@ -24,6 +28,7 @@ import { useOpenPrLink } from "~/lib/openPullRequestLink";
 import { cn } from "~/lib/utils";
 import { readLocalApi } from "~/localApi";
 import { appAtomRegistry } from "~/rpc/atomRegistry";
+import { useEnvironmentScope } from "~/state/session";
 import { environmentThreadShells, threadEnvironment } from "~/state/threads";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { waitForAtomValue } from "~/state/waitForAtomValue";
@@ -92,7 +97,8 @@ function WorkTaskHeader({
   const setWaiting = useAtomCommand(workTasksEnvironment.setWaiting, "Work Task update");
   const setAutoHandle = useAtomCommand(workTasksEnvironment.setAutoHandle, "Work Task update");
   const taskRef = { environmentId: task.environmentId, taskId: task.id };
-  const archived = task.archivedAt !== null;
+  const canOperate = useEnvironmentScope(task.environmentId, AuthOrchestrationOperateScope);
+  const archived = task.archivedAt !== null || !canOperate;
   const clearWaiting = () =>
     void setWaiting({
       environmentId: task.environmentId,
@@ -123,7 +129,7 @@ function WorkTaskHeader({
             </TooltipTrigger>
             <TooltipPopup side="bottom">{task.waitingForUserReason}</TooltipPopup>
           </Tooltip>
-          <Button size="micro" variant="ghost-muted" onClick={clearWaiting}>
+          <Button size="micro" variant="ghost-muted" disabled={!canOperate} onClick={clearWaiting}>
             Clear
           </Button>
         </span>
@@ -173,7 +179,9 @@ function WorkTaskHeader({
               Mark waiting for user...
             </MenuItem>
           ) : (
-            <MenuItem onClick={clearWaiting}>Clear waiting for user</MenuItem>
+            <MenuItem disabled={!canOperate} onClick={clearWaiting}>
+              Clear waiting for user
+            </MenuItem>
           )}
           <MenuSeparator />
           <MenuItem
@@ -208,6 +216,7 @@ function WorkTaskSetupProgress({ view }: { view: WorkTaskView }) {
   const setup = task.workspace.setup;
   const retrySetup = useAtomCommand(workTasksEnvironment.retrySetup, "Work Task setup retry");
   const [retrying, setRetrying] = useState(false);
+  const canOperate = useEnvironmentScope(task.environmentId, AuthOrchestrationOperateScope);
   const failed = setup.status === "failed";
   return (
     <div className="flex flex-col gap-2 px-(--workspace-gutter-start) pb-3 text-xs">
@@ -221,7 +230,7 @@ function WorkTaskSetupProgress({ view }: { view: WorkTaskView }) {
           <Button
             size="micro"
             variant="outline"
-            disabled={retrying || task.archivedAt !== null}
+            disabled={retrying || task.archivedAt !== null || !canOperate}
             onClick={() => {
               setRetrying(true);
               void retrySetup({
@@ -280,7 +289,8 @@ function WorkTaskTabs({
   const { createWorkTaskThread, pending: creatingThread } = useCreateWorkTaskThread();
   const { archiveThread } = useThreadActions();
   const stopSession = useAtomCommand(threadEnvironment.stopSession, "stop thread session");
-  const archived = task.archivedAt !== null;
+  const canOperate = useEnvironmentScope(task.environmentId, AuthOrchestrationOperateScope);
+  const archived = task.archivedAt !== null || !canOperate;
   const navRef = useRef<HTMLElement>(null);
 
   // oxlint-disable-next-line t3code/react-effect-budget -- scrolls the open tab into the DOM viewport
@@ -322,17 +332,13 @@ function WorkTaskTabs({
       });
     }
     const index = tabs.findIndex((candidate) => candidate.shell.id === shell.id);
-    if (shell.id === activeThreadId) {
-      const neighbor = tabs[index + 1] ?? tabs[index - 1] ?? null;
-      await (neighbor !== null
-        ? navigate({
-            to: "/$environmentId/$threadId",
-            params: { environmentId: task.environmentId, threadId: neighbor.shell.id },
-          })
-        : navigate({
-            to: "/work-tasks/$environmentId/$taskId",
-            params: { environmentId: task.environmentId, taskId: task.id },
-          }));
+    const closingActive = shell.id === activeThreadId;
+    const neighbor = closingActive ? (tabs[index + 1] ?? tabs[index - 1] ?? null) : null;
+    if (neighbor !== null) {
+      await navigate({
+        to: "/$environmentId/$threadId",
+        params: { environmentId: task.environmentId, threadId: neighbor.shell.id },
+      });
     }
     const result = await archiveThread(threadRef);
     if (result._tag === "Failure") {
@@ -343,6 +349,14 @@ function WorkTaskTabs({
           description: errorDescription(squashAtomCommandFailure(result)),
         }),
       );
+      return;
+    }
+    // The last tab: archive first (it leaves the thread for a draft), then land on the task page.
+    if (closingActive && neighbor === null) {
+      await navigate({
+        to: "/work-tasks/$environmentId/$taskId",
+        params: { environmentId: task.environmentId, taskId: task.id },
+      });
     }
   };
 
@@ -411,6 +425,7 @@ function WorkTaskTabs({
                         size="icon-tiny"
                         variant="ghost-muted"
                         aria-label={`Close ${shell.title}`}
+                        disabled={!canOperate}
                         onClick={() => void closeTab(tab)}
                       />
                     }

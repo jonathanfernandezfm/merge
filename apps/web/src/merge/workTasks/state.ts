@@ -8,7 +8,6 @@ import {
 } from "@t3tools/client-runtime/state/runtime";
 import {
   MERGE_WS_METHODS,
-  WS_METHODS,
   type EnvironmentId,
   type ScopedThreadRef,
   type WorkTaskId,
@@ -26,21 +25,16 @@ import {
   buildWorkTaskViews,
   linkedWorkTasksByKey,
   workTaskIdOfThread,
+  workTaskOwnsWorktreePath,
   workTaskKey,
   type EnvironmentWorkTask,
   type WorkTaskView,
 } from "./logic";
 
-// shortcut: EnvironmentSubscriptionRpcTag is a hand-kept upstream union without fork streams. The
-// client dispatches by tag at runtime (`session.client[tag]`), so the fork tag is cast in rather
-// than adding a client-runtime seam; add one if upstream starts validating tags.
 const live = createEnvironmentRpcSubscriptionAtomFamily(connectionAtomRuntime, {
   label: "environment-data:merge:work-tasks",
-  tag: MERGE_WS_METHODS.workTasksSubscribe as unknown as typeof WS_METHODS.scheduledTasksSubscribe,
-}) as unknown as (target: {
-  readonly environmentId: EnvironmentId;
-  readonly input: Record<string, never>;
-}) => Atom.Atom<AsyncResult.AsyncResult<WorkTasksSnapshot, unknown>>;
+  tag: MERGE_WS_METHODS.workTasksSubscribe,
+});
 
 const taskCommand = <
   TTag extends
@@ -230,4 +224,19 @@ export function readWorkTaskView(key: string): WorkTaskView | null {
 
 export function readLinkedWorkTasks(key: string): ReadonlyArray<EnvironmentWorkTask> {
   return appAtomRegistry.get(linkedWorkTasksAtom).get(key) ?? [];
+}
+
+/** Used at the `thread-delete-worktree` seam: deleting a thread never removes a Work Task's worktree. */
+export function mergeWorkTaskOwnsWorktreePath(
+  threadRef: ScopedThreadRef,
+  worktreePath: string | null,
+): boolean {
+  return (
+    worktreePath !== null &&
+    workTaskOwnsWorktreePath(
+      appAtomRegistry.get(workTasksAtom),
+      threadRef.environmentId,
+      worktreePath,
+    )
+  );
 }

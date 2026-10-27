@@ -60,6 +60,7 @@ import { showThreadUndoNotice } from "./showThreadUndoNotice";
 import { useAtomCommand } from "../state/use-atom-command";
 import { useOrchestrationCommand } from "../state/use-orchestration-command";
 import { useAtomQueryRunner } from "../state/use-atom-query-runner";
+import { mergeWorkTaskOwnsWorktreePath } from "../merge/workTasks/state"; // merge-seam: thread-delete-worktree
 
 export class ThreadArchiveBlockedError extends Schema.TaggedError<ThreadArchiveBlockedError>()(
   "ThreadArchiveBlockedError",
@@ -463,6 +464,7 @@ export function useThreadActions() {
         orphanedWorktreePath = null;
       }
     }
+    if (mergeWorkTaskOwnsWorktreePath(threadRef, orphanedWorktreePath)) orphanedWorktreePath = null; // merge-seam: thread-delete-worktree
     const displayWorktreePath = orphanedWorktreePath
       ? formatWorktreePathForDisplay(orphanedWorktreePath)
       : null;

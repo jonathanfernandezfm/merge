@@ -350,9 +350,11 @@ export type WorkTaskMenuId =
 export function workTaskMenuItems(input: {
   readonly task: EnvironmentWorkTask;
   readonly linkedProjectTitles: ReadonlyArray<string>;
+  /** False on a read-only connection: only navigation stays enabled. */
+  readonly canOperate: boolean;
 }): ReadonlyArray<ContextMenuItem<WorkTaskMenuId>> {
   const { task, linkedProjectTitles } = input;
-  const archived = task.archivedAt !== null;
+  const archived = task.archivedAt !== null || !input.canOperate;
   return [
     { id: "new-thread", label: "New thread", disabled: archived },
     ...linkedProjectTitles.map((title, index) => ({
@@ -361,7 +363,12 @@ export function workTaskMenuItems(input: {
       separatorBefore: index === 0,
     })),
     task.waitingForUserReason !== null
-      ? { id: "clear-waiting", label: "Clear waiting for user", separatorBefore: true }
+      ? {
+          id: "clear-waiting",
+          label: "Clear waiting for user",
+          disabled: !input.canOperate,
+          separatorBefore: true,
+        }
       : {
           id: "mark-waiting",
           label: "Mark waiting for user...",
@@ -421,5 +428,27 @@ export function workTaskIdOfThread(
     (shell?.lineage.relationshipToParent === "subagent"
       ? byThread(shell.lineage.rootThreadId)
       : null)
+  );
+}
+
+/** Trailing separators dropped; the server also resolves symlinks, which a client cannot. */
+function normalizeWorktreePath(path: string): string {
+  const trimmed = path.trim();
+  return trimmed.length > 1 ? trimmed.replace(/[\\/]+$/, "") : trimmed;
+}
+
+/** True when a live (not archived) Work Task in the environment owns this worktree path. */
+export function workTaskOwnsWorktreePath(
+  tasks: ReadonlyArray<EnvironmentWorkTask>,
+  environmentId: EnvironmentId,
+  worktreePath: string,
+): boolean {
+  const target = normalizeWorktreePath(worktreePath);
+  return tasks.some(
+    (task) =>
+      task.environmentId === environmentId &&
+      task.archivedAt === null &&
+      task.workspace.path !== null &&
+      normalizeWorktreePath(task.workspace.path) === target,
   );
 }

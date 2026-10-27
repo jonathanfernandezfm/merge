@@ -1,9 +1,11 @@
 import { settlePromise } from "@t3tools/client-runtime/state/runtime";
+import { AuthOrchestrationOperateScope } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 
 import { readLocalApi } from "~/localApi";
 import { readProject, waitForThreadShell } from "~/state/entities";
+import { readEnvironmentScope } from "~/state/session";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { workTaskKey, workTaskMenuItems, type WorkTaskMenuId, type WorkTaskView } from "./logic";
 import { readLinkedWorkTasks, readWorkTaskView, workTasksEnvironment } from "./state";
@@ -73,7 +75,13 @@ export function useWorkTaskContextMenu(onNavigate?: () => void) {
     const linked = readLinkedWorkTasks(view.key);
     const clicked = await settlePromise(() =>
       api.contextMenu.show<WorkTaskMenuId>(
-        [...workTaskMenuItems({ task, linkedProjectTitles: linked.map(projectTitle) })],
+        [
+          ...workTaskMenuItems({
+            task,
+            linkedProjectTitles: linked.map(projectTitle),
+            canOperate: readEnvironmentScope(task.environmentId, AuthOrchestrationOperateScope),
+          }),
+        ],
         position,
       ),
     );

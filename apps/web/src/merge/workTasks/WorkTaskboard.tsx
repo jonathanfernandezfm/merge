@@ -1,7 +1,9 @@
+import { useAtomValue } from "@effect/atom-react";
 import type { WorkTaskPullRequestState } from "@t3tools/contracts";
 import { ChevronDownIcon, GitBranchIcon, PlusIcon } from "lucide-react";
 import { memo, useState, type MouseEvent } from "react";
 
+import { ProviderInstanceIcon } from "~/components/chat/ProviderInstanceIcon";
 import { Button } from "~/components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "~/components/ui/empty";
 import { SidebarInset } from "~/components/ui/sidebar";
@@ -10,7 +12,12 @@ import { WorkspacePageHeader } from "~/components/WorkspacePageHeader";
 import { isElectron } from "~/env";
 import { useNowMinute } from "~/hooks/useNowMinute";
 import { cn } from "~/lib/utils";
+import {
+  deriveProviderEntriesByEnvironment,
+  type ProviderInstanceEntry,
+} from "~/providerInstances";
 import { useProjects } from "~/state/entities";
+import { environmentPresentations } from "~/state/presentation";
 import { formatRelativeTimeLabel } from "~/timestampFormat";
 import { useOpenWorkTask, useWorkTaskContextMenu } from "./actions";
 import {
@@ -52,6 +59,15 @@ export function WorkTaskboard() {
   const openWorkTask = useOpenWorkTask();
   const openContextMenu = useWorkTaskContextMenu();
   const [archiveOpen, setArchiveOpen] = useState(false);
+  const serverConfigs = useAtomValue(environmentPresentations.serverConfigsAtom);
+  const providersByEnvironment = useAtomValue(environmentPresentations.providersByEnvironmentAtom);
+  // Default instance ids are driver slugs, so lookups stay scoped per environment.
+  const providerEntries = deriveProviderEntriesByEnvironment(
+    [...serverConfigs].map(
+      ([environmentId, config]) =>
+        [environmentId, providersByEnvironment.get(environmentId) ?? [], config.settings] as const,
+    ),
+  );
   // Re-render relative times once a minute; nothing here animates.
   useNowMinute();
 
@@ -66,6 +82,13 @@ export function WorkTaskboard() {
       <WorkTaskCard
         view={view}
         compact={compact}
+        provider={
+          view.latestThread === null
+            ? undefined
+            : providerEntries
+                .get(view.task.environmentId)
+                ?.get(view.latestThread.providerInstanceId)
+        }
         projectName={
           projectNames.get(`${view.task.environmentId}:${view.task.projectId}`) ?? "Unknown project"
         }
@@ -171,12 +194,15 @@ export function WorkTaskboard() {
 const WorkTaskCard = memo(function WorkTaskCard({
   view,
   projectName,
+  provider,
   compact,
   onOpen,
   onContextMenu,
 }: {
   view: WorkTaskView;
   projectName: string;
+  /** The provider driving the thread the card opens. */
+  provider: ProviderInstanceEntry | undefined;
   /** Title and status only, for the archive. */
   compact: boolean;
   onOpen: (view: WorkTaskView) => void;
@@ -195,9 +221,19 @@ const WorkTaskCard = memo(function WorkTaskCard({
       }}
       className="flex w-full min-w-0 cursor-pointer flex-col gap-2 rounded-lg border bg-card p-3 text-left text-card-foreground hover:border-foreground/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
     >
-      <span className="flex min-w-0 flex-col gap-0.5">
-        <span className="truncate text-muted-foreground text-xs">{projectName}</span>
-        <span className="line-clamp-2 font-medium text-sm">{task.title}</span>
+      <span className="flex min-w-0 items-start gap-2">
+        {provider !== undefined ? (
+          <ProviderInstanceIcon
+            driverKind={provider.driverKind}
+            displayName={provider.displayName}
+            className="mt-0.5"
+            iconClassName="size-4"
+          />
+        ) : null}
+        <span className="flex min-w-0 flex-col gap-0.5">
+          <span className="truncate text-muted-foreground text-xs">{projectName}</span>
+          <span className="line-clamp-2 font-medium text-sm">{task.title}</span>
+        </span>
       </span>
       {compact ? null : (
         <span className="flex min-w-0 items-center gap-1.5 text-muted-foreground text-xs">
