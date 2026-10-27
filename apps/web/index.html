@@ -51,6 +51,20 @@
         // Keep this small boot-time copy in sync with the built-in palettes so
         // the selected theme is visible before the app has mounted.
         const BUILT_IN_THEME_PALETTES = {
+          merge: {
+            light: {
+              background: "oklch(0.966535 0.006712 97.352)",
+              foreground: "oklch(0.208642 0.008506 264.373)",
+              accent: "oklch(0.486022 0.124416 126.433)",
+              chrome: "oklch(0.966535 0.006712 97.352)",
+            },
+            dark: {
+              background: "oklch(0.153485 0.007243 258.4)",
+              foreground: "oklch(0.935901 0.006291 255.476)",
+              accent: "oklch(0.897069 0.190668 122.162)",
+              chrome: "oklch(0.153485 0.007243 258.4)",
+            },
+          }, // merge-seam: theme
           "t3-chat": {
             light: {
               background: "oklch(0.982446 0.010114 325.653)",
@@ -132,6 +146,7 @@
           "system",
           "light",
           "dark",
+          "merge", // merge-seam: theme
           "t3-chat",
           "grove",
           "ocean",

@@ -236,6 +236,34 @@ export const identity: Array<{ file: string; from: string; to: string }> = [
     from: '"Created in [T3 Code](https://t3.codes).",',
     to: `"Created in [Merge](${REPO_URL}).",`,
   },
+  // Default theme: a client with no stored preference wears `merge` (the id existing installs
+  // already store) and follows the OS appearance, as the unthemed look did.
+  {
+    file: "apps/web/src/hooks/useTheme.ts",
+    from: 'theme: "system",\n  resolvedTheme: "light",',
+    to: 'theme: "merge",\n  resolvedTheme: "light",',
+  },
+  {
+    file: "apps/web/src/hooks/useTheme.ts",
+    from: 'return theme === "system";',
+    to: 'return theme === "system" || theme === "merge";',
+  },
+  {
+    file: "apps/web/index.html",
+    from: 'storedTheme === null ? "" :',
+    to: 'storedTheme === null ? "merge" :',
+  },
+  {
+    file: "apps/web/index.html",
+    from: "(isKnownTheme && storedTheme !== null)",
+    to: "isKnownTheme",
+  },
+  {
+    file: "apps/desktop/src/window/DesktopWindow.ts",
+    from: 'return shouldUseDarkColors ? "#000000" : "#ffffff";',
+    to: 'return shouldUseDarkColors ? "#0a0c0f" : "#f5f4ef";',
+  },
+
   // Hosted T3 services (Connect, relay, guest sharing, webhook relay) switch on only when a build
   // bakes in the Clerk key and relay URL, so shipping no defaults keeps every entry point hidden.
   {
