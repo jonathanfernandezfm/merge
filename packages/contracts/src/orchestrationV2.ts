@@ -3165,6 +3165,7 @@ export const OrchestrationV2Command = Schema.Union([
     threadId: ThreadId,
     ...ThreadPullRequestKey.fields,
     watching: Schema.Boolean,
+    resumeRemarksFromEndedWatch: Schema.optional(Schema.Boolean), // merge-seam: pr-watch-resume
     link: Schema.optional(
       Schema.Struct({
         url: TrimmedNonEmptyString,

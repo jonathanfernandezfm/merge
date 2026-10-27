@@ -174,5 +174,20 @@
     "file": "apps/server/src/provider/agentContextBudget.json",
     "purpose": "mcpToolListJsonBytes includes create_work_task",
     "check": "measured"
+  },
+  {
+    "id": "pr-watch-resume",
+    "file": "packages/contracts/src/orchestrationV2.ts",
+    "purpose": "Optional resumeRemarksFromEndedWatch on thread.pull-request.watch (set only by the Work Task feedback hold)"
+  },
+  {
+    "id": "pr-watch-resume",
+    "file": "apps/server/src/orchestration-v2/Orchestrator.ts",
+    "purpose": "Re-watch with resumeRemarksFromEndedWatch keeps endedWatch's remark cursor, so comments posted during the hold are delivered once"
+  },
+  {
+    "id": "pr-watch-resume",
+    "file": "apps/server/src/orchestration-v2/runtimeLayer.test.ts",
+    "purpose": "Test that a resumed re-watch delivers remarks from the unwatched gap once, and a plain re-watch does not"
   }
 ]
