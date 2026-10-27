@@ -85,6 +85,16 @@
     "purpose": "Fork settings route file; regenerates routeTree.gen.ts"
   },
   {
+    "id": "theme",
+    "file": "packages/shared/src/themePalettes.ts",
+    "purpose": "Register the merge built-in theme (id stays merge so stored preferences keep decoding)"
+  },
+  {
+    "id": "theme",
+    "file": "apps/web/index.html",
+    "purpose": "Boot-time copy of the merge palette and reserved id"
+  },
+  {
     "id": "hosted-services",
     "file": "apps/web/src/components/settings/LabsSettingsPanel.tsx",
     "purpose": "Hide the guest links section when the build has no T3 Connect config"
