@@ -24,10 +24,18 @@ import {
   UpdateWorkItemInput,
   WorkItemsError,
 } from "./workItems.ts";
+import {
+  WorkTaskArchiveCheckResult,
+  WorkTaskIdInput,
+  WorkTasksError,
+  WorkTasksSnapshot,
+} from "./workTasks.ts";
 
 export * from "./gitGraph.ts";
 export * from "./workItems.ts";
 export * from "./pullRequests.ts";
+export * from "./workTasks.ts";
+export * from "./workTaskStatus.ts";
 
 export const MERGE_WS_METHODS = {
   ping: "merge.ping",
@@ -38,6 +46,8 @@ export const MERGE_WS_METHODS = {
   workItemsUpdate: "merge.workItems.update",
   workItemsCreateChild: "merge.workItems.createChild",
   pullRequestsRequeueExpiredChecks: "merge.pullRequests.requeueExpiredChecks",
+  workTasksSubscribe: "merge.workTasks.subscribe",
+  workTasksArchiveCheck: "merge.workTasks.archiveCheck",
 } as const;
 
 export const MergePingRpc = Rpc.make(MERGE_WS_METHODS.ping, {
@@ -89,6 +99,20 @@ export const MergePullRequestsRequeueExpiredChecksRpc = Rpc.make(
   },
 );
 
+/** Every Work Task and thread link, then again after each change. */
+export const MergeWorkTasksSubscribeRpc = Rpc.make(MERGE_WS_METHODS.workTasksSubscribe, {
+  payload: Schema.Struct({}),
+  success: WorkTasksSnapshot,
+  error: WorkTasksError,
+  stream: true,
+});
+
+export const MergeWorkTasksArchiveCheckRpc = Rpc.make(MERGE_WS_METHODS.workTasksArchiveCheck, {
+  payload: WorkTaskIdInput,
+  success: WorkTaskArchiveCheckResult,
+  error: WorkTasksError,
+});
+
 /** Fork RPCs. Merged into `WsRpcGroup` at the `rpc-group` seam. */
 export const MergeRpcGroup = RpcGroup.make(
   MergePingRpc,
@@ -99,4 +123,6 @@ export const MergeRpcGroup = RpcGroup.make(
   MergeWorkItemsUpdateRpc,
   MergeWorkItemsCreateChildRpc,
   MergePullRequestsRequeueExpiredChecksRpc,
+  MergeWorkTasksSubscribeRpc,
+  MergeWorkTasksArchiveCheckRpc,
 );
