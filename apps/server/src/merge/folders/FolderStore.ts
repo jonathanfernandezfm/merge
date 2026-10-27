@@ -16,6 +16,8 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as SqlClient from "effect/sql/SqlClient";
 
+import * as ProjectionStore from "../../orchestration-v2/ProjectionStore.ts";
+
 const failed = (message: string) => (cause: unknown) =>
   new FolderOperationError({ reason: "failed", message, cause });
 
@@ -30,7 +32,10 @@ export class FolderStore extends Context.Service<
     readonly rename: (id: FolderId, title: string) => Effect.Effect<void, FolderOperationError>;
     /** Soft-deletes the folder; its threads move back to the thread list. */
     readonly remove: (id: FolderId) => Effect.Effect<void, FolderOperationError>;
-    /** Files the thread in a live folder, or takes it out with null. Its Work Task link stays. */
+    /**
+     * Files a live, undeleted thread in a live folder, or takes it out with null. Its Work Task
+     * link stays.
+     */
     readonly assign: (
       threadId: ThreadId,
       folderId: FolderId | null,
@@ -44,6 +49,7 @@ export class FolderStore extends Context.Service<
 export const make = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   const crypto = yield* Crypto.Crypto;
+  const projections = yield* ProjectionStore.ProjectionStoreV2;
   const changed = yield* PubSub.sliding<void>(1);
   const notify = PubSub.publish(changed, undefined).pipe(Effect.asVoid);
   const now = Effect.map(DateTime.now, DateTime.formatIso);
@@ -123,6 +129,13 @@ export const make = Effect.gen(function* () {
     threadId: ThreadId,
     folderId: FolderId | null,
   ) {
+    // getThreadShell is null for a deleted thread too.
+    const thread = yield* projections
+      .getThreadShell(threadId)
+      .pipe(Effect.mapError(failed("Could not read the thread.")));
+    if (thread === null) {
+      return yield* new FolderOperationError({ reason: "not-found", message: "Thread not found." });
+    }
     if (folderId !== null) yield* requireLive(folderId);
     const at = yield* now;
     yield* (

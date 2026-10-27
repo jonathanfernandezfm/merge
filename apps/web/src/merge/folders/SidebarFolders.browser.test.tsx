@@ -29,10 +29,17 @@ vi.mock("./state", async () => {
       [fixtures.ENV, [{ threadId: ThreadId.make("t1"), folderId: FolderId.make("parked") }]],
     ]),
   );
-  const shells = [fixtures.shell({ id: "t1" }), fixtures.shell({ id: "t2" })];
+  const shells = [fixtures.shell({ id: "t1" }), fixtures.shell({ id: "t2" })].map((shell) => ({
+    ...shell,
+    projectId: fixtures.PROJECT,
+    branch: null,
+    worktreePath: null,
+    linkedPullRequest: null,
+  }));
   const command = { label: "stub" };
   return {
-    useFolderViews: (query: string) => logic.buildFolderViews({ folders, filed, shells, query }),
+    useFolderViews: (scopedProjectKeys: ReadonlySet<string> | null) =>
+      logic.buildFolderViews({ folders, filed, shells, scopedProjectKeys }),
     useFolderEnvironments: () => [fixtures.ENV],
     readFolderMenuItems: () => [],
     runFolderCommand,
@@ -40,7 +47,10 @@ vi.mock("./state", async () => {
   };
 });
 
-vi.mock("./threadMenu", () => ({ folderThreadMenu: { handle: () => true } }));
+const openMenu = vi.hoisted(() => vi.fn());
+vi.mock("~/hooks/useThreadActionMenu", () => ({
+  useThreadActionMenu: () => ({ openMenu, closeMenu: () => undefined }),
+}));
 
 vi.mock("~/state/environments", async (importOriginal) => {
   const fixtures = await import("../workTasks/testFixtures");
@@ -52,6 +62,8 @@ vi.mock("~/state/environments", async (importOriginal) => {
 
 describe("SidebarFolders", () => {
   it("lists folders with their filed threads and creates a folder", async () => {
+    // Folder open state lives in localStorage.
+    localStorage.clear();
     await using _screen = await render(
       <AppAtomRegistryProvider>
         <SidebarProvider>
@@ -63,7 +75,7 @@ describe("SidebarFolders", () => {
     await expect.element(page.getByText("Folders", { exact: true })).toBeVisible();
     await expect.element(page.getByRole("button", { name: "Later, 0 threads" })).toBeVisible();
     await page.getByRole("button", { name: "Parked, 1 threads" }).click();
-    await expect.element(page.getByRole("button", { name: "Thread t1" })).toBeVisible();
+    await expect.element(page.getByRole("button", { name: /Thread t1/ })).toBeVisible();
     await expect.element(page.getByText("Thread t2")).not.toBeInTheDocument();
 
     await page.getByRole("button", { name: "New folder" }).click();
@@ -78,13 +90,25 @@ describe("SidebarFolders", () => {
     );
   });
 
-  it("shows only folders with a match while searching", async () => {
-    await using _screen = await render(
-      <SidebarProvider>
-        <SidebarFolders searchQuery="thread t1" />
-      </SidebarProvider>,
+  it("hides while searching and opens the full thread menu on a filed thread", async () => {
+    localStorage.clear();
+    await using screen = await render(
+      <AppAtomRegistryProvider>
+        <SidebarProvider>
+          <SidebarFolders searchQuery="thread" />
+        </SidebarProvider>
+      </AppAtomRegistryProvider>,
     );
-    await expect.element(page.getByRole("button", { name: "Thread t1" })).toBeVisible();
-    await expect.element(page.getByText("Later")).not.toBeInTheDocument();
+    await expect.element(page.getByText("Folders", { exact: true })).not.toBeInTheDocument();
+    await screen.rerender(
+      <AppAtomRegistryProvider>
+        <SidebarProvider>
+          <SidebarFolders />
+        </SidebarProvider>
+      </AppAtomRegistryProvider>,
+    );
+    await page.getByRole("button", { name: "Parked, 1 threads" }).click();
+    await page.getByRole("button", { name: /Thread t1/ }).click({ button: "right" });
+    expect(openMenu).toHaveBeenCalledOnce();
   });
 });

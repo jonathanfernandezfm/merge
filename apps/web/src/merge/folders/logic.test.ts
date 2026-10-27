@@ -1,16 +1,22 @@
+import { scopedThreadKey, scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { EnvironmentId, FolderId, ThreadId } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { ENV, shell } from "../workTasks/testFixtures";
+import { ENV, PROJECT, shell as taskShell } from "../workTasks/testFixtures";
 import {
   buildFolderViews,
   filedThreadKeys,
+  filedVisibleThreads,
   folderMenuItems,
   parseFolderMenuId,
   unfiledThreads,
   type EnvironmentFolder,
 } from "./logic";
 
+const shell = (overrides: Parameters<typeof taskShell>[0]) => ({
+  ...taskShell(overrides),
+  projectId: PROJECT,
+});
 const folder = (id: string, title = `Folder ${id}`, environmentId = ENV): EnvironmentFolder => ({
   environmentId,
   id: FolderId.make(id),
@@ -38,27 +44,43 @@ describe("folders logic", () => {
     expect(unfiledThreads(elsewhere, filed)).toBe(elsewhere);
   });
 
-  it("groups live threads under their folder and searches titles", () => {
+  it("groups visible threads under their folder in the sidebar's project scope", () => {
     const shells = [
       shell({ id: "t1" }),
       shell({ id: "t2", archivedAt: "2026-10-02T00:00:00.000Z" }),
       shell({ id: "t4" }),
     ];
-    const views = buildFolderViews({ folders, filed, shells });
+    const views = buildFolderViews({ folders, filed, shells, scopedProjectKeys: null });
     expect(views.map((view) => [view.folder.title, view.threads.map((t) => t.id)])).toEqual([
       ["Parked", ["t1"]],
       ["Later", []],
     ]);
+    // Another project in scope: folders stay, their threads leave.
+    const otherScope = new Set([`${ENV}:other`]);
     expect(
-      buildFolderViews({ folders, filed, shells, query: "later" }).map((v) => v.folder.title),
-    ).toEqual(["Later"]);
-    expect(
-      buildFolderViews({ folders, filed, shells, query: "thread t1" }).map((v) => [
-        v.folder.title,
-        v.threads.length,
-      ]),
-    ).toEqual([["Parked", 1]]);
-    expect(buildFolderViews({ folders, filed, shells, query: "nothing" })).toEqual([]);
+      buildFolderViews({ folders, filed, shells, scopedProjectKeys: otherScope }).map(
+        (view) => view.threads.length,
+      ),
+    ).toEqual([0, 0]);
+  });
+
+  it("gives upstream search the filed threads the list would show", () => {
+    const shells = [
+      shell({ id: "t1" }),
+      shell({ id: "t2", archivedAt: "2026-10-02T00:00:00.000Z" }),
+      shell({ id: "t3" }),
+      shell({ id: "t4", subagentOf: "t1" }),
+    ];
+    const filedWithChild = new Map([
+      ...filed,
+      [scopedThreadKey(scopeThreadRef(ENV, ThreadId.make("t4"))), "folder"],
+    ]);
+    expect(filedVisibleThreads(shells, filedWithChild, null).map((thread) => thread.id)).toEqual([
+      "t1",
+    ]);
+    expect(filedVisibleThreads(shells, filed, new Set([`${ENV}:${PROJECT}`]))).toHaveLength(1);
+    expect(filedVisibleThreads(shells, filed, new Set([`${ENV}:other`]))).toEqual([]);
+    expect(filedVisibleThreads(shells, new Map(), null)).toEqual([]);
   });
 
   it("builds the Move to folder menu and parses its ids back", () => {

@@ -1461,6 +1461,8 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                   Regenerating title
                 </span>
               ) : null}
+              {mergeCompact && terminalStatusIcon /* merge-seam: compact-threads */}
+              {mergeCompact && prBadge /* merge-seam: compact-threads */}
               {metaLineEmpty ? (
                 <span aria-hidden className="inline-flex shrink-0">
                   <SidebarProviderStack

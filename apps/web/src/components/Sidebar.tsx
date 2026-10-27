@@ -9,7 +9,7 @@ import {
 import { discardComposerDraft } from "../lib/discardComposerDraft";
 import { MergeSidebarSections } from "../merge/MergeSidebarSections"; // merge-seam: sidebar
 import { handleMergeThreadMenu } from "../merge/threadMenu"; // merge-seam: thread-menu
-import { useMergeUnfiledThreads } from "../merge/folders/state"; // merge-seam: folders
+import { useMergeFiledSearchThreads, useMergeUnfiledThreads } from "../merge/folders/state"; // merge-seam: folders
 import { requestCustomSnooze } from "./CustomSnoozeDialog";
 import { useAtomValue } from "@effect/atom-react";
 import * as Option from "effect/Option";
@@ -487,6 +487,7 @@ function useSidebarThreads(input: {
       ...workingThreads,
       ...snoozedThreads,
       ...settledThreads,
+      ...useMergeFiledSearchThreads(scopedProjectKeys), // merge-seam: folders
     ],
     settledVisibleCount,
     settledCount,
@@ -3252,7 +3253,10 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
             </div>
           ) : null}
         </SidebarGroup>
-        <MergeSidebarSections searchQuery={threadSearchQuery} /> {/* merge-seam: sidebar */}
+        <MergeSidebarSections
+          searchQuery={threadSearchQuery} /* merge-seam: sidebar */
+          scopedProjectKeys={scopedProjectKeys} /* merge-seam: sidebar */
+        />
       </SidebarContent>
       <SidebarChromeFooter
         showUndoNotice={isSearchingThreads || sidebarListItemsFresh.length === 0}

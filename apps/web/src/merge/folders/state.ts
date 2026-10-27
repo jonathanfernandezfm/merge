@@ -29,6 +29,7 @@ import { environmentThreadShells } from "~/state/threads";
 import {
   buildFolderViews,
   filedThreadKeys,
+  filedVisibleThreads,
   folderMenuItems,
   unfiledThreads,
   type EnvironmentFolder,
@@ -119,11 +120,22 @@ const filedAtom = Atom.make((get) => {
   return filedThreadKeys(get(foldersAtom), links);
 }).pipe(Atom.withLabel("merge-folders-filed"));
 
-export function useFolderViews(query: string): ReadonlyArray<FolderView> {
+export function useFolderViews(
+  scopedProjectKeys: ReadonlySet<string> | null,
+): ReadonlyArray<FolderView> {
   const folders = useAtomValue(foldersAtom);
   const filed = useAtomValue(filedAtom);
   const shells = useAtomValue(environmentThreadShells.quietThreadShellsAtom);
-  return buildFolderViews({ folders, filed, shells, query });
+  return buildFolderViews({ folders, filed, shells, scopedProjectKeys });
+}
+
+/** At the `folders` seam: filed threads join upstream's sidebar search, messages included. */
+export function useMergeFiledSearchThreads(
+  scopedProjectKeys: ReadonlySet<string> | null,
+): ReadonlyArray<EnvironmentThreadShell> {
+  const filed = useAtomValue(filedAtom);
+  const shells = useAtomValue(environmentThreadShells.quietThreadShellsAtom);
+  return filedVisibleThreads(shells, filed, scopedProjectKeys);
 }
 
 let previousEnvironments: ReadonlyArray<EnvironmentId> = [];

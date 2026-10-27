@@ -8,6 +8,7 @@ import {
 } from "react";
 
 import { cn } from "~/lib/utils";
+import { MergeCompactToggle } from "~/merge/folders/compact"; // merge-seam: compact-threads
 import { Button } from "../ui/button";
 import { SidebarInput, SidebarMenuButton } from "../ui/sidebar";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
@@ -110,6 +111,7 @@ export function SidebarThreadHeader({
             </SidebarHeaderIconButton>
           </>
         ) : null}
+        <MergeCompactToggle /> {/* merge-seam: compact-threads */}
         <SidebarHeaderIconButton
           label="New thread"
           tooltip={

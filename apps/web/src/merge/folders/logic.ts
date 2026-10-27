@@ -8,7 +8,7 @@ import type {
   FolderLink,
 } from "@t3tools/contracts";
 
-import { isSidebarSubagentThread, sortThreadsForSidebar } from "~/components/Sidebar.logic";
+import { filterSidebarV2VisibleThreads, sortThreadsForSidebar } from "~/components/Sidebar.logic";
 
 export interface EnvironmentFolder extends Folder {
   readonly environmentId: EnvironmentId;
@@ -59,32 +59,41 @@ export function unfiledThreads<T extends Pick<EnvironmentThreadShell, "environme
 }
 
 /**
- * Folders with their live threads in Threads-list order. A search keeps folders whose title
- * matches (with every thread) and folders with a matching thread (with those threads).
+ * Filed threads the Threads list would show: live, top-level, in the sidebar's project scope.
+ * Upstream's search gets them back through the `folders` seam.
  */
+export function filedVisibleThreads(
+  shells: ReadonlyArray<EnvironmentThreadShell>,
+  filed: ReadonlyMap<string, string>,
+  scopedProjectKeys: ReadonlySet<string> | null,
+): ReadonlyArray<EnvironmentThreadShell> {
+  if (filed.size === 0) return [];
+  return filterSidebarV2VisibleThreads(
+    shells.filter((shell) =>
+      filed.has(scopedThreadKey(scopeThreadRef(shell.environmentId, shell.id))),
+    ),
+    scopedProjectKeys,
+  );
+}
+
+/** Every folder with its visible threads in Threads-list order; folders stay when the scope empties them. */
 export function buildFolderViews(input: {
   readonly folders: ReadonlyArray<EnvironmentFolder>;
   readonly filed: ReadonlyMap<string, string>;
   readonly shells: ReadonlyArray<EnvironmentThreadShell>;
-  readonly query?: string;
+  readonly scopedProjectKeys: ReadonlySet<string> | null;
 }): ReadonlyArray<FolderView> {
   const byFolder = new Map<string, EnvironmentThreadShell[]>();
-  for (const shell of input.shells) {
-    if (shell.archivedAt !== null || isSidebarSubagentThread(shell)) continue;
+  for (const shell of filedVisibleThreads(input.shells, input.filed, input.scopedProjectKeys)) {
     const key = input.filed.get(scopedThreadKey(scopeThreadRef(shell.environmentId, shell.id)));
     if (key === undefined) continue;
     const list = byFolder.get(key);
     if (list === undefined) byFolder.set(key, [shell]);
     else list.push(shell);
   }
-  const query = input.query?.trim().toLowerCase() ?? "";
-  const matches = (text: string) => text.toLowerCase().includes(query);
-  return input.folders.flatMap((folder) => {
+  return input.folders.map((folder) => {
     const key = folderKey(folder.environmentId, folder.id);
-    const threads = sortThreadsForSidebar(byFolder.get(key) ?? []);
-    if (query.length === 0 || matches(folder.title)) return [{ key, folder, threads }];
-    const found = threads.filter((thread) => matches(thread.title));
-    return found.length > 0 ? [{ key, folder, threads: found }] : [];
+    return { key, folder, threads: sortThreadsForSidebar(byFolder.get(key) ?? []) };
   });
 }
 

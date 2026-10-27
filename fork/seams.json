@@ -37,7 +37,7 @@
   {
     "id": "sidebar",
     "file": "apps/web/src/components/Sidebar.tsx",
-    "purpose": "Render fork sidebar sections (Work Tasks, Folders) with the sidebar search query"
+    "purpose": "Render fork sidebar sections (Work Tasks, Folders) with the sidebar search query and project scope"
   },
   {
     "id": "thread-menu",
@@ -228,11 +228,17 @@
   {
     "id": "folders",
     "file": "apps/web/src/components/Sidebar.tsx",
-    "purpose": "The Threads list leaves threads filed in a folder to the fork Folders section (v0.0.10 behaviour)"
+    "purpose": "The Threads list leaves threads filed in a folder to the fork Folders section, and the sidebar search gets them back (v0.0.10 behaviour)"
   },
   {
     "id": "compact-threads",
     "file": "apps/web/src/components/sidebar/SidebarThreadRow.tsx",
-    "purpose": "Compact thread rows reuse the card's no-meta-line layout, dropping the branch line"
+    "purpose": "Compact thread rows reuse the card's no-meta-line layout (no branch line) and keep the PR badge and terminal indicator on the title line",
+    "note": "upstream metaLineEmpty lines re-indented inside the added parentheses; sync-conflict hotspot"
+  },
+  {
+    "id": "compact-threads",
+    "file": "apps/web/src/components/sidebar/SidebarThreadHeader.tsx",
+    "purpose": "Compact rows toggle beside New thread in the thread list header (v0.0.10 placement)"
   }
 ]
