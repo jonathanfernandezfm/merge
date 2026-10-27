@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
+import * as FolderStore from "./folders/FolderStore.ts";
 import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
 import * as WorkTaskReactor from "./workTasks/WorkTaskReactor.ts";
 import * as WorkTaskStore from "./workTasks/WorkTaskStore.ts";
@@ -17,5 +18,6 @@ export const MergeServerLayer = Layer.effectDiscard(
 ).pipe(
   Layer.provide(WorkTaskReactor.layer),
   Layer.provideMerge(layerWorkTaskServices),
+  Layer.provideMerge(FolderStore.layer),
   Layer.provide(ProjectionStore.layer),
 );

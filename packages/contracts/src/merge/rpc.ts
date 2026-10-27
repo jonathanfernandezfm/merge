@@ -26,6 +26,15 @@ import {
 } from "./workItems.ts";
 import { VcsListRefsResult } from "../git.ts";
 import {
+  FolderAssignInput,
+  FolderCreateInput,
+  FolderCreateResult,
+  FolderIdInput,
+  FolderRenameInput,
+  FoldersError,
+  FoldersSnapshot,
+} from "./folders.ts";
+import {
   WorkTaskArchiveCheckResult,
   WorkTaskArchiveInput,
   WorkTaskCreateInput,
@@ -40,6 +49,7 @@ import {
   WorkTasksSnapshot,
 } from "./workTasks.ts";
 
+export * from "./folders.ts";
 export * from "./gitGraph.ts";
 export * from "./workItems.ts";
 export * from "./pullRequests.ts";
@@ -64,6 +74,11 @@ export const MERGE_WS_METHODS = {
   workTasksSetWaiting: "merge.workTasks.setWaiting",
   workTasksSetAutoHandle: "merge.workTasks.setAutoHandle",
   workTasksListBranches: "merge.workTasks.listBranches",
+  foldersSubscribe: "merge.folders.subscribe",
+  foldersCreate: "merge.folders.create",
+  foldersRename: "merge.folders.rename",
+  foldersDelete: "merge.folders.delete",
+  foldersAssign: "merge.folders.assign",
 } as const;
 
 export const MergePingRpc = Rpc.make(MERGE_WS_METHODS.ping, {
@@ -167,6 +182,36 @@ export const MergeWorkTasksListBranchesRpc = Rpc.make(MERGE_WS_METHODS.workTasks
   error: WorkTasksError,
 });
 
+/** Every live folder and filed thread, then again after each change. */
+export const MergeFoldersSubscribeRpc = Rpc.make(MERGE_WS_METHODS.foldersSubscribe, {
+  payload: Schema.Struct({}),
+  success: FoldersSnapshot,
+  error: FoldersError,
+  stream: true,
+});
+
+export const MergeFoldersCreateRpc = Rpc.make(MERGE_WS_METHODS.foldersCreate, {
+  payload: FolderCreateInput,
+  success: FolderCreateResult,
+  error: FoldersError,
+});
+
+export const MergeFoldersRenameRpc = Rpc.make(MERGE_WS_METHODS.foldersRename, {
+  payload: FolderRenameInput,
+  error: FoldersError,
+});
+
+/** Its threads move back to the thread list; none is deleted. */
+export const MergeFoldersDeleteRpc = Rpc.make(MERGE_WS_METHODS.foldersDelete, {
+  payload: FolderIdInput,
+  error: FoldersError,
+});
+
+export const MergeFoldersAssignRpc = Rpc.make(MERGE_WS_METHODS.foldersAssign, {
+  payload: FolderAssignInput,
+  error: FoldersError,
+});
+
 /** Fork RPCs. Merged into `WsRpcGroup` at the `rpc-group` seam. */
 export const MergeRpcGroup = RpcGroup.make(
   MergePingRpc,
@@ -186,4 +231,9 @@ export const MergeRpcGroup = RpcGroup.make(
   MergeWorkTasksSetWaitingRpc,
   MergeWorkTasksSetAutoHandleRpc,
   MergeWorkTasksListBranchesRpc,
+  MergeFoldersSubscribeRpc,
+  MergeFoldersCreateRpc,
+  MergeFoldersRenameRpc,
+  MergeFoldersDeleteRpc,
+  MergeFoldersAssignRpc,
 );

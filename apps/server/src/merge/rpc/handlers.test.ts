@@ -35,6 +35,7 @@ import * as VcsProcess from "../../vcs/VcsProcess.ts";
 import * as VcsProjectConfig from "../../vcs/VcsProjectConfig.ts";
 import * as KnownWorkspaces from "../../workspace/KnownWorkspaces.ts";
 import { WS_RPC_SERVER_OPTIONS } from "../../ws.ts";
+import * as FolderStore from "../folders/FolderStore.ts";
 import * as WorkTaskStore from "../workTasks/WorkTaskStore.ts";
 import * as WorkTaskWorkspace from "../workTasks/WorkTaskWorkspace.ts";
 import { mergeRpcHandlers } from "./handlers.ts";
@@ -367,4 +368,124 @@ it.effect(
       }
       assert.strictEqual(calls.length, 1);
     }),
+);
+
+const foldersLayer = FolderStore.layer.pipe(
+  Layer.provideMerge(
+    Layer.effectDiscard(runMigrations()).pipe(
+      Layer.provideMerge(NodeSqliteClient.layer({ filename: ":memory:" })),
+    ),
+  ),
+  Layer.provideMerge(NodeServices.layer),
+);
+
+it.effect("merge.folders mutations need the operate scope and reach subscribers", () =>
+  Effect.gen(function* () {
+    const open = (scopes: ReadonlyArray<AuthEnvironmentScope>) =>
+      Effect.gen(function* () {
+        const messages = yield* Queue.unbounded<RpcMessage.FromServer<never>>();
+        const server = yield* RpcServer.makeNoSerialization(
+          MergeRpcGroup.middleware(RpcScopeAuthorization),
+          { ...WS_RPC_SERVER_OPTIONS, onFromServer: (message) => Queue.offer(messages, message) },
+        ).pipe(
+          Effect.provide(
+            Layer.mergeAll(MergeRpcGroup.toLayer(mergeRpcHandlers), RpcAuthorization.layer(scopes)),
+          ),
+        );
+        let nextId = 0;
+        const send = (
+          tag: (typeof MERGE_WS_METHODS)[keyof typeof MERGE_WS_METHODS],
+          payload: object,
+        ) => {
+          const id = RpcMessage.RequestId(`folders-${nextId++}`);
+          return server
+            .write(0, { _tag: "Request", id, tag, payload, headers: Headers.empty })
+            .pipe(Effect.as(id));
+        };
+        const next = Effect.gen(function* () {
+          const message = yield* Queue.take(messages);
+          if (message._tag === "Chunk") {
+            yield* server.write(0, { _tag: "Ack", requestId: message.requestId });
+          }
+          return message;
+        });
+        const call = (
+          tag: (typeof MERGE_WS_METHODS)[keyof typeof MERGE_WS_METHODS],
+          payload: object,
+        ) =>
+          Effect.gen(function* () {
+            yield* send(tag, payload);
+            const message = yield* next;
+            assert.strictEqual(message._tag, "Exit");
+            return message._tag === "Exit" ? message.exit : Exit.void;
+          });
+        return { send, next, call };
+      });
+
+    yield* Effect.scoped(
+      Effect.gen(function* () {
+        const reader = yield* open([AuthOrchestrationReadScope]);
+        for (const [tag, payload] of [
+          [MERGE_WS_METHODS.foldersCreate, { title: "Later" }],
+          [MERGE_WS_METHODS.foldersRename, { folderId: "f", title: "x" }],
+          [MERGE_WS_METHODS.foldersDelete, { folderId: "f" }],
+          [MERGE_WS_METHODS.foldersAssign, { threadId: "t", folderId: null }],
+        ] as const) {
+          const denied = yield* reader.call(tag, payload);
+          assert.include(
+            String(Exit.isFailure(denied) ? denied.cause : ""),
+            "EnvironmentAuthorizationError",
+            tag,
+          );
+        }
+        // Subscribing needs only the read scope.
+        yield* reader.send(MERGE_WS_METHODS.foldersSubscribe, {});
+        const first = yield* reader.next;
+        assert.deepStrictEqual(first._tag === "Chunk" ? first.values : null, [
+          { folders: [], links: [] },
+        ]);
+
+        const writer = yield* open([AuthOrchestrationOperateScope]);
+        const created = yield* writer.call(MERGE_WS_METHODS.foldersCreate, { title: "Later" });
+        assert.isTrue(Exit.isSuccess(created));
+        const folderId = Exit.isSuccess(created)
+          ? (created.value as unknown as { folderId: string }).folderId
+          : "";
+        assert.isTrue(
+          Exit.isSuccess(
+            yield* writer.call(MERGE_WS_METHODS.foldersAssign, { threadId: "t", folderId }),
+          ),
+        );
+        const missing = yield* writer.call(MERGE_WS_METHODS.foldersAssign, {
+          threadId: "t",
+          folderId: "nope",
+        });
+        assert.include(
+          String(Exit.isFailure(missing) ? missing.cause : ""),
+          "FolderOperationError",
+        );
+
+        // Writes coalesce in the sliding PubSub; the latest snapshot holds both.
+        let latest: unknown = null;
+        while (
+          JSON.stringify(latest) !==
+          JSON.stringify({
+            folders: [{ id: folderId, title: "Later" }],
+            links: [{ threadId: "t", folderId }],
+          })
+        ) {
+          const chunk = yield* reader.next;
+          const value = chunk._tag === "Chunk" ? chunk.values.at(-1) : null;
+          const snapshot = value as {
+            folders: ReadonlyArray<{ id: string; title: string }>;
+            links: unknown;
+          };
+          latest = {
+            folders: snapshot.folders.map(({ id, title }) => ({ id, title })),
+            links: snapshot.links,
+          };
+        }
+      }),
+    );
+  }).pipe(Effect.provide(foldersLayer)),
 );
