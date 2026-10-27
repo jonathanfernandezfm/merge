@@ -26,6 +26,12 @@ async function readOrNull(file: string) {
   }
 }
 
+const siblingTests = (file: string) => {
+  const match = /^(.*)\.(tsx?|mjs)$/.exec(file);
+  if (!match || match[1]!.endsWith(".test")) return [];
+  return [`${match[1]}.test.ts`, `${match[1]}.test.tsx`, `${match[1]}.test.mjs`];
+};
+
 export async function applyBrand(opts: { root: string; check: boolean; rules?: Rules }) {
   const { root, check, rules = defaultRules } = opts;
   const missingAnchors: string[] = [];
@@ -47,6 +53,11 @@ export async function applyBrand(opts: { root: string; check: boolean; rules?: R
     const text = await load(file);
     if (text.includes(from)) next.set(file, text.replaceAll(from, to));
     else if (!text.includes(to)) missingAnchors.push(`${file}: ${from}`);
+    // Upstream tests assert the same literals; the sibling may not contain every anchor.
+    for (const sibling of siblingTests(file)) {
+      if ((await readOrNull(NodePath.join(root, sibling))) === null) continue;
+      next.set(sibling, (await load(sibling)).replaceAll(from, to));
+    }
   }
 
   const { pattern, replacement, include, exclude } = rules.copy;
