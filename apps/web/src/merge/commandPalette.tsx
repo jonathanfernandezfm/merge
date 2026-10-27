@@ -1,9 +1,16 @@
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import type { useNavigate } from "@tanstack/react-router";
-import { GitGraphIcon, ListTodoIcon, SquareKanbanIcon, SquarePlusIcon } from "lucide-react";
+import {
+  FoldVerticalIcon,
+  GitGraphIcon,
+  ListTodoIcon,
+  SquareKanbanIcon,
+  SquarePlusIcon,
+} from "lucide-react";
 
 import { ITEM_ICON_CLASS, type CommandPaletteActionItem } from "~/components/CommandPalette.logic";
+import { toggleCompactThreads } from "./folders/compact";
 import { GIT_GRAPH_SURFACE_ID, openMergeSurface } from "./gitGraph/surface";
 import { WORK_ITEMS_SURFACE_ID } from "./workItems/state";
 import { openNewWorkTaskDialog } from "./workTasks/WorkTaskDialogs";
@@ -31,6 +38,14 @@ export function mergeCommandPaletteActions(
       run: async () => {
         await navigate({ to: "/work-tasks" });
       },
+    },
+    {
+      kind: "action",
+      value: "action:toggle-compact-thread-rows",
+      searchTerms: ["compact thread rows", "dense", "density", "sidebar", "branch"],
+      title: "Toggle compact thread rows",
+      icon: <FoldVerticalIcon className={ITEM_ICON_CLASS} />,
+      run: async () => toggleCompactThreads(),
     },
   ];
   if (!thread) return workTaskActions;
