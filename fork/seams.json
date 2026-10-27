@@ -133,5 +133,10 @@
     "id": "scm-ado",
     "file": "packages/source-control-azure-devops/src/server/AzureDevOpsPullRequestProvider.ts",
     "purpose": "Fill Azure DevOps checks from branch policies and review threads from file threads"
+  },
+  {
+    "id": "work-items",
+    "file": "apps/web/src/components/chat/ChatHeader.tsx",
+    "purpose": "Header chip for the branch's Azure Boards work item; opens the work items panel"
   }
 ]
