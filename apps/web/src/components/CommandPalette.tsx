@@ -1449,7 +1449,7 @@ function OpenCommandPaletteDialog(props: {
   actionItems.push(changeAppearanceItem);
 
   actionItems.push(themeEditorItem);
-  actionItems.push(...mergeCommandPaletteActions(activeThread)); // merge-seam: command-palette
+  actionItems.push(...mergeCommandPaletteActions(activeThread, navigate)); // merge-seam: command-palette
 
   if (
     environments.some(
