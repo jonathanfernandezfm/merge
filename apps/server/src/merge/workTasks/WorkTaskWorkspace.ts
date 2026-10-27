@@ -73,6 +73,8 @@ export interface WorkTaskCreateThreadOptions {
   readonly title?: string | undefined;
   /** Defaults to `user`. Automated threads (review feedback) pass their own. */
   readonly origin?: WorkTaskThreadOrigin | undefined;
+  /** A fixed id makes the launch idempotent: a retry replays the launch receipt's thread. */
+  readonly commandId?: CommandId | undefined;
 }
 
 type Result<A> = Effect.Effect<A, WorkTaskOperationError>;
@@ -558,7 +560,7 @@ export const make = Effect.gen(function* () {
     const defaults = resolveProjectSettings(settings, project.id, project).settings;
     const launched = yield* launches
       .launch({
-        commandId: yield* commandId("thread"),
+        commandId: options.commandId ?? (yield* commandId("thread")),
         projectId: project.id,
         // The default title lets upstream name the thread from its first message.
         title: options.title?.trim() || "New thread",

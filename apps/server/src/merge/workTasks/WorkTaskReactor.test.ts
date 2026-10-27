@@ -1,10 +1,12 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
 import {
+  CommandId,
   ProjectId,
   ProviderInstanceId,
   ThreadId,
   WorkTaskId,
+  type OrchestrationV2DomainEvent,
   type OrchestrationV2ServerCommand,
   type OrchestrationV2ThreadShell,
   type ThreadPullRequestLink,
@@ -14,6 +16,9 @@ import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Queue from "effect/Queue";
+import * as Stream from "effect/Stream";
+import * as TestClock from "effect/testing/TestClock";
 import * as SqlClient from "effect/sql/SqlClient";
 
 import * as Orchestrator from "../../orchestration-v2/Orchestrator.ts";
@@ -117,6 +122,8 @@ const workTask = (overrides: Partial<WorkTask> = {}): WorkTask => ({
 const shells = new Map<string, OrchestrationV2ThreadShell>();
 const commands: Array<OrchestrationV2ServerCommand> = [];
 const created: Array<WorkTaskWorkspace.WorkTaskCreateThreadOptions> = [];
+const reads: Array<string> = [];
+let events: Queue.Queue<OrchestrationV2DomainEvent> | null = null;
 
 const put = (value: OrchestrationV2ThreadShell) => shells.set(value.id, value);
 const patch = (id: string, overrides: Partial<OrchestrationV2ThreadShell>) =>
@@ -149,10 +156,11 @@ const apply = (command: OrchestrationV2ServerCommand) => {
       conflicting: false,
       wakes: 0,
     };
-    const { watch: previous, ...rest } = base;
+    const { watch: previous, endedWatch, ...rest } = base;
+    const resumed = command.resumeRemarksFromEndedWatch && endedWatch;
     const next = command.watching
-      ? { ...rest, watch }
-      : { ...rest, ...(previous && { endedWatch: previous }) };
+      ? { ...rest, watch: previous ?? { ...watch, ...(resumed && { wakes: endedWatch.wakes }) } }
+      : { ...rest, ...((previous ?? endedWatch) && { endedWatch: previous ?? endedWatch }) };
     patch(command.threadId, {
       pullRequests: [
         ...(target.pullRequests ?? []).filter((link) => link.number !== command.number),
@@ -173,7 +181,11 @@ const layerStore = WorkTaskStore.layer.pipe(
 
 const layerFakes = Layer.mergeAll(
   Layer.mock(ProjectionStore.ProjectionStoreV2)({
-    getThreadShell: (threadId) => Effect.succeed(shells.get(threadId) ?? null),
+    getThreadShell: (threadId) =>
+      Effect.sync(() => {
+        reads.push(threadId);
+        return shells.get(threadId) ?? null;
+      }),
     listActiveSubagentThreadIds: () =>
       Effect.succeed(
         [...shells.values()]
@@ -182,6 +194,9 @@ const layerFakes = Layer.mergeAll(
       ),
   }),
   Layer.mock(Orchestrator.OrchestratorV2)({
+    streamDomainEvents: Stream.unwrap(
+      Effect.sync(() => (events === null ? Stream.empty : Stream.fromQueue(events))),
+    ),
     dispatch: (command) =>
       Effect.sync(() => {
         if ("threadId" in command && command.threadId === "explode") throw new Error("boom");
@@ -218,6 +233,7 @@ const setup = Effect.fn("setup")(function* (task: Partial<WorkTask> = {}) {
   shells.clear();
   commands.length = 0;
   created.length = 0;
+  reads.length = 0;
   const sql = yield* SqlClient.SqlClient;
   yield* sql`DELETE FROM merge_thread_links`;
   yield* sql`DELETE FROM projection_tasks`;
@@ -229,7 +245,7 @@ const setup = Effect.fn("setup")(function* (task: Partial<WorkTask> = {}) {
 const watches = () => commands.filter((command) => command.type === "thread.pull-request.watch");
 
 it.layer(layer)("WorkTaskReactor", (it) => {
-  it.effect("links a task thread's branch PR once", () =>
+  it.effect("links a task thread's branch PR once, and a user unlink sticks", () =>
     Effect.gen(function* () {
       const store = yield* setup();
       const branchPullRequest = {
@@ -244,6 +260,9 @@ it.layer(layer)("WorkTaskReactor", (it) => {
       yield* store.link(ThreadId.make("other-branch"), TASK, "user");
 
       yield* sweep;
+      yield* sweep;
+      // The user unlinks it: that sticks, across a restart too.
+      patch("thread-1", { pullRequests: [] });
       yield* sweep;
 
       const links = commands.filter((command) => command.type === "thread.pull-request.link");
@@ -276,9 +295,14 @@ it.layer(layer)("WorkTaskReactor", (it) => {
       yield* sweep;
       yield* sweep;
 
-      // No initial message: only the task, title and origin.
+      // No initial message; a fixed commandId makes the launch replayable.
       assert.deepEqual(created, [
-        { taskId: TASK, title: "Review feedback", origin: "review-feedback" },
+        {
+          taskId: TASK,
+          title: "Review feedback",
+          origin: "review-feedback",
+          commandId: CommandId.make(`merge:work-task-review:${TASK}`),
+        },
       ]);
       assert.deepEqual(
         (yield* store.links()).filter((link) => link.origin === "review-feedback"),
@@ -290,8 +314,9 @@ it.layer(layer)("WorkTaskReactor", (it) => {
         threadId: ThreadId.make("review-1"),
         number: 7,
         watching: true,
-        resumeRemarksFromEndedWatch: true,
       });
+      // The first watch is plain: it starts a new baseline.
+      assert.isUndefined(watch?.resumeRemarksFromEndedWatch);
     }),
   );
 
@@ -360,7 +385,10 @@ it.layer(layer)("WorkTaskReactor", (it) => {
       yield* sweep;
       assert.isTrue(watching());
 
-      const resumed = watches().filter((command) => command.watching);
+      // Only resumes from a hold carry the flag; the first watch does not.
+      const [first, ...resumed] = watches().filter((command) => command.watching);
+      assert.isUndefined(first?.resumeRemarksFromEndedWatch);
+      assert.lengthOf(resumed, 4);
       assert.isTrue(resumed.every((command) => command.resumeRemarksFromEndedWatch === true));
     }),
   );
@@ -381,6 +409,71 @@ it.layer(layer)("WorkTaskReactor", (it) => {
         [true, false],
       );
       assert.equal(created.length, 1);
+    }),
+  );
+
+  it.effect("respects an agent's unwatch until auto-handle is toggled, then watches plainly", () =>
+    Effect.gen(function* () {
+      const store = yield* setup({ autoHandleReviewFeedback: true });
+      put(shell("thread-1", { pullRequests: [prLink("open")] }));
+      yield* store.link(ThreadId.make("thread-1"), TASK, "user");
+      yield* sweep;
+      // The agent hands back with unwatch_pull_request.
+      apply({
+        type: "thread.pull-request.watch",
+        commandId: CommandId.make("agent-unwatch"),
+        threadId: ThreadId.make("review-1"),
+        host: "github.com",
+        repository: "acme/app",
+        number: 7,
+        watching: false,
+      });
+      yield* sweep;
+      yield* sweep;
+      assert.deepEqual(
+        watches().map((command) => command.watching),
+        [true],
+      );
+
+      yield* store.update(TASK, { autoHandleReviewFeedback: false });
+      yield* sweep;
+      yield* store.update(TASK, { autoHandleReviewFeedback: true });
+      yield* sweep;
+      assert.deepEqual(
+        watches().map((command) => [command.watching, command.resumeRemarksFromEndedWatch]),
+        [
+          [true, undefined],
+          [true, undefined],
+        ],
+      );
+    }),
+  );
+
+  it.effect("a hold never revives a watch at the comment-only wake limit", () =>
+    Effect.gen(function* () {
+      const store = yield* setup({ autoHandleReviewFeedback: true });
+      put(shell("thread-1", { pullRequests: [prLink("open")] }));
+      put(shell("thread-2"));
+      yield* store.link(ThreadId.make("thread-1"), TASK, "user");
+      yield* store.link(ThreadId.make("thread-2"), TASK, "user");
+      yield* sweep;
+      patch("thread-2", { status: "running" });
+      yield* sweep;
+      // The ended watch is at the limit.
+      const review = shells.get("review-1")!;
+      patch("review-1", {
+        pullRequests: review.pullRequests!.map((link) =>
+          link.endedWatch ? { ...link, endedWatch: { ...link.endedWatch, wakes: 10 } } : link,
+        ),
+      });
+      put(shell("thread-2"));
+      yield* sweep;
+      yield* sweep;
+
+      assert.deepEqual(
+        watches().map((command) => command.watching),
+        [true, false],
+      );
     }),
   );
 
@@ -427,5 +520,55 @@ it.layer(layer)("WorkTaskReactor", (it) => {
         "2026-10-03T00:00:00.000Z",
       );
     }),
+  );
+
+  it.effect("events: only task threads wake it, and archived tasks are read on unarchive", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const store = yield* setup({ archivedAt: NOW });
+        yield* store.insert(workTask({ id: WorkTaskId.make("task-2") }));
+        put(shell("thread-2"));
+        put(shell("revived"));
+        yield* store.link(ThreadId.make("thread-2"), WorkTaskId.make("task-2"), "user");
+        events = yield* Queue.unbounded<OrchestrationV2DomainEvent>();
+        const queue = events;
+        const emit = (type: string, threadId: string) =>
+          Queue.offer(queue, { type, threadId } as unknown as OrchestrationV2DomainEvent);
+        const settle = Effect.gen(function* () {
+          for (let step = 0; step < 5; step += 1) {
+            yield* Effect.yieldNow;
+            yield* TestClock.adjust("1 second");
+          }
+        });
+        const reactor = yield* WorkTaskReactor.make;
+        yield* reactor.start();
+        yield* settle;
+        // The startup timer pass read everything; later passes are event-driven.
+        yield* store.link(ThreadId.make("revived"), TASK, "user");
+        yield* settle;
+        reads.length = 0;
+
+        yield* emit("run.updated", "stranger");
+        yield* settle;
+        assert.deepEqual(reads, [], "an unrelated thread does not wake the reactor");
+
+        yield* emit("run.updated", "thread-2");
+        yield* settle;
+        assert.include(reads, "thread-2");
+        assert.notInclude(reads, "revived", "archived tasks wait for an unarchive");
+        assert.include(
+          (yield* store.links()).map((link) => link.threadId),
+          ThreadId.make("revived"),
+        );
+
+        yield* emit("thread.unarchived", "revived");
+        yield* settle;
+        assert.notInclude(
+          (yield* store.links()).map((link) => link.threadId),
+          ThreadId.make("revived"),
+        );
+        events = null;
+      }),
+    ),
   );
 });
