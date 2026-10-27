@@ -72,7 +72,7 @@
   {
     "id": "command-palette",
     "file": "apps/web/src/components/CommandPalette.tsx",
-    "purpose": "Append fork command palette actions (Open Git graph)"
+    "purpose": "Append fork command palette actions (Work Tasks, Git graph, work items); passes navigate"
   },
   {
     "id": "settings",

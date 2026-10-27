@@ -1,18 +1,42 @@
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
-import { GitGraphIcon, ListTodoIcon } from "lucide-react";
+import type { useNavigate } from "@tanstack/react-router";
+import { GitGraphIcon, ListTodoIcon, SquareKanbanIcon, SquarePlusIcon } from "lucide-react";
 
 import { ITEM_ICON_CLASS, type CommandPaletteActionItem } from "~/components/CommandPalette.logic";
 import { GIT_GRAPH_SURFACE_ID, openMergeSurface } from "./gitGraph/surface";
 import { WORK_ITEMS_SURFACE_ID } from "./workItems/state";
+import { openNewWorkTaskDialog } from "./workTasks/WorkTaskDialogs";
 
 /** Fork actions for the command palette, appended at the `command-palette` seam. */
 export function mergeCommandPaletteActions(
   thread: { readonly environmentId: EnvironmentId; readonly id: ThreadId } | null | undefined,
+  navigate: ReturnType<typeof useNavigate>,
 ): CommandPaletteActionItem[] {
-  if (!thread) return [];
+  const workTaskActions: CommandPaletteActionItem[] = [
+    {
+      kind: "action",
+      value: "action:new-work-task",
+      searchTerms: ["new work task", "task", "branch", "worktree"],
+      title: "New Work Task…",
+      icon: <SquarePlusIcon className={ITEM_ICON_CLASS} />,
+      run: async () => openNewWorkTaskDialog(),
+    },
+    {
+      kind: "action",
+      value: "action:open-work-taskboard",
+      searchTerms: ["work taskboard", "work tasks", "board", "kanban"],
+      title: "Open Work Taskboard",
+      icon: <SquareKanbanIcon className={ITEM_ICON_CLASS} />,
+      run: async () => {
+        await navigate({ to: "/work-tasks" });
+      },
+    },
+  ];
+  if (!thread) return workTaskActions;
   const threadRef = scopeThreadRef(thread.environmentId, thread.id);
   return [
+    ...workTaskActions,
     {
       kind: "action",
       value: "action:open-git-graph",
