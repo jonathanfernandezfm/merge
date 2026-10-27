@@ -11,9 +11,12 @@ import {
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
 import * as PubSub from "effect/PubSub";
 import * as Schema from "effect/Schema";
+import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import * as SqlClient from "effect/sql/SqlClient";
 
@@ -31,12 +34,12 @@ const WorkTaskLinkDbRow = Schema.Struct({
   origin: Schema.NullOr(WorkTaskThreadOrigin),
 });
 
+/** `workspace` is written only through `updateWorkspace`, which serializes its read-modify-write. */
 export type WorkTaskPatch = Partial<
   Pick<
     WorkTask,
     | "title"
     | "description"
-    | "workspace"
     | "autoHandleReviewFeedback"
     | "waitingForUserReason"
     | "mergedAt"
@@ -48,20 +51,30 @@ const failed = (message: string) => (cause: unknown) =>
   new WorkTaskOperationError({ reason: "failed", message, cause });
 
 /**
- * True while a Work Task that is neither archived nor deleted owns the worktree at `path`.
- * Exact path match. Standalone so the `storage-cleanup` seam needs only `SqlClient`.
+ * True while a Work Task that is neither archived nor deleted owns the worktree at `worktreePath`.
+ * Compares canonical real paths, so `/var` vs `/private/var` or a trailing slash never let
+ * cleanup delete an active task's worktree. Takes its services so the `storage-cleanup` seam
+ * stays one call.
  */
 export const mergeWorkTaskOwnsWorktree = Effect.fn("WorkTaskStore.ownsWorktree")(function* (
-  path: string,
+  worktreePath: string,
+  services: {
+    readonly sql: SqlClient.SqlClient;
+    readonly fs: FileSystem.FileSystem;
+    readonly path: Path.Path;
+  },
 ) {
-  const sql = yield* SqlClient.SqlClient;
-  const rows = yield* sql`
-    SELECT 1 FROM projection_tasks
+  const { sql, fs, path } = services;
+  const rows = yield* sql<{ readonly path: string }>`
+    SELECT json_extract(workspace_json, '$.path') AS "path" FROM projection_tasks
     WHERE archived_at IS NULL AND deleted_at IS NULL
-      AND json_extract(workspace_json, '$.path') = ${path}
-    LIMIT 1
+      AND json_extract(workspace_json, '$.path') IS NOT NULL
   `;
-  return rows.length > 0;
+  const canonical = (target: string) =>
+    fs.realPath(path.resolve(target)).pipe(Effect.orElseSucceed(() => path.resolve(target)));
+  const wanted = yield* canonical(worktreePath);
+  for (const row of rows) if ((yield* canonical(row.path)) === wanted) return true;
+  return false;
 });
 
 export class WorkTaskStore extends Context.Service<
@@ -75,6 +88,11 @@ export class WorkTaskStore extends Context.Service<
     readonly update: (
       id: WorkTaskId,
       patch: WorkTaskPatch,
+    ) => Effect.Effect<WorkTask, WorkTaskOperationError>;
+    /** Read-modify-write of `workspace_json`, serialized so concurrent writers never drop each other's change. */
+    readonly updateWorkspace: (
+      id: WorkTaskId,
+      change: (workspace: WorkTaskWorkspace) => WorkTaskWorkspace,
     ) => Effect.Effect<WorkTask, WorkTaskOperationError>;
     /** Thread links that belong to a Work Task. */
     readonly links: () => Effect.Effect<ReadonlyArray<WorkTaskLink>, WorkTaskOperationError>;
@@ -94,6 +112,9 @@ export class WorkTaskStore extends Context.Service<
 /** @public */
 export const make = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const workspaceLock = yield* Semaphore.make(1);
   const encodeRow = Schema.encodeEffect(WorkTaskDbRow);
   const changed = yield* PubSub.sliding<void>(1);
   const notify = PubSub.publish(changed, undefined).pipe(Effect.asVoid);
@@ -182,7 +203,7 @@ export const make = Effect.gen(function* () {
   /** Writes only the patched columns, so concurrent patches to different fields all survive. */
   const update = Effect.fn("WorkTaskStore.update")(function* (
     id: WorkTaskId,
-    patch: WorkTaskPatch,
+    patch: WorkTaskPatch & { readonly workspace?: WorkTaskWorkspace },
   ) {
     const columns = {
       ...(patch.title === undefined ? {} : { title: patch.title }),
@@ -219,6 +240,23 @@ export const make = Effect.gen(function* () {
     return next;
   });
 
+  const updateWorkspace = (
+    id: WorkTaskId,
+    change: (workspace: WorkTaskWorkspace) => WorkTaskWorkspace,
+  ) =>
+    workspaceLock.withPermit(
+      Effect.gen(function* () {
+        const task = yield* get(id);
+        if (task === null) {
+          return yield* new WorkTaskOperationError({
+            reason: "not-found",
+            message: "Work Task not found.",
+          });
+        }
+        return yield* update(id, { workspace: change(task.workspace) });
+      }),
+    );
+
   const links = () =>
     selectLinks(undefined).pipe(Effect.mapError(failed("Could not read Work Task links.")));
 
@@ -246,9 +284,8 @@ export const make = Effect.gen(function* () {
     yield* notify;
   });
 
-  const ownsWorktree = (path: string) =>
-    mergeWorkTaskOwnsWorktree(path).pipe(
-      Effect.provideService(SqlClient.SqlClient, sql),
+  const ownsWorktree = (worktreePath: string) =>
+    mergeWorkTaskOwnsWorktree(worktreePath, { sql, fs, path }).pipe(
       Effect.mapError(failed("Could not read Work Task worktrees.")),
     );
 
@@ -264,6 +301,7 @@ export const make = Effect.gen(function* () {
     get,
     insert,
     update,
+    updateWorkspace,
     links,
     link,
     unlink,

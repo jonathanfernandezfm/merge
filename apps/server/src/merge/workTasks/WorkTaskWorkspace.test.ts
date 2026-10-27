@@ -11,17 +11,26 @@ import {
   ProviderInstanceId,
   ThreadId,
   WorkTaskId,
+  type OrchestrationV2ServerCommand,
   type OrchestrationV2ThreadShell,
+  type Project,
   type WorkTask,
 } from "@t3tools/contracts";
 import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 
 import * as ServerConfig from "../../config.ts";
+import * as GitWorkflow from "../../git/GitWorkflowService.ts";
+import * as Orchestrator from "../../orchestration-v2/Orchestrator.ts";
 import * as ProjectionStore from "../../orchestration-v2/ProjectionStore.ts";
+import * as ThreadLaunch from "../../orchestration-v2/ThreadLaunchService.ts";
 import { runMigrations } from "../../persistence/Migrations.ts";
+import * as ProjectService from "../../project/ProjectService.ts";
+import * as ServerSettings from "../../serverSettings.ts";
+import * as TerminalManager from "../../terminal/Manager.ts";
 import * as GitVcsDriver from "../../vcs/GitVcsDriver.ts";
 import * as WorkTaskStore from "./WorkTaskStore.ts";
 import * as WorkTaskWorkspace from "./WorkTaskWorkspace.ts";
@@ -109,6 +118,34 @@ const pushedClone = () => {
 };
 
 const shells = new Map<string, OrchestrationV2ThreadShell>();
+const launches: Array<ThreadLaunch.ThreadLaunchInput> = [];
+const commands: Array<OrchestrationV2ServerCommand> = [];
+const PROJECT_ID = ProjectId.make("project-1");
+let projectRoot = "/nowhere";
+let worktreesDirectory = "/nowhere";
+
+const project = (): Project => ({
+  id: PROJECT_ID,
+  title: "App",
+  workspaceRoot: projectRoot,
+  defaultModelSelection: null,
+  scripts: [],
+  createdAt: NOW,
+  updatedAt: NOW,
+  deletedAt: null,
+});
+
+const layerGitWorkflow = Layer.effect(
+  GitWorkflow.GitWorkflowService,
+  Effect.gen(function* () {
+    const git = yield* GitVcsDriver.GitVcsDriver;
+    const workflow: Partial<GitWorkflow.GitWorkflowService["Service"]> = {
+      createWorktree: (input, options) =>
+        git.createWorktree(input, { ...options, worktreesDirectory }),
+    };
+    return workflow as GitWorkflow.GitWorkflowService["Service"];
+  }),
+);
 
 const layer = WorkTaskWorkspace.layer.pipe(
   Layer.provideMerge(WorkTaskStore.layer),
@@ -117,6 +154,34 @@ const layer = WorkTaskWorkspace.layer.pipe(
       Layer.provideMerge(NodeSqliteClient.layer({ filename: ":memory:" })),
     ),
   ),
+  Layer.provide(layerGitWorkflow),
+  Layer.provide(
+    Layer.mock(ProjectService.ProjectService)({
+      getById: (id) => Effect.succeed(id === PROJECT_ID ? Option.some(project()) : Option.none()),
+    }),
+  ),
+  Layer.provide(
+    Layer.mock(ThreadLaunch.ThreadLaunchService)({
+      launch: (input) =>
+        Effect.sync(() => {
+          launches.push(input);
+          const threadId = ThreadId.make(`thread-${launches.length}`);
+          shells.set(threadId, shell(threadId));
+          return { threadId, projection: undefined as never, resumed: false };
+        }),
+    }),
+  ),
+  Layer.provide(
+    Layer.mock(Orchestrator.OrchestratorV2)({
+      dispatch: (command) =>
+        Effect.sync(() => {
+          commands.push(command);
+          return { sequence: commands.length, storedEvents: [] };
+        }),
+    }),
+  ),
+  Layer.provide(Layer.mock(TerminalManager.TerminalManager)({ close: () => Effect.void })),
+  Layer.provide(ServerSettings.ServerSettingsService.layerTest({})),
   Layer.provide(
     Layer.mock(ProjectionStore.ProjectionStoreV2)({
       getThreadShell: (threadId) => Effect.succeed(shells.get(threadId) ?? null),
@@ -128,13 +193,42 @@ const layer = WorkTaskWorkspace.layer.pipe(
         ),
     }),
   ),
-  Layer.provide(
+  Layer.provideMerge(
     GitVcsDriver.layer.pipe(
       Layer.provide(ServerConfig.layerTest(process.cwd(), { prefix: "t3-work-tasks-test-" })),
     ),
   ),
   Layer.provideMerge(NodeServices.layer),
 );
+
+/**
+ * A bare remote with `main` and the remote-only `feature/widgets`, and a clone on `main`
+ * that is the project root. Worktrees go to `<root>/worktrees`.
+ */
+const projectRepo = () => {
+  const { root, clone, run } = pushedClone();
+  run("checkout", "-q", "-b", "main");
+  run("push", "-q", "-u", "origin", "main");
+  run("branch", "-q", "-D", "feature/widgets");
+  projectRoot = clone;
+  worktreesDirectory = NodePath.join(root, "worktrees");
+  const git = (cwd: string, ...args: string[]) =>
+    NodeChildProcess.execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8" }).trim();
+  return { root, clone, run, git };
+};
+
+const reset = () => {
+  shells.clear();
+  launches.length = 0;
+  commands.length = 0;
+};
+
+const createInput = (overrides: Record<string, unknown> = {}) => ({
+  projectId: PROJECT_ID,
+  title: "Widgets",
+  branch: "feature/widgets",
+  ...overrides,
+});
 
 it.effect("archiveCheck reports each blocker", () =>
   Effect.gen(function* () {
@@ -225,6 +319,221 @@ it.effect("archiveCheck reports each blocker", () =>
       }),
     );
     assert.deepStrictEqual(yield* prCheck(), ["pull-request-open", "agent-running"]);
+    NodeFS.rmSync(repo.root, { recursive: true, force: true });
+  }).pipe(Effect.provide(layer)),
+);
+
+it.effect("create on a remote-only branch tracks origin/<b> and creates no new branch", () =>
+  Effect.gen(function* () {
+    reset();
+    const store = yield* WorkTaskStore.WorkTaskStore;
+    const workspace = yield* WorkTaskWorkspace.WorkTaskWorkspace;
+    const repo = projectRepo();
+
+    const missing = yield* Effect.flip(workspace.create(createInput({ branch: "nope" })));
+    assert.strictEqual(missing.reason, "remote-branch-missing");
+    assert.strictEqual(
+      (yield* Effect.flip(workspace.create(createInput({ branch: "-x" })))).reason,
+      "invalid-branch",
+    );
+
+    const { taskId, threadId } = yield* workspace.create(createInput());
+    const task = (yield* store.get(taskId))!;
+    const path = task.workspace.path!;
+    assert.strictEqual(task.workspace.setup.status, "ready");
+    assert.strictEqual(task.workspace.baseBranch, "main");
+    assert.strictEqual(repo.git(path, "rev-parse", "--abbrev-ref", "HEAD"), "feature/widgets");
+    assert.strictEqual(
+      repo.git(path, "rev-parse", "--abbrev-ref", "@{upstream}"),
+      "origin/feature/widgets",
+    );
+    assert.deepStrictEqual(
+      repo.git(repo.clone, "branch", "--format=%(refname:short)").split("\n"),
+      ["feature/widgets", "main"],
+    );
+    assert.deepStrictEqual(
+      launches.map((launch) => launch.workspaceStrategy),
+      [{ type: "existing_worktree", worktreePath: path, branch: "feature/widgets" }],
+    );
+    assert.deepStrictEqual(yield* store.links(), [{ threadId, taskId, origin: "user" }]);
+    assert.isTrue(yield* store.ownsWorktree(path));
+
+    // The branch belongs to this task now.
+    assert.strictEqual((yield* Effect.flip(workspace.create(createInput()))).reason, "failed");
+    NodeFS.rmSync(repo.root, { recursive: true, force: true });
+  }).pipe(Effect.provide(layer)),
+);
+
+it.effect("raises branch-checked-out, then detaches that checkout and continues", () =>
+  Effect.gen(function* () {
+    reset();
+    const store = yield* WorkTaskStore.WorkTaskStore;
+    const workspace = yield* WorkTaskWorkspace.WorkTaskWorkspace;
+    const repo = projectRepo();
+    const other = NodePath.join(repo.root, "other");
+    repo.run("worktree", "add", "-q", other, "-b", "feature/held", "origin/feature/widgets");
+
+    const held = yield* Effect.flip(workspace.create(createInput({ branch: "feature/held" })));
+    assert.strictEqual(held.reason, "branch-checked-out");
+    assert.strictEqual(held.checkoutPath, other);
+    assert.deepStrictEqual(yield* store.list(), []);
+
+    const { taskId } = yield* workspace.create(
+      createInput({ branch: "feature/held", detachCheckoutAt: other }),
+    );
+    assert.strictEqual(repo.git(other, "rev-parse", "--abbrev-ref", "HEAD"), "HEAD");
+    const path = (yield* store.get(taskId))!.workspace.path!;
+    assert.notStrictEqual(path, other);
+    assert.strictEqual(repo.git(path, "rev-parse", "--abbrev-ref", "HEAD"), "feature/held");
+    NodeFS.rmSync(repo.root, { recursive: true, force: true });
+  }).pipe(Effect.provide(layer)),
+);
+
+it.effect("takes over an existing worktree with its uncommitted changes", () =>
+  Effect.gen(function* () {
+    reset();
+    const store = yield* WorkTaskStore.WorkTaskStore;
+    const workspace = yield* WorkTaskWorkspace.WorkTaskWorkspace;
+    const repo = projectRepo();
+    const mine = NodePath.join(repo.root, "mine");
+    repo.run("worktree", "add", "-q", mine, "-b", "feature/mine", "origin/feature/widgets");
+    NodeFS.writeFileSync(NodePath.join(mine, "wip.txt"), "draft");
+
+    const notMine = yield* Effect.flip(
+      workspace.create(createInput({ branch: "feature/mine", worktreePath: repo.clone })),
+    );
+    assert.strictEqual(notMine.reason, "failed");
+
+    const { taskId } = yield* workspace.create(
+      createInput({ branch: "feature/mine", worktreePath: `${mine}/` }),
+    );
+    assert.strictEqual((yield* store.get(taskId))!.workspace.path, mine);
+    assert.strictEqual(NodeFS.readFileSync(NodePath.join(mine, "wip.txt"), "utf8"), "draft");
+    assert.deepStrictEqual(launches.at(-1)?.workspaceStrategy, {
+      type: "existing_worktree",
+      worktreePath: mine,
+      branch: "feature/mine",
+    });
+    NodeFS.rmSync(repo.root, { recursive: true, force: true });
+  }).pipe(Effect.provide(layer)),
+);
+
+it.effect("a failed setup retries from the failed step and then opens the first thread", () =>
+  Effect.gen(function* () {
+    reset();
+    const store = yield* WorkTaskStore.WorkTaskStore;
+    const workspace = yield* WorkTaskWorkspace.WorkTaskWorkspace;
+    const repo = projectRepo();
+    NodeFS.writeFileSync(
+      NodePath.join(repo.clone, "t3.json"),
+      JSON.stringify({ workspace: { copy: [{ from: ".env", required: true }] } }),
+    );
+
+    assert.strictEqual((yield* Effect.flip(workspace.create(createInput()))).reason, "failed");
+    const [failed] = yield* store.list();
+    assert.strictEqual(failed?.workspace.setup.status, "failed");
+    assert.deepStrictEqual(
+      failed?.workspace.setup.steps.map((step) => [step.id, step.status]),
+      [
+        ["fetch", "done"],
+        ["worktree", "done"],
+        ["copy:.env", "failed"],
+      ],
+    );
+    assert.deepStrictEqual(launches, []);
+    assert.strictEqual(
+      (yield* Effect.flip(workspace.createThread({ taskId: failed!.id }))).reason,
+      "failed",
+    );
+
+    NodeFS.writeFileSync(NodePath.join(repo.clone, ".env"), "SECRET=1");
+    yield* workspace.retrySetup(failed!.id);
+    const ready = (yield* store.get(failed!.id))!;
+    assert.strictEqual(ready.workspace.setup.status, "ready");
+    // Finished steps keep their result; only the copy ran again.
+    assert.deepStrictEqual(
+      ready.workspace.setup.steps.slice(0, 2),
+      failed!.workspace.setup.steps.slice(0, 2),
+    );
+    assert.strictEqual(
+      NodeFS.readFileSync(NodePath.join(ready.workspace.path!, ".env"), "utf8"),
+      "SECRET=1",
+    );
+    assert.strictEqual(launches.length, 1);
+    assert.strictEqual((yield* store.links()).length, 1);
+    assert.strictEqual((yield* Effect.flip(workspace.retrySetup(failed!.id))).reason, "failed");
+    NodeFS.rmSync(repo.root, { recursive: true, force: true });
+  }).pipe(Effect.provide(layer)),
+);
+
+it.effect("createThread launches in the task worktree and links the thread", () =>
+  Effect.gen(function* () {
+    reset();
+    const store = yield* WorkTaskStore.WorkTaskStore;
+    const workspace = yield* WorkTaskWorkspace.WorkTaskWorkspace;
+    const repo = projectRepo();
+    const { taskId } = yield* workspace.create(createInput());
+    const path = (yield* store.get(taskId))!.workspace.path!;
+
+    const { threadId } = yield* workspace.createThread({
+      taskId,
+      title: "Review feedback",
+      origin: "review-feedback",
+    });
+    const launch = launches.at(-1)!;
+    assert.strictEqual(launch.title, "Review feedback");
+    assert.strictEqual(launch.projectId, PROJECT_ID);
+    assert.deepStrictEqual(launch.workspaceStrategy, {
+      type: "existing_worktree",
+      worktreePath: path,
+      branch: "feature/widgets",
+    });
+    assert.deepStrictEqual(
+      (yield* store.links()).find((link) => link.threadId === threadId),
+      { threadId, taskId, origin: "review-feedback" },
+    );
+
+    yield* workspace.setWaiting({ taskId, reason: "Pick a base" });
+    yield* workspace.setAutoHandle({ taskId, enabled: true });
+    const task = (yield* store.get(taskId))!;
+    assert.strictEqual(task.waitingForUserReason, "Pick a base");
+    assert.isTrue(task.autoHandleReviewFeedback);
+    yield* workspace.setWaiting({ taskId, reason: null });
+    assert.isNull((yield* store.get(taskId))!.waitingForUserReason);
+    NodeFS.rmSync(repo.root, { recursive: true, force: true });
+  }).pipe(Effect.provide(layer)),
+);
+
+it.effect("archive stops and archives the threads and removes the worktree", () =>
+  Effect.gen(function* () {
+    reset();
+    const store = yield* WorkTaskStore.WorkTaskStore;
+    const workspace = yield* WorkTaskWorkspace.WorkTaskWorkspace;
+    const repo = projectRepo();
+    const { taskId, threadId } = yield* workspace.create(createInput());
+    const path = (yield* store.get(taskId))!.workspace.path!;
+    NodeFS.writeFileSync(NodePath.join(path, "dirty.txt"), "x");
+
+    const blocked = yield* Effect.flip(workspace.archive({ taskId }));
+    assert.strictEqual(blocked.reason, "archive-blocked");
+    assert.deepStrictEqual(blocked.blockers, ["uncommitted-changes"]);
+    assert.isTrue(NodeFS.existsSync(path));
+
+    yield* workspace.archive({ taskId, force: true });
+    assert.isFalse(NodeFS.existsSync(path));
+    assert.deepStrictEqual(
+      commands.map((command) => [command.type, "threadId" in command ? command.threadId : null]),
+      [
+        ["thread.stop", threadId],
+        ["thread.archive", threadId],
+      ],
+    );
+    assert.isNotNull((yield* store.get(taskId))!.archivedAt);
+    assert.isFalse(yield* store.ownsWorktree(path));
+    // The branch stays; only the worktree is gone.
+    assert.include(repo.git(repo.clone, "branch", "--format=%(refname:short)"), "feature/widgets");
+    assert.strictEqual((yield* Effect.flip(workspace.createThread({ taskId }))).reason, "archived");
+    yield* workspace.archive({ taskId });
     NodeFS.rmSync(repo.root, { recursive: true, force: true });
   }).pipe(Effect.provide(layer)),
 );
