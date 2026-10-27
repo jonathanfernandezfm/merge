@@ -1,5 +1,10 @@
 # Release Checklist
 
+<!-- merge-seam: release-doc-fork -->
+
+> [!NOTE]
+> This runbook describes upstream T3 Code releases. Merge releases only from the GitHub-hosted `release.yml` (no relay, npm, AUR, Vercel, Discord or nightly schedule) to GitHub `jonathanfernandezfm/merge`. See [fork/SYNC.md](../../fork/SYNC.md) for what the fork keeps.
+
 > For maintainers. Using T3 Code? See [docs/user](../user/).
 
 This document covers the unified release workflow for stable and nightly desktop releases.
