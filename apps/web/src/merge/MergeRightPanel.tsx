@@ -46,10 +46,3 @@ export function MergeRightPanel(props: {
   }
   return null;
 }
-
-/** Tab label of a `{ kind: "merge" }` right-panel surface. */
-export function mergeRightPanelLabel(id: string): string {
-  if (id === GIT_GRAPH_SURFACE_ID) return "Git graph";
-  if (id === WORK_ITEMS_SURFACE_ID) return "Work items";
-  return id;
-}

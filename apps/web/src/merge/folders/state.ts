@@ -166,14 +166,6 @@ export function useKeepFoldersLive(): void {
   useAtomValue(filedAtom);
 }
 
-export function readFolder(environmentId: EnvironmentId, folderId: string) {
-  return (
-    appAtomRegistry
-      .get(foldersAtom)
-      .find((folder) => folder.environmentId === environmentId && folder.id === folderId) ?? null
-  );
-}
-
 /** The thread menu's folder entries; none where the server has no folders. */
 export function readFolderMenuItems(
   threadRef: ScopedThreadRef,

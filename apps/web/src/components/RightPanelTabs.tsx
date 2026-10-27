@@ -51,7 +51,7 @@ import {
 import { isElectron } from "~/env";
 import type { DesktopPreviewOverlay } from "~/previewStateStore";
 import type { RightPanelSurface } from "~/rightPanelStore";
-import { mergeRightPanelLabel } from "~/merge/MergeRightPanel"; // merge-seam: right-panel
+import { mergeRightPanelLabel } from "~/merge/rightPanelLabel"; // merge-seam: right-panel
 import { cn } from "~/lib/utils";
 import { resolveShortcutCommand, type ShortcutMatchContext } from "~/keybindings";
 import { readLocalApi } from "~/localApi";

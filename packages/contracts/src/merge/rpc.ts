@@ -81,47 +81,47 @@ export const MERGE_WS_METHODS = {
   foldersAssign: "merge.folders.assign",
 } as const;
 
-export const MergePingRpc = Rpc.make(MERGE_WS_METHODS.ping, {
+const MergePingRpc = Rpc.make(MERGE_WS_METHODS.ping, {
   payload: Schema.Struct({}),
   success: Schema.Struct({ pong: Schema.Literal(true) }),
   error: EnvironmentAuthorizationError,
 });
 
-export const MergeGitGraphLogRpc = Rpc.make(MERGE_WS_METHODS.gitGraphLog, {
+const MergeGitGraphLogRpc = Rpc.make(MERGE_WS_METHODS.gitGraphLog, {
   payload: GitGraphLogInput,
   success: GitGraphLogResult,
   error: GitGraphError,
 });
 
-export const MergeGitGraphCommitDiffRpc = Rpc.make(MERGE_WS_METHODS.gitGraphCommitDiff, {
+const MergeGitGraphCommitDiffRpc = Rpc.make(MERGE_WS_METHODS.gitGraphCommitDiff, {
   payload: GitGraphCommitDiffInput,
   success: GitGraphCommitDiffResult,
   error: GitGraphError,
 });
 
-export const MergeWorkItemsBranchRpc = Rpc.make(MERGE_WS_METHODS.workItemsBranch, {
+const MergeWorkItemsBranchRpc = Rpc.make(MERGE_WS_METHODS.workItemsBranch, {
   payload: BranchWorkItemsInput,
   success: BranchWorkItems,
   error: WorkItemsError,
 });
 
-export const MergeWorkItemsLinkRpc = Rpc.make(MERGE_WS_METHODS.workItemsLink, {
+const MergeWorkItemsLinkRpc = Rpc.make(MERGE_WS_METHODS.workItemsLink, {
   payload: LinkBranchWorkItemInput,
   error: WorkItemsError,
 });
 
-export const MergeWorkItemsUpdateRpc = Rpc.make(MERGE_WS_METHODS.workItemsUpdate, {
+const MergeWorkItemsUpdateRpc = Rpc.make(MERGE_WS_METHODS.workItemsUpdate, {
   payload: UpdateWorkItemInput,
   error: WorkItemsError,
 });
 
-export const MergeWorkItemsCreateChildRpc = Rpc.make(MERGE_WS_METHODS.workItemsCreateChild, {
+const MergeWorkItemsCreateChildRpc = Rpc.make(MERGE_WS_METHODS.workItemsCreateChild, {
   payload: CreateChildWorkItemInput,
   success: CreateChildWorkItemResult,
   error: WorkItemsError,
 });
 
-export const MergePullRequestsRequeueExpiredChecksRpc = Rpc.make(
+const MergePullRequestsRequeueExpiredChecksRpc = Rpc.make(
   MERGE_WS_METHODS.pullRequestsRequeueExpiredChecks,
   {
     payload: RequeueExpiredChecksInput,
@@ -131,83 +131,83 @@ export const MergePullRequestsRequeueExpiredChecksRpc = Rpc.make(
 );
 
 /** Every Work Task and thread link, then again after each change. */
-export const MergeWorkTasksSubscribeRpc = Rpc.make(MERGE_WS_METHODS.workTasksSubscribe, {
+const MergeWorkTasksSubscribeRpc = Rpc.make(MERGE_WS_METHODS.workTasksSubscribe, {
   payload: Schema.Struct({}),
   success: WorkTasksSnapshot,
   error: WorkTasksError,
   stream: true,
 });
 
-export const MergeWorkTasksArchiveCheckRpc = Rpc.make(MERGE_WS_METHODS.workTasksArchiveCheck, {
+const MergeWorkTasksArchiveCheckRpc = Rpc.make(MERGE_WS_METHODS.workTasksArchiveCheck, {
   payload: WorkTaskIdInput,
   success: WorkTaskArchiveCheckResult,
   error: WorkTasksError,
 });
 
-export const MergeWorkTasksCreateRpc = Rpc.make(MERGE_WS_METHODS.workTasksCreate, {
+const MergeWorkTasksCreateRpc = Rpc.make(MERGE_WS_METHODS.workTasksCreate, {
   payload: WorkTaskCreateInput,
   success: WorkTaskCreateResult,
   error: WorkTasksError,
 });
 
-export const MergeWorkTasksRetrySetupRpc = Rpc.make(MERGE_WS_METHODS.workTasksRetrySetup, {
+const MergeWorkTasksRetrySetupRpc = Rpc.make(MERGE_WS_METHODS.workTasksRetrySetup, {
   payload: WorkTaskIdInput,
   error: WorkTasksError,
 });
 
-export const MergeWorkTasksCreateThreadRpc = Rpc.make(MERGE_WS_METHODS.workTasksCreateThread, {
+const MergeWorkTasksCreateThreadRpc = Rpc.make(MERGE_WS_METHODS.workTasksCreateThread, {
   payload: WorkTaskCreateThreadInput,
   success: WorkTaskCreateThreadResult,
   error: WorkTasksError,
 });
 
-export const MergeWorkTasksArchiveRpc = Rpc.make(MERGE_WS_METHODS.workTasksArchive, {
+const MergeWorkTasksArchiveRpc = Rpc.make(MERGE_WS_METHODS.workTasksArchive, {
   payload: WorkTaskArchiveInput,
   error: WorkTasksError,
 });
 
-export const MergeWorkTasksSetWaitingRpc = Rpc.make(MERGE_WS_METHODS.workTasksSetWaiting, {
+const MergeWorkTasksSetWaitingRpc = Rpc.make(MERGE_WS_METHODS.workTasksSetWaiting, {
   payload: WorkTaskSetWaitingInput,
   error: WorkTasksError,
 });
 
-export const MergeWorkTasksSetAutoHandleRpc = Rpc.make(MERGE_WS_METHODS.workTasksSetAutoHandle, {
+const MergeWorkTasksSetAutoHandleRpc = Rpc.make(MERGE_WS_METHODS.workTasksSetAutoHandle, {
   payload: WorkTaskSetAutoHandleInput,
   error: WorkTasksError,
 });
 
-export const MergeWorkTasksListBranchesRpc = Rpc.make(MERGE_WS_METHODS.workTasksListBranches, {
+const MergeWorkTasksListBranchesRpc = Rpc.make(MERGE_WS_METHODS.workTasksListBranches, {
   payload: WorkTaskListBranchesInput,
   success: VcsListRefsResult,
   error: WorkTasksError,
 });
 
 /** Every live folder and filed thread, then again after each change. */
-export const MergeFoldersSubscribeRpc = Rpc.make(MERGE_WS_METHODS.foldersSubscribe, {
+const MergeFoldersSubscribeRpc = Rpc.make(MERGE_WS_METHODS.foldersSubscribe, {
   payload: Schema.Struct({}),
   success: FoldersSnapshot,
   error: FoldersError,
   stream: true,
 });
 
-export const MergeFoldersCreateRpc = Rpc.make(MERGE_WS_METHODS.foldersCreate, {
+const MergeFoldersCreateRpc = Rpc.make(MERGE_WS_METHODS.foldersCreate, {
   payload: FolderCreateInput,
   success: FolderCreateResult,
   error: FoldersError,
 });
 
-export const MergeFoldersRenameRpc = Rpc.make(MERGE_WS_METHODS.foldersRename, {
+const MergeFoldersRenameRpc = Rpc.make(MERGE_WS_METHODS.foldersRename, {
   payload: FolderRenameInput,
   error: FoldersError,
 });
 
 /** Its threads move back to the thread list; none is deleted. */
-export const MergeFoldersDeleteRpc = Rpc.make(MERGE_WS_METHODS.foldersDelete, {
+const MergeFoldersDeleteRpc = Rpc.make(MERGE_WS_METHODS.foldersDelete, {
   payload: FolderIdInput,
   error: FoldersError,
 });
 
-export const MergeFoldersAssignRpc = Rpc.make(MERGE_WS_METHODS.foldersAssign, {
+const MergeFoldersAssignRpc = Rpc.make(MERGE_WS_METHODS.foldersAssign, {
   payload: FolderAssignInput,
   error: FoldersError,
 });

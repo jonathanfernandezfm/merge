@@ -22,7 +22,7 @@ export interface FolderView {
 
 export type FolderMenuId = `merge:folder:${string}`;
 
-export function folderKey(environmentId: EnvironmentId, folderId: FolderId): string {
+function folderKey(environmentId: EnvironmentId, folderId: FolderId): string {
   return `${environmentId}\u0000${folderId}`;
 }
 

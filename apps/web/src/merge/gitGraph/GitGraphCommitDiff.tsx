@@ -3,7 +3,7 @@ import type { EnvironmentId, ScopedThreadRef } from "@t3tools/contracts";
 import { ChevronDown, ChevronRight } from "lucide";
 import { FolderTreeIcon } from "lucide-react";
 import * as Schema from "effect/Schema";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useState } from "react";
 
 import { DiffStatLabel } from "~/components/chat/DiffStatLabel";
 import { DiffFilePathCopyButton } from "~/components/DiffFilePathCopyButton";
@@ -18,6 +18,7 @@ import { Toggle } from "~/components/ui/toggle";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { type DraftId } from "~/composerDraftStore";
 import { useLocalStorage } from "~/hooks/useLocalStorage";
+import { useStableCallback } from "~/hooks/useStableCallback";
 import { useTheme } from "~/hooks/useTheme";
 import { useClientSettings } from "~/hooks/useSettings";
 import { createGitDiffFileContentsLoader } from "~/lib/diffFileContents";
@@ -61,86 +62,69 @@ export function GitGraphCommitDiff(props: {
     }),
   );
   const result = query.data;
-  const renderablePatch = useMemo(
-    () =>
-      getRenderablePatch(result?.diff, `git-graph:${resolvedTheme}`, {
-        compactPartialHunkOffsets: true,
-      }),
-    [resolvedTheme, result?.diff],
-  );
-  const renderableFiles = useMemo(
-    () =>
-      (renderablePatch?.kind === "files" ? renderablePatch.files : []).toSorted((a, b) =>
-        resolveFileDiffPath(a).localeCompare(resolveFileDiffPath(b)),
-      ),
-    [renderablePatch],
+  const renderablePatch = getRenderablePatch(result?.diff, `git-graph:${resolvedTheme}`, {
+    compactPartialHunkOffsets: true,
+  });
+  const renderableFiles = (renderablePatch?.kind === "files" ? renderablePatch.files : []).toSorted(
+    (a, b) => resolveFileDiffPath(a).localeCompare(resolveFileDiffPath(b)),
   );
 
   // A root commit's base is the empty tree, which has no merge base to expand context from.
-  const loader = useMemo<FileDiffContentsLoader | undefined>(
-    () =>
-      result?.parentSha
-        ? createGitDiffFileContentsLoader(getDiffFileContents, {
-            environmentId,
-            cwd: result.cwd,
-            sourceKind: "branch-range",
-            baseRef: result.parentSha,
-            headRef: result.sha,
-            cacheKey: result.sha,
-          })
-        : undefined,
-    [environmentId, getDiffFileContents, result],
-  );
-  const loaderRef = useRef(loader);
-  loaderRef.current = loader;
-  const loadDiffFiles = useCallback<FileDiffContentsLoader>(async (fileDiff) => {
-    if (!loaderRef.current) throw new Error("This commit's files are unavailable.");
-    return loaderRef.current(fileDiff);
-  }, []);
+  const loader: FileDiffContentsLoader | undefined = result?.parentSha
+    ? createGitDiffFileContentsLoader(getDiffFileContents, {
+        environmentId,
+        cwd: result.cwd,
+        sourceKind: "branch-range",
+        baseRef: result.parentSha,
+        headRef: result.sha,
+        cacheKey: result.sha,
+      })
+    : undefined;
+  // One identity for the viewer, reading the current commit's loader at call time.
+  const loadDiffFiles = useStableCallback<
+    Parameters<FileDiffContentsLoader>,
+    ReturnType<FileDiffContentsLoader>
+  >(async (fileDiff) => {
+    if (!loader) throw new Error("This commit's files are unavailable.");
+    return loader(fileDiff);
+  });
 
-  const files = useMemo(
-    () =>
-      renderableFiles.map((fileDiff) => {
-        const fileKey = buildFileDiffIdentityKey(fileDiff);
-        return {
-          fileDiff,
-          filePath: resolveFileDiffPath(fileDiff),
-          fileKey,
-          fileVersion: buildFileDiffContentVersion(fileDiff),
-          collapsed: collapsed.has(fileKey),
-        };
-      }),
-    [collapsed, renderableFiles],
-  );
-  const toggleCollapsed = useCallback((fileKey: string) => {
+  const files = renderableFiles.map((fileDiff) => {
+    const fileKey = buildFileDiffIdentityKey(fileDiff);
+    return {
+      fileDiff,
+      filePath: resolveFileDiffPath(fileDiff),
+      fileKey,
+      fileVersion: buildFileDiffContentVersion(fileDiff),
+      collapsed: collapsed.has(fileKey),
+    };
+  });
+  const toggleCollapsed = (fileKey: string) => {
     setCollapsed((current) => {
       const next = new Set(current);
       if (!next.delete(fileKey)) next.add(fileKey);
       return next;
     });
-  }, []);
+  };
   const codeViewReveal = useCodeViewFileReveal();
-  const unfold = useCallback((fileKey: string) => {
+  const unfold = (fileKey: string) => {
     setCollapsed((current) => {
       if (!current.has(fileKey)) return current;
       const next = new Set(current);
       next.delete(fileKey);
       return next;
     });
-  }, []);
-  const revealFile = useCallback(
-    (filePath: string) => {
-      const fileDiff = renderableFiles.find(
-        (candidate) => resolveFileDiffPath(candidate) === filePath,
-      );
-      if (!fileDiff) return;
-      const fileKey = buildFileDiffIdentityKey(fileDiff);
-      unfold(fileKey);
-      codeViewReveal.request(fileKey);
-    },
-    [codeViewReveal, renderableFiles, unfold],
-  );
-  const treeEntries = useMemo(() => diffFileTreeEntries(renderableFiles), [renderableFiles]);
+  };
+  const revealFile = (filePath: string) => {
+    const fileDiff = renderableFiles.find(
+      (candidate) => resolveFileDiffPath(candidate) === filePath,
+    );
+    if (!fileDiff) return;
+    const fileKey = buildFileDiffIdentityKey(fileDiff);
+    unfold(fileKey);
+    codeViewReveal.request(fileKey);
+  };
+  const treeEntries = diffFileTreeEntries(renderableFiles);
 
   if (!result || result.truncated || !renderableFiles.length) {
     if (query.error) {

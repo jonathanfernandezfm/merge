@@ -4,7 +4,7 @@
  * Bump this when syncing upstream: `node fork/check-seams.ts` compares it with `upstream/main`.
  * The bundled-manifest test only proves each driver still matches a policy.
  */
-export const T3_CODE_BASELINE_VERSION = "0.1.3";
+const T3_CODE_BASELINE_VERSION = "0.1.3";
 
 /** Stands in for `package.json` where compatibility code asks for "the T3 Code version". */
 export default { version: T3_CODE_BASELINE_VERSION };

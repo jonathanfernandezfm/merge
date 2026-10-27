@@ -38,7 +38,8 @@ export function useCreateWorkTaskThread() {
     if (inFlightRef.current) return;
     inFlightRef.current = true;
     setPending(true);
-    try {
+    // Promise `finally`, not `try`/`finally`: React Compiler cannot compile the latter.
+    const run = async () => {
       const result = await createThread({
         environmentId: task.environmentId,
         input: { taskId: task.id },
@@ -47,10 +48,11 @@ export function useCreateWorkTaskThread() {
       const threadRef = { environmentId: task.environmentId, threadId: result.value.threadId };
       await waitForThreadShell(threadRef).catch(() => undefined);
       await navigate({ to: "/$environmentId/$threadId", params: threadRef });
-    } finally {
+    };
+    await run().finally(() => {
       inFlightRef.current = false;
       setPending(false);
-    }
+    });
   };
   return { createWorkTaskThread, pending };
 }
