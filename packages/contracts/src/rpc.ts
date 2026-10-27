@@ -33,7 +33,7 @@ import {
   ChatGptHandoffInput,
   ChatGptHandoffState,
 } from "./providerSetup.ts";
-import { MergeRpcGroup } from "./merge/rpc.ts";
+import { MergeRpcGroup } from "./merge/rpc.ts"; // merge-seam: rpc-group
 import * as Schema from "effect/Schema";
 import * as Rpc from "effect/rpc/Rpc";
 import * as RpcGroup from "effect/rpc/RpcGroup";
@@ -2303,4 +2303,4 @@ export const WsRpcGroup = RpcGroup.make(
   WsOrchestrationV2SubscribePromptSuggestionRpc,
 )
   .merge(MergeRpcGroup) // merge-seam: rpc-group
-  .middleware(RpcScopeAuthorization);
+  .middleware(RpcScopeAuthorization); // merge-seam: rpc-group

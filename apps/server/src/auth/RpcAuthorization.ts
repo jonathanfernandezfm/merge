@@ -30,7 +30,7 @@ import {
   WS_METHODS,
   WsRpcGroup,
 } from "@t3tools/contracts";
-import { MERGE_RPC_REQUIRED_SCOPES } from "../merge/rpc/handlers.ts";
+import { MERGE_RPC_REQUIRED_SCOPES } from "../merge/rpc/handlers.ts"; // merge-seam: rpc-group-scopes
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Layer from "effect/Layer";

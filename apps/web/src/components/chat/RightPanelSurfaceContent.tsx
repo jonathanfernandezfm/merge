@@ -11,7 +11,7 @@ import type {
 import { scopedThreadKey } from "@t3tools/client-runtime/environment";
 import { lazy, Suspense } from "react";
 import SideChatPane from "./SideChatPane";
-import { MergeRightPanel } from "../../merge/MergeRightPanel";
+import { MergeRightPanel } from "../../merge/MergeRightPanel"; // merge-seam: right-panel
 import type { ComposerImageAttachment, DraftId } from "../../composerDraftStore";
 import type { ShortcutMatchContext } from "../../keybindings";
 import type { SideChatParentPanel } from "../../lib/sideChatPane";

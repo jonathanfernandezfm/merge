@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as References from "effect/References";
 import type * as RpcGroup from "effect/rpc/RpcGroup";
-import { MERGE_RPC_AGGREGATES } from "../merge/rpc/handlers.ts";
+import { MERGE_RPC_AGGREGATES } from "../merge/rpc/handlers.ts"; // merge-seam: rpc-group-aggregates
 import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
 
 import { rpcRequestDuration, rpcRequestsTotal, withMetrics } from "./Metrics.ts";

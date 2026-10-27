@@ -17,6 +17,7 @@ import { commandLabel } from "./KeybindingsSettings.logic";
 import type { ResolvedSettingsScope } from "./settingsScope";
 
 export type SettingsPath =
+  | "/settings/merge" // merge-seam: settings
   | "/settings/projects"
   | "/settings/general"
   | "/settings/diagnostics"
@@ -39,8 +40,7 @@ export type SettingsPath =
   | "/settings/maintenance"
   | "/settings/labs"
   | "/settings/about"
-  | "/settings/archived"
-  | "/settings/merge"; // merge-seam: settings
+  | "/settings/archived";
 
 export type SettingsSearchScope =
   | "environment"
@@ -161,16 +161,11 @@ export const SETTINGS_NAV_GROUPS: ReadonlyArray<{
       ...(isSecretsFeatureEnabled ? (["/settings/secrets"] as const) : []),
     ],
   },
+  { heading: null, paths: ["/settings/merge"] }, // merge-seam: settings
   {
     heading: msg("More"),
     headingHidden: true,
-    paths: [
-      "/settings/merge", // merge-seam: settings
-      "/settings/maintenance",
-      "/settings/labs",
-      "/settings/about",
-      "/settings/archived",
-    ],
+    paths: ["/settings/maintenance", "/settings/labs", "/settings/about", "/settings/archived"],
   },
 ];
 
