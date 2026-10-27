@@ -7,7 +7,7 @@ import {
 } from "@t3tools/contracts";
 import { satisfiesSemverRange } from "@t3tools/shared/semver";
 import * as Schema from "effect/Schema";
-import packageJson from "../../package.json" with { type: "json" };
+import packageJson from "../merge/t3Baseline.ts"; // merge-seam: provider-baseline
 
 const StableVersion = TrimmedNonEmptyString.pipe(
   Schema.check(Schema.makeFilter((value) => /^\d+\.\d+\.\d+$/.test(value))),
