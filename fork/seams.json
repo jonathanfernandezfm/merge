@@ -95,6 +95,21 @@
     "purpose": "Boot-time copy of the merge palette and reserved id"
   },
   {
+    "id": "texture",
+    "file": "apps/web/src/components/SidebarStageBackdrop.tsx",
+    "purpose": "Release and Dev builds render the Merge texture in the stage backdrop"
+  },
+  {
+    "id": "texture",
+    "file": "apps/web/src/components/chat/ComposerPrimaryActions.tsx",
+    "purpose": "Send button keeps the accent fill instead of stage art"
+  },
+  {
+    "id": "texture",
+    "file": "apps/web/src/components/settings/AppearanceSettingsPanel.tsx",
+    "purpose": "Environment identification setting always visible so the texture can be turned off"
+  },
+  {
     "id": "hosted-services",
     "file": "apps/web/src/components/settings/LabsSettingsPanel.tsx",
     "purpose": "Hide the guest links section when the build has no T3 Connect config"
