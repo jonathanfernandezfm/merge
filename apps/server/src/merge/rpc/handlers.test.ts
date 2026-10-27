@@ -6,6 +6,7 @@ import * as NodePath from "node:path";
 import { assert, it } from "@effect/vitest";
 import {
   AuthFilesystemReadScope,
+  AuthOrchestrationOperateScope,
   AuthOrchestrationReadScope,
   MERGE_WS_METHODS,
   MergeRpcGroup,
@@ -13,7 +14,7 @@ import {
   type AuthEnvironmentScope,
 } from "@t3tools/contracts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { ProjectId, ThreadId, WorkTaskId } from "@t3tools/contracts";
+import { ProjectId, ThreadId, WorkTaskId, WorkTaskOperationError } from "@t3tools/contracts";
 import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -35,6 +36,7 @@ import * as VcsProjectConfig from "../../vcs/VcsProjectConfig.ts";
 import * as KnownWorkspaces from "../../workspace/KnownWorkspaces.ts";
 import { WS_RPC_SERVER_OPTIONS } from "../../ws.ts";
 import * as WorkTaskStore from "../workTasks/WorkTaskStore.ts";
+import * as WorkTaskWorkspace from "../workTasks/WorkTaskWorkspace.ts";
 import { mergeRpcHandlers } from "./handlers.ts";
 
 const ping = (scopes: ReadonlyArray<AuthEnvironmentScope>) =>
@@ -217,6 +219,7 @@ const workTasksLayer = WorkTaskStore.layer.pipe(
       Layer.provideMerge(NodeSqliteClient.layer({ filename: ":memory:" })),
     ),
   ),
+  Layer.provideMerge(NodeServices.layer),
 );
 
 it.effect("merge.workTasks.subscribe streams the snapshot, then again after a change", () =>
@@ -279,4 +282,89 @@ it.effect("merge.workTasks.subscribe streams the snapshot, then again after a ch
       }),
     );
   }).pipe(Effect.provide(workTasksLayer)),
+);
+
+it.effect(
+  "merge.workTasks actions reach WorkTaskWorkspace through the RPC path with the operate scope",
+  () =>
+    Effect.gen(function* () {
+      const calls: Array<unknown> = [];
+      const actions = Layer.mock(WorkTaskWorkspace.WorkTaskWorkspace)({
+        setWaiting: (input) => Effect.sync(() => void calls.push(input)),
+        archive: () =>
+          Effect.fail(
+            new WorkTaskOperationError({
+              reason: "archive-blocked",
+              message: "Archiving would lose work: agent-running.",
+              blockers: ["agent-running"],
+            }),
+          ),
+      });
+      const call = (
+        tag: (typeof MERGE_WS_METHODS)[keyof typeof MERGE_WS_METHODS],
+        payload: object,
+        scopes: ReadonlyArray<AuthEnvironmentScope>,
+      ) =>
+        Effect.gen(function* () {
+          const responses = yield* Queue.unbounded<Exit.Exit<unknown, unknown>>();
+          const server = yield* RpcServer.makeNoSerialization(
+            MergeRpcGroup.middleware(RpcScopeAuthorization),
+            {
+              ...WS_RPC_SERVER_OPTIONS,
+              onFromServer: (response) =>
+                response._tag === "Exit" ? Queue.offer(responses, response.exit) : Effect.void,
+            },
+          ).pipe(
+            Effect.provide(
+              Layer.mergeAll(
+                MergeRpcGroup.toLayer(mergeRpcHandlers),
+                RpcAuthorization.layer(scopes),
+              ),
+            ),
+          );
+          yield* server.write(0, {
+            _tag: "Request",
+            id: RpcMessage.RequestId("work-task"),
+            tag,
+            payload,
+            headers: Headers.empty,
+          });
+          return yield* Queue.take(responses);
+        }).pipe(Effect.scoped, Effect.provide(actions));
+
+      const taskId = WorkTaskId.make("task-1");
+      const waiting = yield* call(
+        MERGE_WS_METHODS.workTasksSetWaiting,
+        { taskId, reason: "Pick a base" },
+        [AuthOrchestrationOperateScope],
+      );
+      assert.isTrue(Exit.isSuccess(waiting));
+      assert.deepStrictEqual(calls, [{ taskId, reason: "Pick a base" }]);
+
+      const blocked = yield* call(MERGE_WS_METHODS.workTasksArchive, { taskId }, [
+        AuthOrchestrationOperateScope,
+      ]);
+      assert.include(
+        String(Exit.isFailure(blocked) ? blocked.cause : ""),
+        "WorkTaskOperationError",
+      );
+
+      // Every mutation needs more than the read scope.
+      for (const tag of [
+        MERGE_WS_METHODS.workTasksCreate,
+        MERGE_WS_METHODS.workTasksRetrySetup,
+        MERGE_WS_METHODS.workTasksCreateThread,
+        MERGE_WS_METHODS.workTasksArchive,
+        MERGE_WS_METHODS.workTasksSetWaiting,
+        MERGE_WS_METHODS.workTasksSetAutoHandle,
+      ]) {
+        const denied = yield* call(tag, { taskId, reason: null }, [AuthOrchestrationReadScope]);
+        assert.include(
+          String(Exit.isFailure(denied) ? denied.cause : ""),
+          "EnvironmentAuthorizationError",
+          tag,
+        );
+      }
+      assert.strictEqual(calls.length, 1);
+    }),
 );

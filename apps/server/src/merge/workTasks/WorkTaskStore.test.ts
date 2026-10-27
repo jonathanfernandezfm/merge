@@ -86,6 +86,7 @@ const layer = WorkTaskStore.layer.pipe(
       Layer.provideMerge(NodeSqliteClient.layer({ filename: ":memory:" })),
     ),
   ),
+  Layer.provideMerge(NodeServices.layer),
 );
 
 describe("WorkTaskStore", () => {
@@ -199,6 +200,58 @@ describe("WorkTaskStore", () => {
       assert.strictEqual(task?.title, "Renamed");
       assert.strictEqual(task?.waitingForUserReason, "Pick a base");
       assert.isFalse(task?.autoHandleReviewFeedback);
+    }).pipe(Effect.provide(layer)),
+  );
+
+  it.effect("concurrent workspace mutations to different sub-fields both survive", () =>
+    Effect.gen(function* () {
+      const store = yield* WorkTaskStore.WorkTaskStore;
+      yield* insertLegacyTask("task-1");
+      const id = WorkTaskId.make("task-1");
+      // Setup progress and a path change race, as setup steps and retry do.
+      yield* Effect.all(
+        [
+          ...Array.from({ length: 10 }, (_, index) =>
+            store.updateWorkspace(id, (workspace) => ({
+              ...workspace,
+              setup: {
+                ...workspace.setup,
+                steps: [
+                  ...workspace.setup.steps,
+                  { id: `step-${index}`, label: `Step ${index}`, status: "done", log: null },
+                ],
+              },
+            })),
+          ),
+          store.updateWorkspace(id, (workspace) => ({ ...workspace, path: "/wt/moved" })),
+        ],
+        { concurrency: "unbounded" },
+      );
+      const task = yield* store.get(id);
+      assert.strictEqual(task?.workspace.path, "/wt/moved");
+      assert.strictEqual(task?.workspace.setup.steps.length, 11);
+      const missing = yield* Effect.flip(
+        store.updateWorkspace(WorkTaskId.make("nope"), (workspace) => workspace),
+      );
+      assert.strictEqual(missing.reason, "not-found");
+    }).pipe(Effect.provide(layer)),
+  );
+
+  it.effect("ownsWorktree compares canonical paths", () =>
+    Effect.gen(function* () {
+      const store = yield* WorkTaskStore.WorkTaskStore;
+      const root = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "merge-owns-"));
+      const real = NodePath.join(NodeFS.realpathSync(root), "worktree");
+      NodeFS.mkdirSync(real);
+      const link = NodePath.join(root, "link");
+      NodeFS.symlinkSync(real, link);
+      // Stored through a symlink with a trailing slash, as macOS /var vs /private/var does.
+      yield* insertLegacyTask("active", { path: `${link}/` });
+      assert.isTrue(yield* store.ownsWorktree(real));
+      assert.isTrue(yield* store.ownsWorktree(`${real}/`));
+      assert.isTrue(yield* store.ownsWorktree(link));
+      assert.isFalse(yield* store.ownsWorktree(NodePath.join(real, "nested")));
+      NodeFS.rmSync(root, { recursive: true, force: true });
     }).pipe(Effect.provide(layer)),
   );
 

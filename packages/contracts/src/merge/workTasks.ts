@@ -8,6 +8,7 @@ import {
   ThreadId,
   TrimmedNonEmptyString,
 } from "../baseSchemas.ts";
+import { VcsListRefsInput } from "../git.ts";
 import { SourceControlProviderKind } from "../sourceControl.ts";
 
 /** Brand stays `TaskId` so v0.0.10 rows and links keep matching. */
@@ -141,6 +142,60 @@ export type WorkTasksSnapshot = typeof WorkTasksSnapshot.Type;
 
 export const WorkTaskIdInput = Schema.Struct({ taskId: WorkTaskId });
 export type WorkTaskIdInput = typeof WorkTaskIdInput.Type;
+
+export const WorkTaskCreateInput = Schema.Struct({
+  projectId: ProjectId,
+  title: TrimmedNonEmptyString.check(Schema.isMaxLength(200)),
+  description: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(20_000))),
+  /** Defaults to the project's primary remote. */
+  remoteName: Schema.optionalKey(TrimmedNonEmptyString),
+  /** An existing local or remote branch. Work Tasks never create branches. */
+  branch: TrimmedNonEmptyString,
+  autoHandleReviewFeedback: Schema.optionalKey(Schema.Boolean),
+  /** The worktree a `branch-checked-out` error named; it is detached so the task can check out the branch. */
+  detachCheckoutAt: Schema.optionalKey(TrimmedNonEmptyString),
+  /** A worktree of the project with `branch` checked out, taken over as is. */
+  worktreePath: Schema.optionalKey(TrimmedNonEmptyString),
+});
+export type WorkTaskCreateInput = typeof WorkTaskCreateInput.Type;
+
+export const WorkTaskCreateResult = Schema.Struct({ taskId: WorkTaskId, threadId: ThreadId });
+export type WorkTaskCreateResult = typeof WorkTaskCreateResult.Type;
+
+export const WorkTaskCreateThreadInput = Schema.Struct({
+  taskId: WorkTaskId,
+  title: Schema.optionalKey(TrimmedNonEmptyString),
+});
+export type WorkTaskCreateThreadInput = typeof WorkTaskCreateThreadInput.Type;
+
+export const WorkTaskCreateThreadResult = Schema.Struct({ threadId: ThreadId });
+export type WorkTaskCreateThreadResult = typeof WorkTaskCreateThreadResult.Type;
+
+export const WorkTaskArchiveInput = Schema.Struct({
+  taskId: WorkTaskId,
+  /** Required when the archive check reports a blocker. */
+  force: Schema.optionalKey(Schema.Boolean),
+});
+export type WorkTaskArchiveInput = typeof WorkTaskArchiveInput.Type;
+
+export const WorkTaskSetWaitingInput = Schema.Struct({
+  taskId: WorkTaskId,
+  /** Null clears it. */
+  reason: Schema.NullOr(TrimmedNonEmptyString.check(Schema.isMaxLength(500))),
+});
+export type WorkTaskSetWaitingInput = typeof WorkTaskSetWaitingInput.Type;
+
+export const WorkTaskSetAutoHandleInput = Schema.Struct({
+  taskId: WorkTaskId,
+  enabled: Schema.Boolean,
+});
+export type WorkTaskSetAutoHandleInput = typeof WorkTaskSetAutoHandleInput.Type;
+
+const { cwd: _cwd, refresh: _refresh, ...listRefsFields } = VcsListRefsInput.fields;
+
+/** `vcs.listRefs` for a project, after fetching its primary remote. */
+export const WorkTaskListBranchesInput = Schema.Struct({ ...listRefsFields, projectId: ProjectId });
+export type WorkTaskListBranchesInput = typeof WorkTaskListBranchesInput.Type;
 
 export const WorkTaskArchiveBlocker = Schema.Literals([
   "uncommitted-changes",

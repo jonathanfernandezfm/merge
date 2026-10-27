@@ -24,9 +24,18 @@ import {
   UpdateWorkItemInput,
   WorkItemsError,
 } from "./workItems.ts";
+import { VcsListRefsResult } from "../git.ts";
 import {
   WorkTaskArchiveCheckResult,
+  WorkTaskArchiveInput,
+  WorkTaskCreateInput,
+  WorkTaskCreateResult,
+  WorkTaskCreateThreadInput,
+  WorkTaskCreateThreadResult,
   WorkTaskIdInput,
+  WorkTaskListBranchesInput,
+  WorkTaskSetAutoHandleInput,
+  WorkTaskSetWaitingInput,
   WorkTasksError,
   WorkTasksSnapshot,
 } from "./workTasks.ts";
@@ -48,6 +57,13 @@ export const MERGE_WS_METHODS = {
   pullRequestsRequeueExpiredChecks: "merge.pullRequests.requeueExpiredChecks",
   workTasksSubscribe: "merge.workTasks.subscribe",
   workTasksArchiveCheck: "merge.workTasks.archiveCheck",
+  workTasksCreate: "merge.workTasks.create",
+  workTasksRetrySetup: "merge.workTasks.retrySetup",
+  workTasksCreateThread: "merge.workTasks.createThread",
+  workTasksArchive: "merge.workTasks.archive",
+  workTasksSetWaiting: "merge.workTasks.setWaiting",
+  workTasksSetAutoHandle: "merge.workTasks.setAutoHandle",
+  workTasksListBranches: "merge.workTasks.listBranches",
 } as const;
 
 export const MergePingRpc = Rpc.make(MERGE_WS_METHODS.ping, {
@@ -113,6 +129,44 @@ export const MergeWorkTasksArchiveCheckRpc = Rpc.make(MERGE_WS_METHODS.workTasks
   error: WorkTasksError,
 });
 
+export const MergeWorkTasksCreateRpc = Rpc.make(MERGE_WS_METHODS.workTasksCreate, {
+  payload: WorkTaskCreateInput,
+  success: WorkTaskCreateResult,
+  error: WorkTasksError,
+});
+
+export const MergeWorkTasksRetrySetupRpc = Rpc.make(MERGE_WS_METHODS.workTasksRetrySetup, {
+  payload: WorkTaskIdInput,
+  error: WorkTasksError,
+});
+
+export const MergeWorkTasksCreateThreadRpc = Rpc.make(MERGE_WS_METHODS.workTasksCreateThread, {
+  payload: WorkTaskCreateThreadInput,
+  success: WorkTaskCreateThreadResult,
+  error: WorkTasksError,
+});
+
+export const MergeWorkTasksArchiveRpc = Rpc.make(MERGE_WS_METHODS.workTasksArchive, {
+  payload: WorkTaskArchiveInput,
+  error: WorkTasksError,
+});
+
+export const MergeWorkTasksSetWaitingRpc = Rpc.make(MERGE_WS_METHODS.workTasksSetWaiting, {
+  payload: WorkTaskSetWaitingInput,
+  error: WorkTasksError,
+});
+
+export const MergeWorkTasksSetAutoHandleRpc = Rpc.make(MERGE_WS_METHODS.workTasksSetAutoHandle, {
+  payload: WorkTaskSetAutoHandleInput,
+  error: WorkTasksError,
+});
+
+export const MergeWorkTasksListBranchesRpc = Rpc.make(MERGE_WS_METHODS.workTasksListBranches, {
+  payload: WorkTaskListBranchesInput,
+  success: VcsListRefsResult,
+  error: WorkTasksError,
+});
+
 /** Fork RPCs. Merged into `WsRpcGroup` at the `rpc-group` seam. */
 export const MergeRpcGroup = RpcGroup.make(
   MergePingRpc,
@@ -125,4 +179,11 @@ export const MergeRpcGroup = RpcGroup.make(
   MergePullRequestsRequeueExpiredChecksRpc,
   MergeWorkTasksSubscribeRpc,
   MergeWorkTasksArchiveCheckRpc,
+  MergeWorkTasksCreateRpc,
+  MergeWorkTasksRetrySetupRpc,
+  MergeWorkTasksCreateThreadRpc,
+  MergeWorkTasksArchiveRpc,
+  MergeWorkTasksSetWaitingRpc,
+  MergeWorkTasksSetAutoHandleRpc,
+  MergeWorkTasksListBranchesRpc,
 );
