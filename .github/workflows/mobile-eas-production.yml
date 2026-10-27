@@ -1,4 +1,6 @@
 name: Mobile EAS Production
+# merge-seam: mobile-eas-production-fork
+# Fork: GitHub-hosted runners, no hosted-T3 (Clerk/relay/npm/Vercel/Discord/AUR), GITHUB_TOKEN.
 
 # Production builds and OTA updates run from CI (Linux) — never from a laptop.
 # Under the fingerprint runtime-version policy the fingerprint must be computed
@@ -75,8 +77,7 @@ concurrency:
 jobs:
   production:
     name: EAS ${{ inputs.profile || 'production' }} ${{ github.event_name == 'push' && 'auto' || inputs.mode }}
-    if: github.repository == 'pingdotgg/t3code'
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     env:

@@ -4,7 +4,7 @@ import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import * as NodeTest from "node:test";
 
-import * as NodeChild from "node:child_process";
+import * as NodeChildProcess from "node:child_process";
 
 import { checkBaseline, checkSeams } from "./check-seams.ts";
 
@@ -26,6 +26,11 @@ NodeTest.test("a present seam marker is not reported", async (t) => {
     t,
     "Layer.mergeAll(\n  MergeServerLayer, // merge-seam: server-layer\n",
   );
+  NodeAssert.deepEqual(await checkSeams(root), { missing: [] });
+});
+
+NodeTest.test("a YAML # seam marker is recognised", async (t) => {
+  const root = await fixture(t, "# merge-seam: server-layer\nname: CI\n");
   NodeAssert.deepEqual(await checkSeams(root), { missing: [] });
 });
 
@@ -70,7 +75,7 @@ async function baselineFixture(
     NodePath.join(root, "apps/server/package.json"),
     JSON.stringify({ version: "1.2.3" }),
   );
-  const git = (...args: string[]) => NodeChild.execFileSync("git", ["-C", root, ...args]);
+  const git = (...args: string[]) => NodeChildProcess.execFileSync("git", ["-C", root, ...args]);
   git("init", "-q");
   git("add", "-A");
   git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "x");

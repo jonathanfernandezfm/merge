@@ -1,5 +1,5 @@
 import * as NodeFSP from "node:fs/promises";
-import * as NodeChild from "node:child_process";
+import * as NodeChildProcess from "node:child_process";
 import * as NodePath from "node:path";
 
 interface Seam {
@@ -31,7 +31,7 @@ const BASELINE_FILE = "apps/server/src/merge/t3Baseline.ts";
 export async function checkBaseline(root: string) {
   let upstream: string;
   try {
-    const manifest = NodeChild.execFileSync(
+    const manifest = NodeChildProcess.execFileSync(
       "git",
       ["-C", root, "show", "upstream/main:apps/server/package.json"],
       { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },

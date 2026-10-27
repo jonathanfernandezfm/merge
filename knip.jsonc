@@ -11,7 +11,7 @@
       "entry": [
         // CodeRabbit loads its configuration by filename.
         ".coderabbit.config.ts",
-        ".github/scripts/thread-transfer-report.cjs",
+        // merge-seam: knip-fork (thread-transfer-report.cjs removed with its workflow)
       ],
       "vite": { "entry": [".github/**/*.test.cjs"] },
       "vitest": { "entry": [".github/**/*.test.cjs"] },

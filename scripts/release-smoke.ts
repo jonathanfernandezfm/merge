@@ -214,11 +214,7 @@ function assertMissing(path: string, message: string): void {
 const tempRoot = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "t3-release-smoke-"));
 
 try {
-  NodeChildProcess.execFileSync(
-    process.execPath,
-    ["--test", NodePath.resolve(repoRoot, ".github/scripts/relay-state-output.test.cjs")],
-    { stdio: "inherit" },
-  );
+  // merge-seam: release-smoke-fork (relay-state-output test dropped with the hosted relay release job)
 
   copyWorkspaceManifestFixture(tempRoot);
 
