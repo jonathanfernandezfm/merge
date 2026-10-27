@@ -118,5 +118,10 @@
     "id": "hosted-services",
     "file": "apps/web/src/components/settings/settingsSearch.ts",
     "purpose": "Guest links search result only with T3 Connect config"
+  },
+  {
+    "id": "provider-baseline",
+    "file": "apps/server/src/provider/providerCompatibility.ts",
+    "purpose": "Evaluate manifest t3CodeRange against the upstream release the fork tracks, not Merge's own version"
   }
 ]
