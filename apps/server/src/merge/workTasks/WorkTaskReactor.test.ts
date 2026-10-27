@@ -449,6 +449,79 @@ it.layer(layer)("WorkTaskReactor", (it) => {
     }),
   );
 
+  it.effect("a new PR after the old one closed gets a plain watch", () =>
+    Effect.gen(function* () {
+      const store = yield* setup({ autoHandleReviewFeedback: true });
+      put(shell("thread-1", { pullRequests: [prLink("open")] }));
+      yield* store.link(ThreadId.make("thread-1"), TASK, "user");
+      yield* sweep;
+      // The PR closes and upstream ends the review thread's watch itself.
+      const closed = {
+        ...prLink("open"),
+        snapshot: { ...prLink("open").snapshot!, state: "closed" as const },
+      };
+      patch("thread-1", { pullRequests: [closed] });
+      patch("review-1", {
+        pullRequests: shells.get("review-1")!.pullRequests!.map(({ watch, ...link }) => ({
+          ...link,
+          snapshot: closed.snapshot,
+          ...(watch && { endedWatch: watch }),
+        })),
+      });
+      yield* sweep;
+      // A new PR opens on the branch.
+      patch("thread-1", {
+        pullRequests: [
+          closed,
+          {
+            ...prLink("open"),
+            number: 8,
+            url: `${PR_URL.slice(0, -1)}8`,
+            linkedAt: "2026-10-02T00:00:00.000Z",
+          },
+        ],
+      });
+      yield* sweep;
+
+      assert.deepEqual(
+        watches().map((command) => [
+          command.number,
+          command.watching,
+          command.resumeRemarksFromEndedWatch,
+        ]),
+        [
+          [7, true, undefined],
+          [8, true, undefined],
+        ],
+      );
+    }),
+  );
+
+  it.effect("re-linking a thread to another task resets its reactor marks", () =>
+    Effect.gen(function* () {
+      const store = yield* setup();
+      const threadId = ThreadId.make("thread-1");
+      yield* store.link(threadId, TASK, "review-feedback");
+      yield* store.setReactorMark(threadId, {
+        autoLinkedPrKey: "github.com/acme/app#7",
+        reviewWatch: "on",
+      });
+      const marks = Effect.map(store.reactorMarks(), (all) =>
+        all.find((mark) => mark.threadId === threadId),
+      );
+
+      yield* store.link(threadId, TASK, "review-feedback");
+      assert.deepEqual(yield* marks, {
+        threadId,
+        autoLinkedPrKey: "github.com/acme/app#7",
+        reviewWatch: "on",
+      });
+
+      yield* store.link(threadId, WorkTaskId.make("task-2"), "user");
+      assert.deepEqual(yield* marks, { threadId, autoLinkedPrKey: null, reviewWatch: null });
+    }),
+  );
+
   it.effect("a hold never revives a watch at the comment-only wake limit", () =>
     Effect.gen(function* () {
       const store = yield* setup({ autoHandleReviewFeedback: true });
