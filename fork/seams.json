@@ -148,5 +148,10 @@
     "id": "scm-ado",
     "file": "apps/web/src/components/pullRequest/PullRequestDetailPanel.tsx",
     "purpose": "Re-queue button for expired Azure DevOps build policies"
+  },
+  {
+    "id": "storage-cleanup",
+    "file": "apps/server/src/storageCleanup.ts",
+    "purpose": "Keep a worktree owned by an active Work Task, whatever cleanup rule applies"
   }
 ]
