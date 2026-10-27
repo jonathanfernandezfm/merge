@@ -3,18 +3,34 @@
 Merge is upstream T3 Code plus three things:
 
 1. **Fork code** in `fork/`, `*/src/merge/` and `packages/source-control-azure-devops/`.
-2. **Seams**: small edits to upstream files, each marked `// merge-seam: <id>` (`{/* merge-seam: <id> */}` in JSX) and listed in `fork/seams.json`.
+2. **Seams**: small edits to upstream files, each marked `// merge-seam: <id>` (`{/* merge-seam: <id> */}` in JSX, `# merge-seam: <id>` in YAML, `<!-- merge-seam: <id> -->` in Markdown) and listed in `fork/seams.json`.
 3. **Brand overlay**: one generated commit, `chore(brand): apply Merge brand overlay [generated]`, always on top. Never edit it by hand; change `fork/brand/rules.ts` or `fork/brand/assets/` and regenerate.
 
 ## Run a sync
 
-With Node 26 and `vp` on `PATH`, a clean tree and an `upstream` remote:
+With Node 26 and `vp` on `PATH`, a clean tree and an `upstream` remote (`https://github.com/pingdotgg/t3code`):
 
-```sh
-fork/sync.sh
-```
+1. `git fetch upstream`, then on a fresh branch from the fork's main run `fork/sync.sh`.
+   It drops the previous overlay commit, rebases onto `upstream/main`, runs `node fork/check-seams.ts`, re-applies the overlay, formats the touched files and commits the overlay again.
+2. Resolve conflicts and seam failures (next section), then rerun the rest of the script by hand.
+3. Re-delete upstream workflows the fork does not use (see below).
+4. Verify:
+   - `node --test 'fork/**/*.test.ts'`
+   - `node fork/check-seams.ts`: every seam marker present, and `T3_CODE_BASELINE_VERSION` (`apps/server/src/merge/t3Baseline.ts`) equal to `upstream/main`'s `apps/server/package.json` version (the drift check).
+   - `node fork/brand/apply.ts --check` exits 0 on a fully branded tree. CI runs all three in the `Fork checks` job; the `--check` only passes on a branch that carries the generated brand commit.
+   - the budget json: `cd apps/server && vp test run src/provider/AgentContextBudget.test.ts`.
+   - the repo-wide checks AGENTS.md requires (`vp run fmt`, `vp run lint`, `vp run typecheck`, `vp run test`).
+5. Real-data migration test: copy a real `~/.merge/userdata` with `sqlite3 <src>/state.sqlite "VACUUM INTO '<copy>/state.sqlite'"` (never open the live DB read-write), start the server on the copy, and confirm every thread and task is listed, fork links and folders survive, and `merge_fork_migrations` is populated while `effect_sql_migrations` holds only upstream rows. Then start the previous Merge release on the same home to confirm rollback still works.
 
-It drops the previous overlay commit, rebases onto `upstream/main`, checks the seams, re-applies the overlay, formats the touched files and commits the overlay again. `node fork/brand/apply.ts --check` exits 0 on a fully branded tree.
+## Workflows
+
+CI and release run from the fork on GitHub-hosted runners. Kept: `ci.yml`, `release.yml`, `release-desktop.yml`, `windows-tests.yml`, `pr-size.yml`, `issue-labels.yml`, `mobile-eas-preview.yml`, `mobile-eas-production.yml`. Edited kept files carry `# merge-seam:` markers (`ci-hosted`, `ci-fork-checks`, `release-fork`, `release-desktop-fork`, `windows-tests-fork`, `mobile-eas-*-fork`). Releases publish to GitHub `jonathanfernandezfm/merge` with `GITHUB_TOKEN`, and never read Clerk or relay config, so release builds cannot bake in hosted T3 services. After a sync, run `grep -rniE 'clerk|relay_|blacksmith|pingdotgg' .github/workflows`; only comments should match.
+
+Deleted upstream workflows (a deleted file cannot hold a marker): re-delete on sync if upstream re-adds or changes them.
+
+`agent-context-budget.yml`, `deploy-relay.yml`, `desktop-macos-preview.yml`, `desktop-macos-preview-publish.yml`, `mobile-android-apk.yml`, `mobile-fingerprint-check.yml`, `mobile-showcase-screenshots.yml`, `pr-vouch.yml`, `publish-aur.yml`, `relay-preview.yml`, `relay-preview-cleanup.yml`, `stale-needs-more-info.yml`, `thread-transfer-report.yml`, `web-preview.yml`.
+
+Also deleted: `.github/actions/setup-apt-mirrors/` and the scripts only those workflows used (`relay-state-output.test.cjs`, `stage-preview-bundle.py`, `stage-preview-bundle.test.py`, `thread-transfer-report.cjs`, `thread-transfer-report.test.cjs`, `vercel-deployment-output.test.cjs`). `release.yml` also drops the `relay_public_config`, `publish_cli`, `publish_aur`, `build_web`, `deploy_web`, `build_marketing`, `deploy_marketing` and `announce_discord` jobs and the nightly `schedule`. When upstream edits those regions, keep the fork's version.
 
 ## When something breaks
 

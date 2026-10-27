@@ -1,142 +1,72 @@
-# T3 Code
+<!-- merge-seam: readme-fork -->
+<p align="center">
+  <img src="./assets/readme/banner.webp" alt="Merge: one home for every coding agent you already pay for" width="100%">
+</p>
 
-T3 Code is an "agent harness control surface". It enables control of the agents on your machine with a best-in-class mobile app ([iOS](https://apps.apple.com/us/app/t3-code-remote-claude-more/id6787819824), [Android](https://play.google.com/store/apps/details?id=com.t3tools.t3code)), [web app](https://app.t3.codes) and [Electron-based desktop app](https://t3.codes).
+# Merge
 
-Works with your subscriptions on Claude Code, Codex, Cursor, Grok Build, OpenCode, and Google Antigravity. If they're set up on your computer, T3 Code can control them.
+Merge is a desktop, web, and mobile control surface for the coding agents on your machine. It works with your existing subscriptions to Claude Code, Codex, Cursor, Grok Build, OpenCode, and Google Antigravity: if they are set up on your computer, Merge can drive them.
 
-## "Wait, what are you selling me?"
+> [!NOTE]
+> Merge is a fork of [T3 Code](https://github.com/pingdotgg/t3code) by T3 Tools, released under the MIT License. Most of the code is theirs. The fork rebrands it, adds its own features (task and thread links, sidebar folders, Azure DevOps source control), and ships its own builds from [GitHub Releases](https://github.com/jonathanfernandezfm/merge/releases). Hosted T3 services (Connect, relay, hosted web app) are not part of Merge. How the fork tracks upstream is described in [fork/SYNC.md](./fork/SYNC.md).
 
-Nothing. We built T3 Code because we wanted the best possible development experience with agents. We were inspired by existing solutions like the Codex desktop app, Conductor, Claude Desktop and Cursor Glass, but none met our bar.
+## A quick look
 
-We wanted something performant, remote-ready, and truly open. If we ever go the wrong direction, we want you to have everything you need to fork and build the editor that you want.
+Agents work in threads, grouped by project. Each turn ends with a summary of what changed.
 
-## Installation
+![A finished Codex turn in a Merge thread, with the changed files listed under the summary](./assets/readme/hero.webp)
 
-> [!WARNING]
-> T3 Code currently supports Codex, Claude, Cursor, Grok Build, OpenCode, and Antigravity. Install and authenticate at least one provider before use:
->
-> - Codex: install [Codex CLI](https://developers.openai.com/codex/cli) and run `codex login`
-> - Claude: install [Claude Code](https://claude.com/product/claude-code) and run `claude auth login`
-> - Cursor: install [Cursor CLI](https://cursor.com/cli) and run `agent login`
-> - Grok Build: install [Grok Build CLI](https://x.ai/cli) and run `grok login`
-> - OpenCode: install [OpenCode](https://opencode.ai) and run `opencode auth login`
-> - Antigravity: enable it in Settings, then use **Install Antigravity** and **Sign in with Google**. No CLI is required.
+Review every turn's diff next to the conversation, then commit from the same window.
 
-### Command line
+![The diff panel showing a turn's changes beside the thread](./assets/readme/diff.webp)
 
-```bash
-curl -fsSL https://t3.codes/install.sh | sh
-```
+Switch providers and models per thread.
 
-On Windows, in PowerShell:
+![The model picker listing Claude models, with Codex in the provider rail](./assets/readme/models.webp)
 
-```powershell
-irm https://t3.codes/install.ps1 | iex
-```
+Turn providers on or off, and point each at its own binary, home directory, and environment.
 
-Then run `t3` to start the server and open the local web app. `t3 service install` keeps it running in the background, `t3 update` moves to a newer release, and `t3 --help` has the full reference.
+![Provider settings with Codex and Claude authenticated and the other providers available](./assets/readme/providers.webp)
 
-To try it once without installing, run `npx t3@latest` instead.
+## Prerequisites
 
-### Desktop app
+Install and authenticate at least one provider on the machine that will run the agents:
 
-Install the latest version of the desktop app from [GitHub Releases](https://github.com/pingdotgg/t3code/releases), or from your favorite package registry:
+- Codex: install [Codex CLI](https://developers.openai.com/codex/cli) and run `codex login`
+- Claude: install [Claude Code](https://claude.com/product/claude-code) and run `claude auth login`
+- Cursor: install [Cursor CLI](https://cursor.com/cli) and run `agent login`
+- Grok Build: install [Grok Build CLI](https://x.ai/cli) and run `grok login`
+- OpenCode: install [OpenCode](https://opencode.ai) and run `opencode auth login`
+- Antigravity: enable it in Settings, then use **Install Antigravity** and **Sign in with Google**. No CLI is required.
 
-#### Windows (`winget`)
+## Install
 
-```bash
-winget install T3Tools.T3Code
-```
+Download the installer for your platform from [GitHub Releases](https://github.com/jonathanfernandezfm/merge/releases): `.exe` (Windows), `.dmg` (macOS), `.AppImage` or `.deb` (Linux). The desktop app updates itself from the same releases.
 
-#### Windows (`scoop`)
+Release builds may be unsigned:
 
-```bash
-scoop install extras/t3code
-```
+- **macOS:** if Gatekeeper refuses to open the app, right-click it and choose **Open**, or allow it in **System Settings → Privacy & Security**.
+- **Windows:** if SmartScreen blocks the installer, choose **More info → Run anyway**.
 
-#### macOS (Homebrew)
+Merge keeps its data in `~/.merge`.
 
-```bash
-brew install --cask t3-code
-```
+## Build from source
 
-#### Debian, Ubuntu (`.deb`)
-
-Download the `.deb` from [GitHub Releases](https://github.com/pingdotgg/t3code/releases), then:
-
-```bash
-sudo apt install ./T3-Code-*.deb
-```
-
-#### Arch Linux (AUR)
-
-Stable:
-
-```bash
-yay -S t3code-bin
-```
-
-Nightly:
-
-```bash
-yay -S t3code-nightly-bin
-```
-
-The AUR packaging is maintained in this repository under [`packaging/aur`](./packaging/aur).
-
-## Some notes
-
-We are very very early in this project. Expect bugs.
-
-We are (mostly) not accepting contributions yet. Small fixes may be considered. Big features will not be.
+1. Install [Vite+](https://viteplus.dev/guide/), which provides the `vp` command:
+   - macOS / Linux: `curl -fsSL https://vite.plus | bash`
+   - Windows: `irm https://vite.plus/ps1 | iex`
+2. Install dependencies: `vp i`
+3. Start the server and web app: `vp run dev` (or `vp run dev:desktop` for the desktop app)
 
 ## Documentation
 
-Full docs live in [docs/](./docs). There's no docs site yet.
+Guides live in [docs/](./docs). They are inherited from T3 Code, so product names and install commands in them may still say T3 Code.
 
-- [FAQ](./docs/user/faq.md)
 - [Install and first run](./docs/user/install.md)
-- [Permission modes](./docs/user/permission-modes.md)
-- [Keyboard shortcuts](./docs/user/keybindings.md)
-- [Project settings](./docs/user/project-settings.md)
-- [Appearance preferences](./docs/user/appearance.md)
-- [Remote access from a phone or another machine](./docs/user/remote-access.md)
-- [Connect Claude Code, Codex, ChatGPT and other agents over MCP](./docs/user/outside-agents.md)
-- [Keeping app and server in sync](./docs/user/updating.md)
-- [Source control integrations](./docs/user/source-control.md)
-- Multiple accounts: [Codex](./docs/user/providers-codex.md) · [Claude](./docs/user/providers-claude.md)
-- [Run T3 Code as a background service](./docs/user/background-service.md)
+- [Remote access](./docs/user/remote-access.md)
+- [Updating](./docs/user/updating.md)
+- [All user guides](./docs/README.md)
+- [Architecture overview](./docs/internals/overview.md)
+- [Syncing the fork with upstream](./fork/SYNC.md)
 
-Building from source? Start at [docs/internals/overview.md](./docs/internals/overview.md).
-
-## If you REALLY want to contribute still.... read this first
-
-### Install `vp`
-
-T3 Code uses Vite+ so you'll need to install the global `vp` command-line tool.
-
-#### macOS / Linux
-
-```bash
-curl -fsSL https://vite.plus | bash
-```
-
-#### Windows
-
-```bash
-irm https://vite.plus/ps1 | iex
-```
-
-Checkout their getting started guide for more information: https://viteplus.dev/guide/
-
-### Install dependencies
-
-```bash
-vp i
-```
-
-Read [CONTRIBUTING.md](./CONTRIBUTING.md) before reporting a bug or opening a PR.
-
-Have a feature request? Start an [Ideas discussion](https://github.com/pingdotgg/t3code/discussions/categories/ideas).
-
-Need support? Join the [Discord](https://discord.gg/jn4EGJjrvv).
+Read [CONTRIBUTING.md](./CONTRIBUTING.md) before opening a PR.

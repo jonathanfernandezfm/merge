@@ -285,5 +285,10 @@
     "id": "knip-fork",
     "file": "knip.jsonc",
     "purpose": "Drop the knip entry for the removed thread-transfer-report script"
+  },
+  {
+    "id": "readme-fork",
+    "file": "README.md",
+    "purpose": "Merge README with fork note; upstream's README is replaced wholesale, keep ours on conflict"
   }
 ]
