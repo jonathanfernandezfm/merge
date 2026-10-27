@@ -3,5 +3,85 @@
     "id": "migrations",
     "file": "apps/server/src/persistence/Migrations.ts",
     "purpose": "Move v0.0.10 fork rows out of effect_sql_migrations, then run fork migrations from merge_fork_migrations"
+  },
+  {
+    "id": "server-layer",
+    "file": "apps/server/src/server.ts",
+    "purpose": "Merge fork services into the runtime core layer"
+  },
+  {
+    "id": "rpc-group",
+    "file": "packages/contracts/src/rpc.ts",
+    "purpose": "Merge MergeRpcGroup into WsRpcGroup, so server and client see fork RPCs"
+  },
+  {
+    "id": "contracts-export",
+    "file": "packages/contracts/src/index.ts",
+    "purpose": "Export fork contracts (MergeRpcGroup, MERGE_WS_METHODS)"
+  },
+  {
+    "id": "rpc-group-handlers",
+    "file": "apps/server/src/ws.ts",
+    "purpose": "Spread fork RPC handlers into the WS handler map"
+  },
+  {
+    "id": "rpc-group-scopes",
+    "file": "apps/server/src/auth/RpcAuthorization.ts",
+    "purpose": "Spread fork RPC required scopes"
+  },
+  {
+    "id": "rpc-group-aggregates",
+    "file": "apps/server/src/observability/RpcInstrumentation.ts",
+    "purpose": "Spread fork RPC metric aggregates"
+  },
+  {
+    "id": "rpc-group-test",
+    "file": "apps/server/src/ws.test.ts",
+    "purpose": "merge.ping round-trip through the production WS RPC layer"
+  },
+  {
+    "id": "sidebar",
+    "file": "apps/web/src/components/Sidebar.tsx",
+    "purpose": "Render fork sidebar sections"
+  },
+  {
+    "id": "thread-menu",
+    "file": "apps/web/src/components/threadActionMenu.logic.ts",
+    "purpose": "Widen menu id and spread fork thread menu items"
+  },
+  {
+    "id": "thread-menu",
+    "file": "apps/web/src/components/Sidebar.tsx",
+    "purpose": "Delegate fork thread menu clicks"
+  },
+  {
+    "id": "right-panel",
+    "file": "apps/web/src/rightPanelStore.ts",
+    "purpose": "One merge surface kind"
+  },
+  {
+    "id": "right-panel",
+    "file": "apps/web/src/reopenClosedView.ts",
+    "purpose": "Fork surfaces are not reopened"
+  },
+  {
+    "id": "right-panel",
+    "file": "apps/web/src/components/RightPanelTabs.tsx",
+    "purpose": "Fork surface tab label"
+  },
+  {
+    "id": "right-panel",
+    "file": "apps/web/src/components/chat/RightPanelSurfaceContent.tsx",
+    "purpose": "Render MergeRightPanel for merge surfaces"
+  },
+  {
+    "id": "settings",
+    "file": "apps/web/src/components/settings/settingsSearch.ts",
+    "purpose": "Merge settings path, label, nav entry and search scope"
+  },
+  {
+    "id": "settings",
+    "file": "apps/web/src/components/settings/SettingsSidebarNav.tsx",
+    "purpose": "Merge settings nav icon"
   }
 ]

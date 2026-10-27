@@ -36,7 +36,8 @@ export type SettingsPath =
   | "/settings/maintenance"
   | "/settings/labs"
   | "/settings/about"
-  | "/settings/archived";
+  | "/settings/archived"
+  | "/settings/merge"; // merge-seam: settings
 
 export type SettingsSearchScope =
   | "environment"
@@ -103,6 +104,7 @@ export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
   "/settings/labs": "Labs",
   "/settings/about": "About",
   "/settings/archived": "Archive",
+  "/settings/merge": "Merge", // merge-seam: settings
 };
 
 /** Sidebar order. A group without a heading is set apart by space alone. */
@@ -138,7 +140,13 @@ export const SETTINGS_NAV_GROUPS: ReadonlyArray<{
   { heading: "Connections", paths: ["/settings/connections", "/settings/access"] },
   {
     heading: null,
-    paths: ["/settings/maintenance", "/settings/labs", "/settings/about", "/settings/archived"],
+    paths: [
+      "/settings/merge", // merge-seam: settings
+      "/settings/maintenance",
+      "/settings/labs",
+      "/settings/about",
+      "/settings/archived",
+    ],
   },
 ];
 
@@ -1128,6 +1136,7 @@ const SETTINGS_CATEGORY_SCOPES: Readonly<Record<SettingsPath, SettingsSearchScop
   "/settings/labs": null,
   "/settings/about": null,
   "/settings/archived": "project-defaults",
+  "/settings/merge": null, // merge-seam: settings
 };
 
 const RENAMED_SETTINGS_PATHS: Readonly<Record<string, SettingsPath>> = {

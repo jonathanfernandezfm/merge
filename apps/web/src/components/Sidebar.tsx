@@ -7,6 +7,8 @@ import {
   moveThreadContextDrag as moveThreadContextDragGhost,
 } from "./chat/threadContextDrag";
 import { discardComposerDraft } from "../lib/discardComposerDraft";
+import { MergeSidebarSections } from "../merge/MergeSidebarSections";
+import { handleMergeThreadMenu } from "../merge/threadMenu";
 import { requestCustomSnooze } from "./CustomSnoozeDialog";
 import { useAtomValue } from "@effect/atom-react";
 import * as Option from "effect/Option";
@@ -2412,6 +2414,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
         );
         if (clicked._tag === "Failure" || clicked.value === null) return;
         if (threadActionRequiresOperate(clicked.value) && !checkThreadOperations([thread])) return;
+        if (handleMergeThreadMenu(clicked.value, threadRef)) return; // merge-seam: thread-menu
         if (clicked.value?.startsWith("snooze:")) {
           const preset =
             clicked.value === "snooze:custom"
@@ -3247,6 +3250,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
             </div>
           ) : null}
         </SidebarGroup>
+        <MergeSidebarSections /> {/* merge-seam: sidebar */}
       </SidebarContent>
       <SidebarChromeFooter
         showUndoNotice={isSearchingThreads || sidebarListItemsFresh.length === 0}

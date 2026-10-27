@@ -134,6 +134,8 @@ export async function reopenClosedView(
     case "pull-request":
       panels.openPullRequest(ref, surface);
       break;
+    case "merge":
+      return false; // merge-seam: right-panel
     default:
       panels.open(ref, surface.kind);
   }

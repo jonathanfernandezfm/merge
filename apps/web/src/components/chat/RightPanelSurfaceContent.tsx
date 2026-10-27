@@ -10,6 +10,7 @@ import type {
 } from "@t3tools/contracts";
 import { scopedThreadKey } from "@t3tools/client-runtime/environment";
 import { lazy, Suspense } from "react";
+import { MergeRightPanel } from "../../merge/MergeRightPanel";
 import type { ComposerImageAttachment, DraftId } from "../../composerDraftStore";
 import type { ShortcutMatchContext } from "../../keybindings";
 import { type RightPanelSurface, useRightPanelStore } from "../../rightPanelStore";
@@ -163,6 +164,8 @@ export function RightPanelSurfaceContent(props: {
         />
       );
     }
+    case "merge":
+      return <MergeRightPanel id={surface.id} />; // merge-seam: right-panel
     case "pull-requests":
       return <ThreadPullRequestsPanel threadRef={threadRef} />;
     case "device":
