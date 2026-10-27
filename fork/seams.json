@@ -37,7 +37,7 @@
   {
     "id": "sidebar",
     "file": "apps/web/src/components/Sidebar.tsx",
-    "purpose": "Render fork sidebar sections"
+    "purpose": "Render fork sidebar sections (Work Tasks, dialogs host) with the sidebar search query"
   },
   {
     "id": "thread-menu",
@@ -189,5 +189,20 @@
     "id": "pr-watch-resume",
     "file": "apps/server/src/orchestration-v2/runtimeLayer.test.ts",
     "purpose": "Test that a resumed re-watch delivers remarks from the unwatched gap once, and a plain re-watch does not"
+  },
+  {
+    "id": "chat-header",
+    "file": "apps/web/src/components/ChatView.tsx",
+    "purpose": "Work Task bar (header, setup steps, thread tabs) under the chat header; null outside a Work Task"
+  },
+  {
+    "id": "routes",
+    "file": "apps/web/src/routes/_chat.work-tasks.index.tsx",
+    "purpose": "Work Taskboard route file; regenerates routeTree.gen.ts"
+  },
+  {
+    "id": "routes",
+    "file": "apps/web/src/routes/_chat.work-tasks.$environmentId.$taskId.tsx",
+    "purpose": "Work Task page route file; regenerates routeTree.gen.ts"
   }
 ]

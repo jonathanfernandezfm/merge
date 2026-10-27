@@ -53,6 +53,7 @@ import { Route as ChatSettingsAccessRouteImport } from './routes/_chat.settings.
 import { Route as ChatSettingsAboutRouteImport } from './routes/_chat.settings.about'
 import { Route as ChatDraftDraftIdRouteImport } from './routes/_chat.draft.$draftId'
 import { Route as ChatEnvironmentIdThreadIdRouteImport } from './routes/_chat.$environmentId.$threadId'
+import { Route as ChatWorkTasksEnvironmentIdTaskIdRouteImport } from './routes/_chat.work-tasks.$environmentId.$taskId'
 
 const WelcomeRoute = WelcomeRouteImport.update({
   id: '/welcome',
@@ -277,6 +278,12 @@ const ChatEnvironmentIdThreadIdRoute =
   ChatEnvironmentIdThreadIdRouteImport.update({
     id: '/$environmentId/$threadId',
     path: '/$environmentId/$threadId',
+    getParentRoute: () => ChatRoute,
+  } as any)
+const ChatWorkTasksEnvironmentIdTaskIdRoute =
+  ChatWorkTasksEnvironmentIdTaskIdRouteImport.update({
+    id: '/work-tasks/$environmentId/$taskId',
+    path: '/work-tasks/$environmentId/$taskId',
     getParentRoute: () => ChatRoute,
   } as any)
 
@@ -878,6 +885,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ChatEnvironmentIdThreadIdRouteImport
       parentRoute: typeof ChatRoute
     }
+    '/_chat/work-tasks/$environmentId/$taskId': {
+      id: '/_chat/work-tasks/$environmentId/$taskId'
+      path: '/work-tasks/$environmentId/$taskId'
+      fullPath: '/work-tasks/$environmentId/$taskId'
+      preLoaderRoute: typeof ChatWorkTasksEnvironmentIdTaskIdRouteImport
+      parentRoute: typeof ChatRoute
+    }
   }
 }
 
@@ -955,6 +969,8 @@ interface ChatRouteChildren {
   ChatIndexRoute: typeof ChatIndexRoute
   ChatEnvironmentIdThreadIdRoute: typeof ChatEnvironmentIdThreadIdRoute
   ChatDraftDraftIdRoute: typeof ChatDraftDraftIdRoute
+  ChatWorkTasksIndexRoute: typeof ChatWorkTasksIndexRoute
+  ChatWorkTasksEnvironmentIdTaskIdRoute: typeof ChatWorkTasksEnvironmentIdTaskIdRoute
 }
 
 const ChatRouteChildren: ChatRouteChildren = {
@@ -965,6 +981,8 @@ const ChatRouteChildren: ChatRouteChildren = {
   ChatIndexRoute: ChatIndexRoute,
   ChatEnvironmentIdThreadIdRoute: ChatEnvironmentIdThreadIdRoute,
   ChatDraftDraftIdRoute: ChatDraftDraftIdRoute,
+  ChatWorkTasksIndexRoute: ChatWorkTasksIndexRoute,
+  ChatWorkTasksEnvironmentIdTaskIdRoute: ChatWorkTasksEnvironmentIdTaskIdRoute,
 }
 
 const ChatRouteWithChildren = ChatRoute._addFileChildren(ChatRouteChildren)

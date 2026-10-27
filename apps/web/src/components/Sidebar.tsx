@@ -3656,7 +3656,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
             </div>
           ) : null}
         </SidebarGroup>
-        <MergeSidebarSections /> {/* merge-seam: sidebar */}
+        <MergeSidebarSections searchQuery={threadSearchQuery} /> {/* merge-seam: sidebar */}
       </SidebarContent>
       <SidebarChromeFooter />
     </SidebarFolderDrop>
