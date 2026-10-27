@@ -182,8 +182,8 @@ export const make = Effect.gen(function* () {
       yield* Effect.forEach(watched, (link) => watchCommand(reviewId, link, false), {
         discard: true,
       });
-      // Clearing the mark makes the next watch a plain one (new baseline).
-      if (mark !== null && (!task.autoHandleReviewFeedback || watched.length > 0)) {
+      // Upstream also ends watches on merge or close. Clearing makes the next watch plain.
+      if (mark !== null) {
         yield* store.setReactorMark(reviewId, { reviewWatch: null });
       }
       return;

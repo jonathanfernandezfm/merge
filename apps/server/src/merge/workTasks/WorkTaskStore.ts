@@ -286,6 +286,9 @@ export const make = Effect.gen(function* () {
       INSERT INTO merge_thread_links (thread_id, task_id, origin, updated_at)
       VALUES (${threadId}, ${taskId}, ${origin}, ${now})
       ON CONFLICT (thread_id) DO UPDATE SET
+        -- Reactor marks belong to the old task; SET reads the pre-update row.
+        auto_linked_pr_key = CASE WHEN task_id IS excluded.task_id THEN auto_linked_pr_key END,
+        review_watch = CASE WHEN task_id IS excluded.task_id THEN review_watch END,
         task_id = excluded.task_id, origin = excluded.origin, updated_at = excluded.updated_at
     `.pipe(Effect.mapError(failed("Could not link the thread.")));
     yield* notify;
