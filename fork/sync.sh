@@ -9,11 +9,9 @@ if [ -n "$(git status --porcelain)" ]; then
   echo "sync: the working tree is dirty (including untracked files); commit or remove them first." >&2
   exit 1
 fi
-if [ "$(git log -1 --format=%s)" = "$SUBJECT" ]; then
-  git reset --hard HEAD~1
-fi
-
 git fetch upstream
+# The overlay may sit below later fork commits (for example release version bumps).
+fork/drop-overlay.sh upstream/main
 git rebase upstream/main
 node fork/check-seams.ts
 node fork/brand/apply.ts

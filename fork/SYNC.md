@@ -11,11 +11,11 @@ Merge is upstream T3 Code plus three things:
 With Node 26 and `vp` on `PATH`, a clean tree and an `upstream` remote (`https://github.com/pingdotgg/t3code`):
 
 1. `git fetch upstream`, then on a fresh branch from the fork's main run `fork/sync.sh`.
-   It drops the previous overlay commit, rebases onto `upstream/main`, runs `node fork/check-seams.ts`, re-applies the overlay, formats the touched files and commits the overlay again.
+   It finds the generated brand commit by its exact subject anywhere in `upstream/main..HEAD` (it may sit below later commits such as the release workflow's `chore(release): prepare vX` bump) and drops just that commit with `fork/drop-overlay.sh` (`git rebase --onto <sha>^ <sha>`); it refuses if more than one is found. It then rebases onto `upstream/main`, runs `node fork/check-seams.ts`, re-applies the overlay, formats the touched files and commits the overlay again.
 2. Resolve conflicts and seam failures (next section), then rerun the rest of the script by hand.
 3. Re-delete upstream workflows the fork does not use (see below).
 4. Verify:
-   - `node --test 'fork/**/*.test.ts'`
+   - `node --test 'fork/**/*.test.ts'` (includes the temp-repo test of `drop-overlay.sh`)
    - `node fork/check-seams.ts`: every seam marker present, and `T3_CODE_BASELINE_VERSION` (`apps/server/src/merge/t3Baseline.ts`) equal to `upstream/main`'s `apps/server/package.json` version (the drift check).
    - `node fork/brand/apply.ts --check` exits 0 on a fully branded tree. CI runs all three in the `Fork checks` job; the `--check` only passes on a branch that carries the generated brand commit.
    - the budget json: `cd apps/server && vp test run src/provider/AgentContextBudget.test.ts`.

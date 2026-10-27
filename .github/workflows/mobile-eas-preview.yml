@@ -23,6 +23,9 @@ jobs:
       APP_VARIANT: preview
       NODE_OPTIONS: --max-old-space-size=8192
       MOBILE_VERSION_POLICY: fingerprint
+      # app.config.ts reads the Expo account and project from these.
+      EXPO_OWNER: ${{ vars.EXPO_OWNER }}
+      EAS_PROJECT_ID: ${{ vars.EAS_PROJECT_ID }}
     steps:
       - id: expo-token
         name: Check for EXPO_TOKEN

@@ -290,5 +290,30 @@
     "id": "readme-fork",
     "file": "README.md",
     "purpose": "Merge README with fork note; upstream's README is replaced wholesale, keep ours on conflict"
+  },
+  {
+    "id": "ci-test-parallelism",
+    "file": ".github/workflows/ci.yml",
+    "purpose": "Test job timeout 20 minutes for hosted runners"
+  },
+  {
+    "id": "ci-test-parallelism-limit",
+    "file": ".github/workflows/ci.yml",
+    "purpose": "Test concurrency limit 2 for hosted runners"
+  },
+  {
+    "id": "release-test-parallelism",
+    "file": ".github/workflows/release.yml",
+    "purpose": "Release test job timeout 20 minutes"
+  },
+  {
+    "id": "release-test-parallelism-limit",
+    "file": ".github/workflows/release.yml",
+    "purpose": "Release test concurrency limit 2"
+  },
+  {
+    "id": "release-doc-fork",
+    "file": "docs/operations/release.md",
+    "purpose": "Banner: Merge releases differ from the upstream runbook"
   }
 ]

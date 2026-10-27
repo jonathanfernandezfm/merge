@@ -212,7 +212,7 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.test != 'false' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 20 # merge-seam: ci-test-parallelism
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -279,7 +279,7 @@ jobs:
             filters=()
             for package in $TEST_PACKAGES; do filters+=(--filter "$package"); done
           fi
-          vp run --parallel --concurrency-limit 4 "${filters[@]}" test
+          vp run --parallel --concurrency-limit 2 "${filters[@]}" test # merge-seam: ci-test-parallelism-limit
 
   # The web suite is the largest outside the server. In the shared Test job it
   # started last and ran alone for about 40s after everything else finished.
@@ -571,10 +571,17 @@ jobs:
         run: node --test 'fork/**/*.test.ts'
 
       - name: Seams and baseline
-        run: node fork/check-seams.ts
+        run: |
+          # The baseline drift check needs an upstream/main ref.
+          git fetch --no-tags https://github.com/pingdotgg/t3code main:refs/remotes/upstream/main
+          node fork/check-seams.ts
 
       - name: Brand overlay applied
-        run: node fork/brand/apply.ts --check
+        run: |
+          node fork/brand/apply.ts --check || {
+            echo "::error::The brand overlay is not applied. Run fork/sync.sh (or node fork/brand/apply.ts) and commit the result as the generated brand commit; see fork/SYNC.md."
+            exit 1
+          }
 
   # Branch protection requires this job by its name, `Check`. It fails when any
   # other job fails, is cancelled, or is skipped without a reason, so splitting
