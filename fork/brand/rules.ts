@@ -236,6 +236,23 @@ export const identity: Array<{ file: string; from: string; to: string }> = [
     from: '"Created in [T3 Code](https://t3.codes).",',
     to: `"Created in [Merge](${REPO_URL}).",`,
   },
+  // Hosted T3 services (Connect, relay, guest sharing, webhook relay) switch on only when a build
+  // bakes in the Clerk key and relay URL, so shipping no defaults keeps every entry point hidden.
+  {
+    file: ".env.example",
+    from: "T3CODE_CLERK_PUBLISHABLE_KEY=pk_live_Y2xlcmsudDMuY29kZXMk",
+    to: "T3CODE_CLERK_PUBLISHABLE_KEY=",
+  },
+  {
+    file: ".env.example",
+    from: "T3CODE_CLERK_CLI_OAUTH_CLIENT_ID=hzxSgY2cH10sDU2r",
+    to: "T3CODE_CLERK_CLI_OAUTH_CLIENT_ID=",
+  },
+  {
+    file: ".env.example",
+    from: "T3CODE_RELAY_URL=https://relay.t3.codes",
+    to: "T3CODE_RELAY_URL=",
+  },
   // Upstream tests whose literals differ from the source anchors (siblings get those for free).
   {
     file: "apps/desktop/src/app/DesktopAppIdentity.test.ts",
