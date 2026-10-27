@@ -15,7 +15,10 @@ import {
   type WorkTaskPullRequestView,
   type WorkTaskStatus,
   type WorkTaskThreadOrigin,
+  type WorkTasksSnapshot,
 } from "@t3tools/contracts";
+import * as Option from "effect/Option";
+import { AsyncResult } from "effect/reactivity";
 
 export interface EnvironmentWorkTask extends WorkTask {
   readonly environmentId: EnvironmentId;
@@ -437,16 +440,31 @@ function normalizeWorktreePath(path: string): string {
   return trimmed.length > 1 ? trimmed.replace(/[\\/]+$/, "") : trimmed;
 }
 
-/** True when a live (not archived) Work Task in the environment owns this worktree path. */
+/**
+ * An environment's tasks from its subscription: null while loading, none when the stream failed
+ * (e.g. a server without Work Tasks).
+ */
+export function loadedWorkTasks(
+  result: AsyncResult.AsyncResult<WorkTasksSnapshot, unknown>,
+): ReadonlyArray<WorkTask> | null {
+  const snapshot = Option.getOrNull(AsyncResult.value(result));
+  if (snapshot !== null) return snapshot.tasks;
+  return result._tag === "Failure" ? [] : null;
+}
+
+/**
+ * True when a live (not archived) Work Task of the environment owns this worktree path. `tasks` is
+ * null while the environment's snapshot has not loaded: unknown counts as owned, so nothing can be
+ * deleted on a guess.
+ */
 export function workTaskOwnsWorktreePath(
-  tasks: ReadonlyArray<EnvironmentWorkTask>,
-  environmentId: EnvironmentId,
+  tasks: ReadonlyArray<Pick<WorkTask, "archivedAt" | "workspace">> | null,
   worktreePath: string,
 ): boolean {
+  if (tasks === null) return true;
   const target = normalizeWorktreePath(worktreePath);
   return tasks.some(
     (task) =>
-      task.environmentId === environmentId &&
       task.archivedAt === null &&
       task.workspace.path !== null &&
       normalizeWorktreePath(task.workspace.path) === target,

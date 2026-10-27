@@ -56,7 +56,7 @@ import { readEnvironmentScope } from "~/state/session";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { vcsEnvironment } from "~/state/vcs";
 import { remoteBranchOf, workTaskTitleFromBranch } from "./logic";
-import { useWorkTaskView, workTasksEnvironment } from "./state";
+import { useKeepWorkTasksLive, useWorkTaskView, workTasksEnvironment } from "./state";
 
 export interface WorkTaskRef {
   readonly environmentId: EnvironmentId;
@@ -105,6 +105,8 @@ function commandErrorMessage(result: AtomCommandResult<unknown, unknown>, fallba
 
 /** Mounted once by the `_chat` layout (`work-task-dialogs` seam). */
 export function WorkTaskDialogsHost() {
+  // The delete-thread worktree guard reads the snapshot, so it must load without any Work Task view.
+  useKeepWorkTasksLive();
   const newTarget = useAtomValue(newDialogAtom);
   const archiveTarget = useAtomValue(archiveDialogAtom);
   const waitingTarget = useAtomValue(waitingDialogAtom);

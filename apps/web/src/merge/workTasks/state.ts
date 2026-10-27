@@ -25,6 +25,7 @@ import {
   buildWorkTaskViews,
   linkedWorkTasksByKey,
   workTaskIdOfThread,
+  loadedWorkTasks,
   workTaskOwnsWorktreePath,
   workTaskKey,
   type EnvironmentWorkTask,
@@ -226,17 +227,21 @@ export function readLinkedWorkTasks(key: string): ReadonlyArray<EnvironmentWorkT
   return appAtomRegistry.get(linkedWorkTasksAtom).get(key) ?? [];
 }
 
-/** Used at the `thread-delete-worktree` seam: deleting a thread never removes a Work Task's worktree. */
+/**
+ * Used at the `thread-delete-worktree` seam: deleting a thread never removes a Work Task's
+ * worktree. An environment whose stream failed (e.g. a server without Work Tasks) has none; one
+ * still loading counts as owning everything.
+ */
 export function mergeWorkTaskOwnsWorktreePath(
   threadRef: ScopedThreadRef,
   worktreePath: string | null,
 ): boolean {
-  return (
-    worktreePath !== null &&
-    workTaskOwnsWorktreePath(
-      appAtomRegistry.get(workTasksAtom),
-      threadRef.environmentId,
-      worktreePath,
-    )
-  );
+  if (worktreePath === null) return false;
+  const result = appAtomRegistry.get(live({ environmentId: threadRef.environmentId, input: {} }));
+  return workTaskOwnsWorktreePath(loadedWorkTasks(result), worktreePath);
+}
+
+/** Keeps every environment's Work Tasks stream open; mounted by the always-mounted dialogs host. */
+export function useKeepWorkTasksLive(): void {
+  useAtomValue(workTasksAtom);
 }
