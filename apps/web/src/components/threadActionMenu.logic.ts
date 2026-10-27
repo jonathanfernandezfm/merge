@@ -1,4 +1,4 @@
-import type { ContextMenuItem } from "@t3tools/contracts";
+import type { ContextMenuItem, ScopedThreadRef } from "@t3tools/contracts";
 import type { SnoozePreset } from "@t3tools/client-runtime/state/thread-settled";
 import { mergeThreadMenuItems } from "../merge/threadMenu"; // merge-seam: thread-menu
 
@@ -97,6 +97,7 @@ export interface ThreadActionMenuState {
   readonly canShareWithGuest?: boolean;
   /** A No project thread with its own folder, on a server that can promote it. */
   readonly canTurnIntoProject?: boolean;
+  readonly mergeThreadRef?: ScopedThreadRef; // merge-seam: thread-menu
 }
 
 /** Local navigation, read markers, and copying remain available to read-only clients. */
