@@ -1,5 +1,6 @@
 import type { EnvironmentId, ProjectId } from "@t3tools/contracts";
 
+import { openMergeSurface } from "./merge/gitGraph/surface"; // merge-seam: right-panel
 import type { OpenPreviewMutation } from "./browser/openFileInPreview";
 import type { ClosedView, ClosedViewEntry } from "./closedViewStore";
 import type { PullRequestListPreferences } from "./components/pullRequest/pullRequestListPreferences";
@@ -135,7 +136,8 @@ export async function reopenClosedView(
       panels.openPullRequest(ref, surface);
       break;
     case "merge":
-      return false; // merge-seam: right-panel
+      openMergeSurface(ref, surface.id); // merge-seam: right-panel
+      break;
     default:
       panels.open(ref, surface.kind);
   }

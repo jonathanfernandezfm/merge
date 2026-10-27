@@ -165,7 +165,16 @@ export function RightPanelSurfaceContent(props: {
       );
     }
     case "merge":
-      return <MergeRightPanel id={surface.id} />; // merge-seam: right-panel
+      return (
+        // merge-seam: right-panel
+        <MergeRightPanel
+          id={surface.id}
+          threadRef={threadRef}
+          composerDraftTarget={props.composerDraftTarget}
+          workspaceMutationId={props.workspaceMutationId}
+          workspaceRoot={props.files.workspaceRoot}
+        />
+      );
     case "pull-requests":
       return <ThreadPullRequestsPanel threadRef={threadRef} />;
     case "device":
