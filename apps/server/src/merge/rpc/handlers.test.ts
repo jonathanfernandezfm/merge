@@ -1,5 +1,5 @@
 // @effect-diagnostics nodeBuiltinImport:off - fixture repo setup runs before the layer is built.
-import * as NodeChild from "node:child_process";
+import * as NodeChildProcess from "node:child_process";
 import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
@@ -13,7 +13,8 @@ import {
   type AuthEnvironmentScope,
 } from "@t3tools/contracts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { ProjectId } from "@t3tools/contracts";
+import { ProjectId, ThreadId, WorkTaskId } from "@t3tools/contracts";
+import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
@@ -24,6 +25,7 @@ import { RpcMessage, RpcServer } from "effect/rpc";
 import * as RpcAuthorization from "../../auth/RpcAuthorization.ts";
 import * as ServerConfig from "../../config.ts";
 import * as ProjectStore from "../../orchestration-v2/ProjectStore.ts";
+import { runMigrations } from "../../persistence/Migrations.ts";
 import * as SqlitePersistence from "../../persistence/Sqlite.ts";
 import * as ServerSettings from "../../serverSettings.ts";
 import * as GitVcsDriver from "../../vcs/GitVcsDriver.ts";
@@ -32,6 +34,7 @@ import * as VcsProcess from "../../vcs/VcsProcess.ts";
 import * as VcsProjectConfig from "../../vcs/VcsProjectConfig.ts";
 import * as KnownWorkspaces from "../../workspace/KnownWorkspaces.ts";
 import { WS_RPC_SERVER_OPTIONS } from "../../ws.ts";
+import * as WorkTaskStore from "../workTasks/WorkTaskStore.ts";
 import { mergeRpcHandlers } from "./handlers.ts";
 
 const ping = (scopes: ReadonlyArray<AuthEnvironmentScope>) =>
@@ -144,7 +147,7 @@ it.effect("merge.gitGraph.log finds its services through the RPC path", () =>
       NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "merge-rpc-")),
     );
     const git = (...args: string[]) =>
-      NodeChild.execFileSync("git", ["-C", root, ...args], { stdio: "ignore" });
+      NodeChildProcess.execFileSync("git", ["-C", root, ...args], { stdio: "ignore" });
     git("init", "-q", "-b", "main");
     git("config", "user.email", "t@t.com");
     git("config", "user.name", "T");
@@ -206,4 +209,74 @@ it.effect("merge.workItems writes need the source-control write scope", () =>
       "EnvironmentAuthorizationError",
     );
   }),
+);
+
+const workTasksLayer = WorkTaskStore.layer.pipe(
+  Layer.provideMerge(
+    Layer.effectDiscard(runMigrations()).pipe(
+      Layer.provideMerge(NodeSqliteClient.layer({ filename: ":memory:" })),
+    ),
+  ),
+);
+
+it.effect("merge.workTasks.subscribe streams the snapshot, then again after a change", () =>
+  Effect.gen(function* () {
+    const store = yield* WorkTaskStore.WorkTaskStore;
+    const subscribe = (scopes: ReadonlyArray<AuthEnvironmentScope>) =>
+      Effect.gen(function* () {
+        const messages = yield* Queue.unbounded<RpcMessage.FromServer<never>>();
+        const server = yield* RpcServer.makeNoSerialization(
+          MergeRpcGroup.middleware(RpcScopeAuthorization),
+          { ...WS_RPC_SERVER_OPTIONS, onFromServer: (message) => Queue.offer(messages, message) },
+        ).pipe(
+          Effect.provide(
+            Layer.mergeAll(MergeRpcGroup.toLayer(mergeRpcHandlers), RpcAuthorization.layer(scopes)),
+          ),
+        );
+        const requestId = RpcMessage.RequestId("work-tasks");
+        yield* server.write(0, {
+          _tag: "Request",
+          id: requestId,
+          tag: MERGE_WS_METHODS.workTasksSubscribe,
+          payload: {},
+          headers: Headers.empty,
+        });
+        const next = Effect.gen(function* () {
+          const message = yield* Queue.take(messages);
+          if (message._tag === "Chunk") yield* server.write(0, { _tag: "Ack", requestId });
+          return message;
+        });
+        return { next };
+      });
+
+    yield* Effect.scoped(
+      Effect.gen(function* () {
+        const { next } = yield* subscribe([AuthOrchestrationReadScope]);
+        const first = yield* next;
+        assert.strictEqual(first._tag, "Chunk");
+        if (first._tag === "Chunk") {
+          assert.deepStrictEqual(first.values, [{ tasks: [], links: [] }]);
+        }
+        yield* store.link(ThreadId.make("thread-a"), WorkTaskId.make("task-1"), "user");
+        const second = yield* next;
+        assert.strictEqual(second._tag, "Chunk");
+        if (second._tag === "Chunk") {
+          assert.deepStrictEqual(second.values.at(-1), {
+            tasks: [],
+            links: [{ threadId: "thread-a", taskId: "task-1", origin: "user" }],
+          });
+        }
+      }),
+    );
+
+    // Upstream's shell subscriptions need the orchestration read scope; so does this one.
+    yield* Effect.scoped(
+      Effect.gen(function* () {
+        const { next } = yield* subscribe([]);
+        const denied = yield* next;
+        assert.strictEqual(denied._tag, "Exit");
+        if (denied._tag === "Exit") assert.isTrue(Exit.isFailure(denied.exit));
+      }),
+    );
+  }).pipe(Effect.provide(workTasksLayer)),
 );
