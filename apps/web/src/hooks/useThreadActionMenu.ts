@@ -43,6 +43,7 @@ import {
 } from "../logicalProject";
 import { buildPhysicalToLogicalProjectKeyMap } from "../sidebarProjectGrouping";
 import { threadRuntimeCanArchive } from "@t3tools/client-runtime/state/models";
+import { handleMergeThreadMenu } from "../merge/threadMenu"; // merge-seam: thread-menu
 import { useCopyToClipboard } from "./useCopyToClipboard";
 import { useNewThreadHandler } from "./useHandleNewThread";
 import { useClientSettings } from "./useSettings";
@@ -144,6 +145,7 @@ export function useThreadActionMenu(input: {
         supports,
         snoozePresets,
         canShareWithGuest,
+        mergeThreadRef: threadRef, // merge-seam: thread-menu
       });
       const clicked = await settlePromise(() => api.contextMenu.show(items, position));
       if (clicked._tag === "Failure" || clicked.value === null) return;
@@ -158,6 +160,7 @@ export function useThreadActionMenu(input: {
         );
         return;
       }
+      if (handleMergeThreadMenu(action, threadRef)) return; // merge-seam: thread-menu
       if (action.startsWith("snooze:")) {
         const preset =
           action === "snooze:custom"

@@ -217,6 +217,13 @@ export function useThreadWorkTask(threadRef: ScopedThreadRef | null): WorkTaskVi
   return taskId === null ? null : (views.get(workTaskKey(threadRef.environmentId, taskId)) ?? null);
 }
 
+/** True when the thread (or its subagent root) belongs to a Work Task. */
+export function readThreadInWorkTask(threadRef: ScopedThreadRef): boolean {
+  const links = appAtomRegistry.get(linksByEnvironmentAtom).get(threadRef.environmentId);
+  const shell = appAtomRegistry.get(environmentThreadShells.quietThreadShellAtom(threadRef));
+  return workTaskIdOfThread(links ?? EMPTY_LINKS, shell, threadRef.threadId) !== null;
+}
+
 const NO_SHELL_ATOM = Atom.make(null).pipe(Atom.withLabel("merge-work-task-no-shell"));
 
 export function readWorkTaskView(key: string): WorkTaskView | null {

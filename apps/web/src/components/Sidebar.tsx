@@ -9,6 +9,7 @@ import {
 import { discardComposerDraft } from "../lib/discardComposerDraft";
 import { MergeSidebarSections } from "../merge/MergeSidebarSections"; // merge-seam: sidebar
 import { handleMergeThreadMenu } from "../merge/threadMenu"; // merge-seam: thread-menu
+import { useMergeUnfiledThreads } from "../merge/folders/state"; // merge-seam: folders
 import { requestCustomSnooze } from "./CustomSnoozeDialog";
 import { useAtomValue } from "@effect/atom-react";
 import * as Option from "effect/Option";
@@ -1138,7 +1139,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     scopedProjectKeys,
     serverConfigs,
     optimisticDrop,
-    threads,
+    threads: useMergeUnfiledThreads(threads), // merge-seam: folders
     routeRowThreadKey,
   });
 
@@ -2408,6 +2409,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                 titleRegeneration: supportsTitleRegeneration,
               },
               snoozePresets,
+              mergeThreadRef: threadRef, // merge-seam: thread-menu
             }),
             position,
           ),

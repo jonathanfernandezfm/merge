@@ -1,4 +1,4 @@
-import type { ContextMenuItem } from "@t3tools/contracts";
+import type { ContextMenuItem, ScopedThreadRef } from "@t3tools/contracts";
 import type { SnoozePreset } from "@t3tools/client-runtime/state/thread-settled";
 import { mergeThreadMenuItems } from "../merge/threadMenu"; // merge-seam: thread-menu
 
@@ -91,6 +91,7 @@ export interface ThreadActionMenuState {
   readonly snoozePresets: ReadonlyArray<SnoozePreset>;
   /** Guest links need their own grant, so the caller checks it instead of `canOperate`. */
   readonly canShareWithGuest?: boolean;
+  readonly mergeThreadRef?: ScopedThreadRef; // merge-seam: thread-menu
 }
 
 /** Local navigation, read markers, and copying remain available to read-only clients. */

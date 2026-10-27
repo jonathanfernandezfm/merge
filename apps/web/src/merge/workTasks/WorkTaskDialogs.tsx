@@ -55,6 +55,8 @@ import { useEnvironmentQuery } from "~/state/query";
 import { readEnvironmentScope } from "~/state/session";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { vcsEnvironment } from "~/state/vcs";
+import { FolderDialogsHost } from "../folders/FolderDialogs";
+import { useKeepFoldersLive } from "../folders/state";
 import { remoteBranchOf, workTaskTitleFromBranch } from "./logic";
 import { useKeepWorkTasksLive, useWorkTaskView, workTasksEnvironment } from "./state";
 
@@ -103,15 +105,18 @@ function commandErrorMessage(result: AtomCommandResult<unknown, unknown>, fallba
   return error instanceof Error && error.message.trim().length > 0 ? error.message : fallback;
 }
 
-/** Mounted once by the `_chat` layout (`work-task-dialogs` seam). */
+/** Mounted once by the `_chat` layout (`work-task-dialogs` seam); also hosts folder dialogs. */
 export function WorkTaskDialogsHost() {
   // The delete-thread worktree guard reads the snapshot, so it must load without any Work Task view.
   useKeepWorkTasksLive();
+  // The thread menu reads folders, so they load before the Folders section mounts.
+  useKeepFoldersLive();
   const newTarget = useAtomValue(newDialogAtom);
   const archiveTarget = useAtomValue(archiveDialogAtom);
   const waitingTarget = useAtomValue(waitingDialogAtom);
   return (
     <>
+      <FolderDialogsHost />
       {newTarget !== null ? (
         <NewWorkTaskDialog
           target={newTarget}
