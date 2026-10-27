@@ -42,6 +42,7 @@ vi.mock("./state", async () => {
     useWorkTaskView: () => null,
     readLinkedWorkTasks: () => [],
     readWorkTaskView: () => null,
+    mergeWorkTaskOwnsWorktreePath: () => false,
     workTasksEnvironment: {
       create: command,
       archiveCheck: () => null,

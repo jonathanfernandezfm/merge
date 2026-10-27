@@ -5,6 +5,7 @@ import {
   type AtomCommandResult,
 } from "@t3tools/client-runtime/state/runtime";
 import {
+  AuthOrchestrationOperateScope,
   WorkTaskOperationError,
   type EnvironmentId,
   type ProjectId,
@@ -51,6 +52,7 @@ import { toastManager } from "~/components/ui/toast";
 import { appAtomRegistry } from "~/rpc/atomRegistry";
 import { useProjects, waitForThreadShell } from "~/state/entities";
 import { useEnvironmentQuery } from "~/state/query";
+import { readEnvironmentScope } from "~/state/session";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { vcsEnvironment } from "~/state/vcs";
 import { remoteBranchOf, workTaskTitleFromBranch } from "./logic";
@@ -101,7 +103,7 @@ function commandErrorMessage(result: AtomCommandResult<unknown, unknown>, fallba
   return error instanceof Error && error.message.trim().length > 0 ? error.message : fallback;
 }
 
-/** Mounted once by `MergeSidebarSections`. */
+/** Mounted once by the `_chat` layout (`work-task-dialogs` seam). */
 export function WorkTaskDialogsHost() {
   const newTarget = useAtomValue(newDialogAtom);
   const archiveTarget = useAtomValue(archiveDialogAtom);
@@ -142,7 +144,10 @@ function NewWorkTaskDialog({
   target: NewWorkTaskTarget;
   onClose: () => void;
 }) {
-  const projects = useProjects();
+  // Read-only connections cannot create Work Tasks, so their projects are not offered.
+  const projects = useProjects().filter((project) =>
+    readEnvironmentScope(project.environmentId, AuthOrchestrationOperateScope),
+  );
   const navigate = useNavigate();
   const formId = useId();
   const [projectKey, setProjectKey] = useState<string | null>(() => {

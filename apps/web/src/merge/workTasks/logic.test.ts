@@ -1,5 +1,6 @@
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
 import {
+  EnvironmentId,
   ProjectId,
   WORK_TASK_STATUSES,
   WorkTaskId,
@@ -17,6 +18,7 @@ import {
   workTaskboardColumnForStatus,
   workTaskKey,
   workTaskMenuItems,
+  workTaskOwnsWorktreePath,
   workTaskTabState,
   workTaskTitleFromBranch,
   type EnvironmentWorkTask,
@@ -278,6 +280,7 @@ describe("workTaskMenuItems", () => {
     const items = workTaskMenuItems({
       task: workTask({ id: "t", autoHandleReviewFeedback: false }),
       linkedProjectTitles: ["Ui"],
+      canOperate: true,
     });
     expect(items.map((item) => [item.id, item.label])).toEqual([
       ["new-thread", "New thread"],
@@ -293,11 +296,13 @@ describe("workTaskMenuItems", () => {
     const waiting = workTaskMenuItems({
       task: workTask({ id: "t", waitingForUserReason: "Decide" }),
       linkedProjectTitles: [],
+      canOperate: true,
     });
     expect(waiting.map((item) => item.id)).toContain("clear-waiting");
     const archived = workTaskMenuItems({
       task: workTask({ id: "t", archivedAt: "2026-10-01T12:00:00.000Z" }),
       linkedProjectTitles: [],
+      canOperate: true,
     });
     expect(archived.filter((item) => item.disabled).map((item) => item.id)).toEqual([
       "new-thread",
@@ -305,6 +310,31 @@ describe("workTaskMenuItems", () => {
       "auto-handle",
       "archive",
     ]);
+  });
+
+  it("leaves only navigation enabled on a read-only connection", () => {
+    const items = workTaskMenuItems({
+      task: workTask({ id: "t", waitingForUserReason: "Decide" }),
+      linkedProjectTitles: ["Ui"],
+      canOperate: false,
+    });
+    expect(items.filter((item) => !item.disabled).map((item) => item.id)).toEqual([
+      "open-linked:0",
+    ]);
+  });
+});
+
+describe("workTaskOwnsWorktreePath", () => {
+  it("matches live tasks of the environment, ignoring trailing slashes", () => {
+    const tasks = [
+      workTask({ id: "live" }),
+      workTask({ id: "old", archivedAt: "2026-10-01T12:00:00.000Z" }),
+    ];
+    expect(workTaskOwnsWorktreePath(tasks, ENV, "/tmp/live")).toBe(true);
+    expect(workTaskOwnsWorktreePath(tasks, ENV, " /tmp/live/ ")).toBe(true);
+    expect(workTaskOwnsWorktreePath(tasks, ENV, "/tmp/live/sub")).toBe(false);
+    expect(workTaskOwnsWorktreePath(tasks, ENV, "/tmp/old")).toBe(false);
+    expect(workTaskOwnsWorktreePath(tasks, EnvironmentId.make("other"), "/tmp/live")).toBe(false);
   });
 });
 
