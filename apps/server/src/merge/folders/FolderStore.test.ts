@@ -6,12 +6,22 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as SqlClient from "effect/sql/SqlClient";
 
+import * as ProjectionStore from "../../orchestration-v2/ProjectionStore.ts";
 import { runMigrations } from "../../persistence/Migrations.ts";
 import ProjectionTasks from "../persistence/Migrations/001_ProjectionTasks.ts";
 import * as WorkTaskStore from "../workTasks/WorkTaskStore.ts";
 import * as FolderStore from "./FolderStore.ts";
 
-const stores = Layer.mergeAll(FolderStore.layer, WorkTaskStore.layer);
+// Every thread exists except "deleted" (getThreadShell is null for deleted and unknown threads).
+const projections = Layer.mock(ProjectionStore.ProjectionStoreV2)({
+  getThreadShell: (threadId) =>
+    Effect.succeed(threadId === "deleted" ? null : ({ id: threadId } as never)),
+});
+
+const stores = Layer.mergeAll(
+  FolderStore.layer.pipe(Layer.provide(projections)),
+  WorkTaskStore.layer,
+);
 
 const freshLayer = stores.pipe(
   Layer.provideMerge(
@@ -89,6 +99,10 @@ describe("FolderStore", () => {
       );
       const missing = yield* Effect.flip(store.assign(thread, FolderId.make("nope")));
       assert.strictEqual(missing.reason, "not-found");
+      // A deleted (or unknown) thread is never filed, as in v0.0.10.
+      const deleted = yield* Effect.flip(store.assign(ThreadId.make("deleted"), a));
+      assert.deepStrictEqual([deleted.reason, deleted.message], ["not-found", "Thread not found."]);
+      assert.deepStrictEqual((yield* store.snapshot()).links, []);
     }).pipe(Effect.provide(freshLayer)),
   );
 

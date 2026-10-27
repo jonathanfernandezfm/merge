@@ -25,6 +25,7 @@ import { RpcMessage, RpcServer } from "effect/rpc";
 
 import * as RpcAuthorization from "../../auth/RpcAuthorization.ts";
 import * as ServerConfig from "../../config.ts";
+import * as ProjectionStoreV2 from "../../orchestration-v2/ProjectionStore.ts";
 import * as ProjectStore from "../../orchestration-v2/ProjectStore.ts";
 import { runMigrations } from "../../persistence/Migrations.ts";
 import * as SqlitePersistence from "../../persistence/Sqlite.ts";
@@ -371,6 +372,11 @@ it.effect(
 );
 
 const foldersLayer = FolderStore.layer.pipe(
+  Layer.provide(
+    Layer.mock(ProjectionStoreV2.ProjectionStoreV2)({
+      getThreadShell: (threadId) => Effect.succeed({ id: threadId } as never),
+    }),
+  ),
   Layer.provideMerge(
     Layer.effectDiscard(runMigrations()).pipe(
       Layer.provideMerge(NodeSqliteClient.layer({ filename: ":memory:" })),

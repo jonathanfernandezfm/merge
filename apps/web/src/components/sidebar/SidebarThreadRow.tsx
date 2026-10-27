@@ -1,5 +1,6 @@
 import { useAtomMount } from "@effect/atom-react";
 import { asLaunchingThread } from "@t3tools/client-runtime/state/thread-inbox";
+import { useMergeCompactThreads } from "../../merge/folders/compact"; // merge-seam: compact-threads
 import { ThreadHoverCard, ThreadHoverCardPopup } from "../ThreadHoverCard";
 import { ThreadTerminalStatusButton } from "../ThreadStatusIndicators";
 import { discardComposerDraft } from "../../lib/discardComposerDraft";
@@ -1607,6 +1608,8 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                   Regenerating title
                 </span>
               ) : null}
+              {mergeCompact && terminalStatusIcon /* merge-seam: compact-threads */}
+              {mergeCompact && prBadge /* merge-seam: compact-threads */}
               {titleLineIcons}
             </div>
             {metaLine}
