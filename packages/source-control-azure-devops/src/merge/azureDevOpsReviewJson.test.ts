@@ -5,7 +5,12 @@ import * as Result from "effect/Result";
 import { describe, expect, it } from "vite-plus/test";
 
 import { decodeThreadsJson } from "../server/azureDevOpsPullRequestJson.ts";
-import { decodePolicyEvaluationsJson, decodeReviewThreadsJson } from "./azureDevOpsReviewJson.ts";
+import {
+  decodeExpiredPolicyEvaluationIds,
+  decodePolicyEvaluationsJson,
+  decodeReviewDecisionJson,
+  decodeReviewThreadsJson,
+} from "./azureDevOpsReviewJson.ts";
 
 /** Recorded `az` answers. */
 const fixture = (name: string) =>
@@ -151,5 +156,45 @@ describe("decodeReviewThreadsJson from recorded az output", () => {
         comments: ["106:1"],
       },
     ]);
+  });
+});
+
+describe("decodeExpiredPolicyEvaluationIds", () => {
+  it("names only the expired evaluations, for requeue", () => {
+    const raw = asJson([
+      { evaluationId: "eval-expired", status: "queued", context: { isExpired: true } },
+      { evaluationId: "eval-live", status: "queued", context: { isExpired: false } },
+      { status: "queued", context: { isExpired: true } },
+    ]);
+    expect(expectSuccess(decodeExpiredPolicyEvaluationIds(raw))).toEqual(["eval-expired"]);
+    expect(expectSuccess(decodeExpiredPolicyEvaluationIds(""))).toEqual([]);
+  });
+});
+
+describe("decodeReviewDecisionJson", () => {
+  const withVotes = (reviewers: ReadonlyArray<Record<string, unknown>>) =>
+    expectSuccess(decodeReviewDecisionJson(asJson({ reviewers })));
+
+  it("holds the change while anyone waits for the author, from recorded az output", () => {
+    expect(
+      expectSuccess(decodeReviewDecisionJson(fixture("azureDevOpsPullRequestShow.json"))),
+    ).toBe("changes-requested");
+  });
+
+  it("reads a rejection as changes requested", () => {
+    expect(withVotes([{ vote: 10 }, { vote: -10 }])).toBe("changes-requested");
+  });
+
+  it("approves once a reviewer approves and nobody objects", () => {
+    expect(withVotes([{ vote: 5 }, { vote: 0 }])).toBe("approved");
+  });
+
+  it("still owes a review while a required reviewer has not approved", () => {
+    expect(withVotes([{ vote: 10 }, { vote: 0, isRequired: true }])).toBe("review-required");
+    expect(withVotes([{ vote: 0 }])).toBe("review-required");
+  });
+
+  it("has no decision when nobody was asked", () => {
+    expect(withVotes([])).toBeNull();
   });
 });

@@ -1,4 +1,10 @@
-import type { BranchWorkItems, EnvironmentId, WorkItem, WorkItemState } from "@t3tools/contracts";
+import {
+  AuthSourceControlWriteScope,
+  type BranchWorkItems,
+  type EnvironmentId,
+  type WorkItem,
+  type WorkItemState,
+} from "@t3tools/contracts";
 import {
   CheckIcon,
   ChevronDownIcon,
@@ -10,7 +16,7 @@ import {
   UnlinkIcon,
   UserRoundIcon,
 } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 
 import { Button } from "~/components/ui/button";
 import {
@@ -37,6 +43,7 @@ import { Spinner } from "~/components/ui/spinner";
 import { toastManager } from "~/components/ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { writeTextToClipboard } from "~/hooks/useCopyToClipboard";
+import { useEnvironmentScope } from "~/state/session";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { workItemsEnvironment } from "./state";
 import { WorkItemCopyButtons, WorkItemDetailsSection } from "./WorkItemDetails";
@@ -104,8 +111,12 @@ export function WorkItemsPanel({ environmentId, cwd }: PanelTarget) {
             : "It may have been removed, or it lives in an organization this Azure CLI login cannot read."
         }
       >
-        <LinkWorkItemForm environmentId={environmentId} cwd={cwd} />
-        {data.source === "linked" ? <UnlinkButton environmentId={environmentId} cwd={cwd} /> : null}
+        <WhenWritable environmentId={environmentId}>
+          <LinkWorkItemForm environmentId={environmentId} cwd={cwd} />
+          {data.source === "linked" ? (
+            <UnlinkButton environmentId={environmentId} cwd={cwd} />
+          ) : null}
+        </WhenWritable>
       </PanelMessage>
     );
   }
@@ -146,22 +157,24 @@ function WorkItemFamily({
           <span className="min-w-0 truncate font-medium">{root.type ?? "Work item"}</span>
           <WorkItemId id={root.id} />
           <span className="flex-1" />
-          <Menu>
-            <MenuTrigger
-              render={<Button size="icon-xs" variant="ghost-muted" aria-label="Link options" />}
-            >
-              <LinkIcon className="size-3.5" />
-            </MenuTrigger>
-            <MenuPopup align="end">
-              <MenuItem onClick={() => setRelinking(true)}>
+          <WhenWritable environmentId={environmentId}>
+            <Menu>
+              <MenuTrigger
+                render={<Button size="icon-xs" variant="ghost-muted" aria-label="Link options" />}
+              >
                 <LinkIcon className="size-3.5" />
-                Link another work item
-              </MenuItem>
-              {data.source === "linked" ? (
-                <UnlinkMenuItem environmentId={environmentId} cwd={cwd} />
-              ) : null}
-            </MenuPopup>
-          </Menu>
+              </MenuTrigger>
+              <MenuPopup align="end">
+                <MenuItem onClick={() => setRelinking(true)}>
+                  <LinkIcon className="size-3.5" />
+                  Link another work item
+                </MenuItem>
+                {data.source === "linked" ? (
+                  <UnlinkMenuItem environmentId={environmentId} cwd={cwd} />
+                ) : null}
+              </MenuPopup>
+            </Menu>
+          </WhenWritable>
           <Tooltip>
             <TooltipTrigger
               render={
@@ -260,12 +273,14 @@ function WorkItemFamily({
             No subtasks yet. Commits reference #{root.id} until one exists.
           </p>
         )}
-        <AddSubtaskForm
-          environmentId={environmentId}
-          cwd={cwd}
-          parentId={root.id}
-          types={childTypes(children)}
-        />
+        <WhenWritable environmentId={environmentId}>
+          <AddSubtaskForm
+            environmentId={environmentId}
+            cwd={cwd}
+            parentId={root.id}
+            types={childTypes(children)}
+          />
+        </WhenWritable>
       </Section>
     </div>
   );
@@ -359,10 +374,11 @@ function StateMenu({
 }: PanelTarget & { item: WorkItem; states: BranchWorkItems["states"] }) {
   const update = useAtomCommand(workItemsEnvironment.update, { reportFailure: false });
   const [pending, setPending] = useState<string | null>(null);
+  const canWrite = useEnvironmentScope(environmentId, AuthSourceControlWriteScope);
   const options: ReadonlyArray<WorkItemState> = item.type ? (states[item.type] ?? []) : [];
   const label = pending ?? item.state ?? "No state";
 
-  if (options.length === 0) {
+  if (options.length === 0 || !canWrite) {
     return <span className="shrink-0 text-xs text-muted-foreground">{label}</span>;
   }
   return (
@@ -418,8 +434,12 @@ function StateMenu({
 }
 
 function AssignToMeButton({ environmentId, cwd, item }: PanelTarget & { item: WorkItem }) {
+  const canWrite = useEnvironmentScope(environmentId, AuthSourceControlWriteScope);
   const update = useAtomCommand(workItemsEnvironment.update, { reportFailure: false });
   const [pending, setPending] = useState(false);
+  if (!canWrite) {
+    return <span className="px-2 text-xs">{item.assignedTo ?? "Unassigned"}</span>;
+  }
   return (
     <Tooltip>
       <TooltipTrigger
@@ -630,6 +650,13 @@ function AddSubtaskForm({
       </Button>
     </form>
   );
+}
+
+/** Writes need the source-control write scope; the server enforces it, this only hides them. */
+function WhenWritable(props: { environmentId: EnvironmentId; children: ReactNode }) {
+  return useEnvironmentScope(props.environmentId, AuthSourceControlWriteScope) ? (
+    <>{props.children}</>
+  ) : null;
 }
 
 function RetryButton({ refreshing, onRetry }: { refreshing: boolean; onRetry: () => void }) {

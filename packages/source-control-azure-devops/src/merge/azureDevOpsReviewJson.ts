@@ -4,8 +4,10 @@ import * as Schema from "effect/Schema";
 import type {
   PullRequestCheck,
   PullRequestComment,
+  PullRequestReviewDecision,
   PullRequestReviewThread,
 } from "@t3tools/contracts";
+import { AZURE_DEVOPS_EXPIRED_CHECK_DESCRIPTION } from "@t3tools/contracts";
 import { decodeJsonResult } from "@t3tools/shared/schemaJson";
 
 const trimmed = (value: string | null | undefined) => {
@@ -20,6 +22,7 @@ const NullableString = Schema.optional(Schema.NullOr(Schema.String));
  * build and status policies are checks; reviewer, comment and work-item policies are not.
  */
 const RawPolicyEvaluationSchema = Schema.Struct({
+  evaluationId: NullableString,
   /** `queued`, `running`, `approved`, `rejected`, `notApplicable` or `broken`. */
   status: NullableString,
   configuration: Schema.optional(
@@ -139,7 +142,7 @@ export function decodePolicyEvaluationsJson(
       status,
       description:
         status === "action-required"
-          ? "Expired. Queue it again in Azure DevOps."
+          ? AZURE_DEVOPS_EXPIRED_CHECK_DESCRIPTION
           : isBlocking
             ? null
             : "Optional",
@@ -151,6 +154,68 @@ export function decodePolicyEvaluationsJson(
     });
   }
   return Result.succeed(checks);
+}
+
+/**
+ * The evaluations of a `az repos pr policy list` answer that have expired, which are the ones
+ * `az repos pr policy queue` has to be given to run again.
+ */
+export function decodeExpiredPolicyEvaluationIds(
+  raw: string,
+): Result.Result<ReadonlyArray<string>, unknown> {
+  const decoded = decodePolicyEvaluationList(raw.trim().length === 0 ? "[]" : raw);
+  if (!Result.isSuccess(decoded)) return Result.fail(decoded.failure);
+  const entries = "value" in decoded.success ? decoded.success.value : decoded.success;
+  const ids: string[] = [];
+  for (const entry of entries) {
+    const decodedEvaluation = decodePolicyEvaluationEntry(entry);
+    if (Exit.isFailure(decodedEvaluation)) continue;
+    const id = trimmed(decodedEvaluation.value.evaluationId);
+    if (id !== null && decodedEvaluation.value.context?.isExpired === true) ids.push(id);
+  }
+  return Result.succeed(ids);
+}
+
+/**
+ * Azure's vote is 10 approved, 5 approved with suggestions, 0 no vote, -5 waiting for the author
+ * and -10 rejected.
+ */
+const decodeReviewers = decodeJsonResult(
+  Schema.Struct({
+    reviewers: Schema.optional(
+      Schema.NullOr(
+        Schema.Array(
+          Schema.Struct({
+            vote: Schema.optional(Schema.NullOr(Schema.Number)),
+            isRequired: Schema.optional(Schema.NullOr(Schema.Boolean)),
+          }),
+        ),
+      ),
+    ),
+  }),
+);
+
+/**
+ * The reviewers' votes on `az repos pr show` read as one decision, the way Azure's completion gate
+ * reads them: any rejection or wait for the author holds the change, a required reviewer who has
+ * not approved still owes a review, and otherwise one approval is enough.
+ */
+export function decodeReviewDecisionJson(
+  raw: string,
+): Result.Result<PullRequestReviewDecision | null, unknown> {
+  const decoded = decodeReviewers(raw);
+  if (!Result.isSuccess(decoded)) return Result.fail(decoded.failure);
+  const reviewers = decoded.success.reviewers ?? [];
+  if (reviewers.length === 0) return Result.succeed(null);
+  const voteOf = (reviewer: (typeof reviewers)[number]) => reviewer.vote ?? 0;
+  if (reviewers.some((reviewer) => voteOf(reviewer) < 0))
+    return Result.succeed("changes-requested");
+  if (reviewers.some((reviewer) => reviewer.isRequired === true && voteOf(reviewer) < 5)) {
+    return Result.succeed("review-required");
+  }
+  return Result.succeed(
+    reviewers.some((reviewer) => voteOf(reviewer) >= 5) ? "approved" : "review-required",
+  );
 }
 
 const RawFilePositionSchema = Schema.optional(

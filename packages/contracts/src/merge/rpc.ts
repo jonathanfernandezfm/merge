@@ -11,6 +11,11 @@ import {
   GitGraphLogResult,
 } from "./gitGraph.ts";
 import {
+  RequeueExpiredChecksError,
+  RequeueExpiredChecksInput,
+  RequeueExpiredChecksResult,
+} from "./pullRequests.ts";
+import {
   BranchWorkItems,
   BranchWorkItemsInput,
   CreateChildWorkItemInput,
@@ -22,6 +27,7 @@ import {
 
 export * from "./gitGraph.ts";
 export * from "./workItems.ts";
+export * from "./pullRequests.ts";
 
 export const MERGE_WS_METHODS = {
   ping: "merge.ping",
@@ -31,6 +37,7 @@ export const MERGE_WS_METHODS = {
   workItemsLink: "merge.workItems.link",
   workItemsUpdate: "merge.workItems.update",
   workItemsCreateChild: "merge.workItems.createChild",
+  pullRequestsRequeueExpiredChecks: "merge.pullRequests.requeueExpiredChecks",
 } as const;
 
 export const MergePingRpc = Rpc.make(MERGE_WS_METHODS.ping, {
@@ -73,6 +80,15 @@ export const MergeWorkItemsCreateChildRpc = Rpc.make(MERGE_WS_METHODS.workItemsC
   error: WorkItemsError,
 });
 
+export const MergePullRequestsRequeueExpiredChecksRpc = Rpc.make(
+  MERGE_WS_METHODS.pullRequestsRequeueExpiredChecks,
+  {
+    payload: RequeueExpiredChecksInput,
+    success: RequeueExpiredChecksResult,
+    error: RequeueExpiredChecksError,
+  },
+);
+
 /** Fork RPCs. Merged into `WsRpcGroup` at the `rpc-group` seam. */
 export const MergeRpcGroup = RpcGroup.make(
   MergePingRpc,
@@ -82,4 +98,5 @@ export const MergeRpcGroup = RpcGroup.make(
   MergeWorkItemsLinkRpc,
   MergeWorkItemsUpdateRpc,
   MergeWorkItemsCreateChildRpc,
+  MergePullRequestsRequeueExpiredChecksRpc,
 );
