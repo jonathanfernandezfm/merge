@@ -4,6 +4,7 @@ import {
   type OrchestrationV2DomainEvent,
   type OrchestrationV2ServerCommand,
   type OrchestrationV2ThreadShell,
+  type ThreadPullRequestKey,
   type WorkTask,
   type WorkTaskLink,
 } from "@t3tools/contracts";
@@ -14,6 +15,7 @@ import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Queue from "effect/Queue";
+import * as Ref from "effect/Ref";
 import * as Schedule from "effect/Schedule";
 import type * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
@@ -21,6 +23,7 @@ import * as Stream from "effect/Stream";
 
 import * as Orchestrator from "../../orchestration-v2/Orchestrator.ts";
 import * as ProjectionStore from "../../orchestration-v2/ProjectionStore.ts";
+import { PULL_REQUEST_WATCH_WAKE_LIMIT } from "../../orchestration-v2/pullRequestWatch.ts";
 import { forkParked } from "../../serverActivation.ts";
 import {
   legacyThreadPullRequestKey,
@@ -28,18 +31,17 @@ import {
   threadPullRequestsOf,
   visibleThreadPullRequests,
 } from "../../sourceControl/threadPullRequests.ts";
-import { WorkTaskStore } from "./WorkTaskStore.ts";
+import { WorkTaskStore, type WorkTaskReactorMark } from "./WorkTaskStore.ts";
 import { WorkTaskWorkspace, type WorkTaskLauncher } from "./WorkTaskWorkspace.ts";
 
 const REVIEW_THREAD_TITLE = "Review feedback";
 const REVIEW_LAUNCHER: WorkTaskLauncher = { createdBy: "system", creationSource: "server" };
 
-/** Events that can change a link, a PR snapshot, an archive, or whether a thread is busy. */
+/** Events that can change a link, a PR snapshot, or whether a task thread is busy. */
 const TRIGGERS: ReadonlySet<OrchestrationV2DomainEvent["type"]> = new Set([
   "thread.pull-request-synced",
   "thread.pull-request-link-updated",
   "thread.archived",
-  "thread.unarchived",
   "run.created",
   "run.updated",
   "runtime-request.updated",
@@ -49,16 +51,32 @@ const TRIGGERS: ReadonlySet<OrchestrationV2DomainEvent["type"]> = new Set([
 const isLive = (shell: OrchestrationV2ThreadShell) =>
   shell.archivedAt === null && shell.deletedAt === null;
 
+const keyText = (key: ThreadPullRequestKey) => `${key.host}/${key.repository}#${key.number}`;
+
+/** Logs a failure and lets interrupts through. */
+const logSkipped =
+  (message: string, fields: Record<string, unknown> = {}) =>
+  <E>(cause: Cause.Cause<E>): Effect.Effect<void> =>
+    Cause.hasInterruptsOnly(cause)
+      ? Effect.interrupt
+      : Effect.logWarning(message, { ...fields, cause: Cause.pretty(cause) });
+
+/** Runs a long-lived subscription again 5 s after it fails or ends. */
+const restarting = <E, R>(message: string, effect: Effect.Effect<void, E, R>) =>
+  Effect.forever(
+    effect.pipe(Effect.catchCause(logSkipped(message)), Effect.andThen(Effect.sleep("5 seconds"))),
+  );
+
 /**
  * Work Task layer on upstream's PR engine: links branch PRs, stamps `merged_at`, keeps one
  * "Review feedback" thread whose watch is held off while a sibling is busy, and unlinks revived
- * threads of archived tasks. Stateless: each pass re-derives from the store, so restarts are safe.
+ * threads of archived tasks. Decisions come from the store and its reactor marks, so restarts are safe.
  */
 export class WorkTaskReactor extends Context.Service<
   WorkTaskReactor,
   {
     readonly start: () => Effect.Effect<void, never, Scope.Scope>;
-    /** One reconcile pass over every Work Task. Logs failures and never fails. */
+    /** One full reconcile pass, archived tasks included. Logs failures and never fails. */
     readonly sweep: Effect.Effect<void>;
   }
 >()("t3/merge/workTasks/WorkTaskReactor") {}
@@ -69,8 +87,11 @@ export const make = Effect.gen(function* () {
   const store = yield* WorkTaskStore;
   const workspace = yield* WorkTaskWorkspace;
   const crypto = yield* Crypto.Crypto;
-  // Event wakes and the timer must not reconcile at once, or two passes could both launch a review thread.
+  // Event wakes and the timer must not reconcile at once.
   const lock = yield* Semaphore.make(1);
+  // Event filter only: threads of active tasks and their subagents, refreshed every pass.
+  const relevant = yield* Ref.make<ReadonlySet<string>>(new Set());
+  const archivedDue = yield* Ref.make(false);
 
   const dispatch = (tag: string, command: (commandId: CommandId) => OrchestrationV2ServerCommand) =>
     crypto.randomUUIDv4().pipe(
@@ -80,16 +101,29 @@ export const make = Effect.gen(function* () {
       ),
     );
 
-  const logSkipped =
-    (message: string, fields: Record<string, unknown>) =>
-    <E>(cause: Cause.Cause<E>): Effect.Effect<void> =>
-      Cause.hasInterruptsOnly(cause)
-        ? Effect.interrupt
-        : Effect.logWarning(message, { ...fields, cause: Cause.pretty(cause) });
+  const watchCommand = (
+    threadId: OrchestrationV2ThreadShell["id"],
+    key: ThreadPullRequestKey,
+    watching: boolean,
+    extra: { readonly resume?: boolean; readonly url?: string } = {},
+  ) =>
+    dispatch(watching ? "pr-watch" : "pr-unwatch", (commandId) => ({
+      type: "thread.pull-request.watch",
+      commandId,
+      threadId,
+      host: key.host,
+      repository: key.repository,
+      number: key.number,
+      watching,
+      ...(extra.resume === true && { resumeRemarksFromEndedWatch: true }),
+      // manual: an agent-source watch is refused after the user stopped the thread's last run.
+      ...(extra.url !== undefined && { link: { url: extra.url, source: "manual" as const } }),
+    }));
 
   const reconcileActive = Effect.fn("WorkTaskReactor.reconcileActive")(function* (
     task: WorkTask,
     links: ReadonlyArray<WorkTaskLink>,
+    marks: ReadonlyMap<string, WorkTaskReactorMark>,
     shells: ReadonlyArray<OrchestrationV2ThreadShell>,
   ) {
     const branch = task.workspace.branch;
@@ -97,22 +131,24 @@ export const make = Effect.gen(function* () {
     const ownIds = new Set<string>(own.map((link) => link.threadId));
     const threads = shells.filter((shell) => ownIds.has(shell.id) && isLive(shell));
 
-    // PR linker: upstream finds the branch PR; linking it lets upstream sync its snapshot.
+    // PR linker: link each thread's branch PR once. The recorded key makes a user unlink stick.
     for (const shell of threads) {
       const found = shell.branchPullRequest;
       if (!found || shell.branch !== branch) continue;
       const key = legacyThreadPullRequestKey(found);
-      if (threadPullRequestsOf(shell).some((link) => threadPullRequestKeysEqual(link, key))) {
-        continue;
+      const text = keyText(key);
+      if (marks.get(shell.id)?.autoLinkedPrKey === text) continue;
+      if (!threadPullRequestsOf(shell).some((link) => threadPullRequestKeysEqual(link, key))) {
+        yield* dispatch("pr-link", (commandId) => ({
+          type: "thread.pull-request.link",
+          commandId,
+          threadId: shell.id,
+          ...key,
+          url: found.url,
+          source: "agent",
+        }));
       }
-      yield* dispatch("pr-link", (commandId) => ({
-        type: "thread.pull-request.link",
-        commandId,
-        threadId: shell.id,
-        ...key,
-        url: found.url,
-        source: "agent",
-      }));
+      yield* store.setReactorMark(shell.id, { autoLinkedPrKey: text });
     }
 
     // The task PR is the newest linked snapshot on the task branch, as status picks it.
@@ -129,6 +165,7 @@ export const make = Effect.gen(function* () {
 
     const reviewLink = own.find((link) => link.origin === "review-feedback");
     let review = shells.find((shell) => shell.id === reviewLink?.threadId) ?? null;
+    const mark = reviewLink ? (marks.get(reviewLink.threadId)?.reviewWatch ?? null) : null;
     const wanted =
       task.autoHandleReviewFeedback &&
       task.workspace.setup.status === "ready" &&
@@ -139,25 +176,29 @@ export const make = Effect.gen(function* () {
       // Auto-handle is off or there is no open PR: the review thread watches nothing.
       if (review === null || !isLive(review)) return;
       const reviewId = review.id;
-      for (const link of visibleThreadPullRequests(review.pullRequests ?? [])) {
-        if (link.watch === undefined) continue;
-        yield* dispatch("pr-unwatch", (commandId) => ({
-          type: "thread.pull-request.watch",
-          commandId,
-          threadId: reviewId,
-          host: link.host,
-          repository: link.repository,
-          number: link.number,
-          watching: false,
-        }));
+      const watched = visibleThreadPullRequests(review.pullRequests ?? []).filter(
+        (link) => link.watch !== undefined,
+      );
+      yield* Effect.forEach(watched, (link) => watchCommand(reviewId, link, false), {
+        discard: true,
+      });
+      // Clearing the mark makes the next watch a plain one (new baseline).
+      if (mark !== null && (!task.autoHandleReviewFeedback || watched.length > 0)) {
+        yield* store.setReactorMark(reviewId, { reviewWatch: null });
       }
       return;
     }
 
     if (reviewLink === undefined) {
       // No initial message: a retried preparation with one would drop skipSetupScript.
+      // A fixed commandId replays the launch receipt if a crash lost the link.
       const { threadId } = yield* workspace.createThread(
-        { taskId: task.id, title: REVIEW_THREAD_TITLE, origin: "review-feedback" },
+        {
+          taskId: task.id,
+          title: REVIEW_THREAD_TITLE,
+          origin: "review-feedback",
+          commandId: CommandId.make(`merge:work-task-review:${task.id}`),
+        },
         REVIEW_LAUNCHER,
       );
       review = yield* projections.getThreadShell(threadId);
@@ -177,25 +218,33 @@ export const make = Effect.gen(function* () {
         (thread.state === "running" || thread.state === "waiting" || thread.state === "monitoring"),
     );
     const key = { host: pr.host, repository: pr.repository, number: pr.number };
-    const watching =
-      threadPullRequestsOf(review).find((link) => threadPullRequestKeysEqual(link, key))?.watch !==
-      undefined;
-    if (watching === !busy) return;
-    yield* dispatch(busy ? "pr-hold" : "pr-watch", (commandId) => ({
-      type: "thread.pull-request.watch",
-      commandId,
-      threadId: review.id,
-      ...key,
-      watching: !busy,
-      ...(busy
-        ? {}
-        : {
-            // Comments posted during the hold are delivered now, once.
-            resumeRemarksFromEndedWatch: true,
-            // manual: an agent-source watch is refused after the user stopped the thread's last run.
-            link: { url: pr.url, source: "manual" as const },
-          }),
-    }));
+    const link = threadPullRequestsOf(review).find((entry) =>
+      threadPullRequestKeysEqual(entry, key),
+    );
+
+    if (link?.watch !== undefined) {
+      if (busy) {
+        // Marked first: after a crash, `held` with no watch still resumes.
+        yield* store.setReactorMark(review.id, { reviewWatch: "held" });
+        yield* watchCommand(review.id, key, false);
+      } else if (mark !== "on") {
+        yield* store.setReactorMark(review.id, { reviewWatch: "on" });
+      }
+      return;
+    }
+    // Off, and `on`: an agent's unwatch or upstream ending the watch. Respect it.
+    if (busy || mark === "on") return;
+    if (mark === "held") {
+      // A hold never revives a watch upstream ended at its comment-only limit.
+      if ((link?.endedWatch?.wakes ?? 0) >= PULL_REQUEST_WATCH_WAKE_LIMIT) {
+        yield* store.setReactorMark(review.id, { reviewWatch: "on" });
+        return;
+      }
+      yield* watchCommand(review.id, key, true, { resume: true, url: pr.url });
+    } else {
+      yield* watchCommand(review.id, key, true, { url: pr.url });
+    }
+    yield* store.setReactorMark(review.id, { reviewWatch: "on" });
   });
 
   /** A thread unarchived after its task was archived becomes an ordinary thread. */
@@ -211,24 +260,44 @@ export const make = Effect.gen(function* () {
     }
   });
 
-  const pass = Effect.gen(function* () {
-    const tasks = yield* store.list();
-    const links = yield* store.links();
-    const linked = new Set<string>(links.map((link) => link.threadId));
-    // Subagent children count toward their root's busy state.
-    const subagents = (yield* projections.listActiveSubagentThreadIds()).filter(
-      (id) => !linked.has(id),
+  const pass = Effect.fn("WorkTaskReactor.pass")(function* (includeArchived: boolean) {
+    const tasks = (yield* store.list()).filter(
+      (task) => includeArchived || task.archivedAt === null,
     );
-    const shells = (yield* Effect.forEach(
-      [...links.map((link) => link.threadId), ...subagents],
+    const included = new Set<string>(tasks.map((task) => task.id));
+    const links = (yield* store.links()).filter((link) => included.has(link.taskId));
+    const marks = new Map((yield* store.reactorMarks()).map((mark) => [mark.threadId, mark]));
+    const active = new Set<string>(
+      tasks.filter((task) => task.archivedAt === null).map((task) => task.id),
+    );
+    const activeIds = new Set<string>(
+      links.filter((link) => active.has(link.taskId)).map((link) => link.threadId),
+    );
+    // Subagent children count toward their root's busy state.
+    const subagents = yield* Effect.forEach(
+      yield* projections.listActiveSubagentThreadIds(),
       (id) => projections.getThreadShell(id),
       { concurrency: 8 },
-    )).filter((shell): shell is OrchestrationV2ThreadShell => shell !== null);
+    );
+    const children = subagents.filter(
+      (shell): shell is OrchestrationV2ThreadShell =>
+        shell !== null && activeIds.has(shell.lineage.rootThreadId) && !activeIds.has(shell.id),
+    );
+    const linkedShells = yield* Effect.forEach(
+      links,
+      (link) => projections.getThreadShell(link.threadId),
+      { concurrency: 8 },
+    );
+    const shells = [
+      ...linkedShells.filter((shell): shell is OrchestrationV2ThreadShell => shell !== null),
+      ...children,
+    ];
+    yield* Ref.set(relevant, new Set([...activeIds, ...children.map((shell) => shell.id)]));
     yield* Effect.forEach(
       tasks,
       (task) =>
         (task.archivedAt === null
-          ? reconcileActive(task, links, shells)
+          ? reconcileActive(task, links, marks, shells)
           : unlinkRevived(task, links, shells)
         ).pipe(
           Effect.catchCause(logSkipped("Work Task reactor skipped a task", { taskId: task.id })),
@@ -237,29 +306,50 @@ export const make = Effect.gen(function* () {
     );
   });
 
-  const sweep = lock
-    .withPermit(pass)
-    .pipe(Effect.catchCause(logSkipped("Work Task reactor sweep failed", {})));
+  const sweepWith = (includeArchived: boolean) =>
+    lock
+      .withPermit(pass(includeArchived))
+      .pipe(Effect.catchCause(logSkipped("Work Task reactor sweep failed")));
 
   const start = Effect.fn("WorkTaskReactor.start")(function* () {
-    // Sliding(1) coalesces bursts of events into one pending sweep.
+    // Sliding(1) plus the debounce below coalesces bursts into one sweep.
     const wake = yield* Queue.sliding<void>(1);
     const poke = Queue.offer(wake, undefined).pipe(Effect.asVoid);
     yield* forkParked(
-      Stream.runForEach(engine.streamDomainEvents, (event) =>
-        TRIGGERS.has(event.type) ? poke : Effect.void,
-      ).pipe(Effect.catchCause(logSkipped("Work Task reactor event stream failed", {}))),
-    );
-    yield* forkParked(
-      Stream.runForEach(store.changes, () => poke).pipe(
-        Effect.catchCause(logSkipped("Work Task reactor change stream failed", {})),
+      restarting(
+        "Work Task reactor event stream failed",
+        Stream.runForEach(engine.streamDomainEvents, (event) => {
+          if (event.type === "thread.unarchived") {
+            return Ref.set(archivedDue, true).pipe(Effect.andThen(poke));
+          }
+          if (!TRIGGERS.has(event.type)) return Effect.void;
+          return Ref.get(relevant).pipe(
+            Effect.flatMap((ids) => (ids.has(event.threadId) ? poke : Effect.void)),
+          );
+        }),
       ),
     );
-    yield* forkParked(Effect.forever(Queue.take(wake).pipe(Effect.andThen(sweep))));
-    yield* forkParked(sweep.pipe(Effect.repeat(Schedule.spaced("2 minutes")), Effect.asVoid));
+    yield* forkParked(
+      restarting(
+        "Work Task reactor change stream failed",
+        Stream.runForEach(store.changes, () => poke),
+      ),
+    );
+    yield* forkParked(
+      Effect.forever(
+        Queue.take(wake).pipe(
+          Effect.andThen(Effect.sleep("1 second")),
+          Effect.andThen(Ref.getAndSet(archivedDue, false)),
+          Effect.flatMap(sweepWith),
+        ),
+      ),
+    );
+    yield* forkParked(
+      sweepWith(true).pipe(Effect.repeat(Schedule.spaced("2 minutes")), Effect.asVoid),
+    );
   });
 
-  return WorkTaskReactor.of({ start, sweep });
+  return WorkTaskReactor.of({ start, sweep: sweepWith(true) });
 });
 
 export const layer = Layer.effect(WorkTaskReactor, make);

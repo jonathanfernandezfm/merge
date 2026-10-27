@@ -7,6 +7,7 @@ import * as NodePath from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
 import {
+  CommandId,
   ProjectId,
   ProviderInstanceId,
   ThreadId,
@@ -119,6 +120,7 @@ const pushedClone = () => {
 
 const shells = new Map<string, OrchestrationV2ThreadShell>();
 const launches: Array<ThreadLaunch.ThreadLaunchInput> = [];
+const receipts = new Map<string, ThreadId>();
 const commands: Array<OrchestrationV2ServerCommand> = [];
 const PROJECT_ID = ProjectId.make("project-1");
 let projectRoot = "/nowhere";
@@ -165,7 +167,12 @@ const layer = WorkTaskWorkspace.layer.pipe(
       launch: (input) =>
         Effect.sync(() => {
           launches.push(input);
+          // Like ThreadLaunchService, a known commandId replays its receipt's thread.
+          const replayed = receipts.get(input.commandId);
+          if (replayed)
+            return { threadId: replayed, projection: undefined as never, resumed: true };
           const threadId = ThreadId.make(`thread-${launches.length}`);
+          receipts.set(input.commandId, threadId);
           shells.set(threadId, shell(threadId));
           return { threadId, projection: undefined as never, resumed: false };
         }),
@@ -227,6 +234,7 @@ const projectRepo = () => {
 
 const reset = () => {
   shells.clear();
+  receipts.clear();
   launches.length = 0;
   commands.length = 0;
 };
@@ -520,6 +528,39 @@ it.effect("createThread launches in the task worktree and links the thread", () 
     assert.isTrue(task.autoHandleReviewFeedback);
     yield* workspace.setWaiting({ taskId, reason: null });
     assert.isNull((yield* store.get(taskId))!.waitingForUserReason);
+    NodeFS.rmSync(repo.root, { recursive: true, force: true });
+  }).pipe(Effect.provide(layer)),
+);
+
+it.effect("createThread with a fixed commandId replays the launch and still writes the link", () =>
+  Effect.gen(function* () {
+    reset();
+    const store = yield* WorkTaskStore.WorkTaskStore;
+    const workspace = yield* WorkTaskWorkspace.WorkTaskWorkspace;
+    const repo = projectRepo();
+    const { taskId } = yield* workspace.create(createInput());
+    const commandId = CommandId.make(`merge:work-task-review:${taskId}`);
+    const input = {
+      taskId,
+      title: "Review feedback",
+      origin: "review-feedback" as const,
+      commandId,
+    };
+
+    const first = yield* workspace.createThread(input);
+    // A crash between launch and link: the link is lost, the receipt is not.
+    yield* store.unlink(first.threadId);
+    const second = yield* workspace.createThread(input);
+
+    assert.strictEqual(second.threadId, first.threadId);
+    assert.deepStrictEqual(
+      launches.slice(-2).map((launch) => launch.commandId),
+      [commandId, commandId],
+    );
+    assert.deepStrictEqual(
+      (yield* store.links()).filter((link) => link.origin === "review-feedback"),
+      [{ threadId: first.threadId, taskId, origin: "review-feedback" }],
+    );
     NodeFS.rmSync(repo.root, { recursive: true, force: true });
   }).pipe(Effect.provide(layer)),
 );

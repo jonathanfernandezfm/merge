@@ -104,10 +104,26 @@ export class WorkTaskStore extends Context.Service<
     /** Detaches the thread from its Work Task; its folder link stays. */
     readonly unlink: (threadId: ThreadId) => Effect.Effect<void, WorkTaskOperationError>;
     readonly ownsWorktree: (path: string) => Effect.Effect<boolean, WorkTaskOperationError>;
+    /** Reactor marks of every task-linked thread. Writes to them do not emit `changes`. */
+    readonly reactorMarks: () => Effect.Effect<
+      ReadonlyArray<WorkTaskReactorMark>,
+      WorkTaskOperationError
+    >;
+    readonly setReactorMark: (
+      threadId: ThreadId,
+      patch: Partial<Omit<WorkTaskReactorMark, "threadId">>,
+    ) => Effect.Effect<void, WorkTaskOperationError>;
     /** Emits once on subscribe, then after writes (coalesced). */
     readonly changes: Stream.Stream<void>;
   }
 >()("t3/merge/workTasks/WorkTaskStore") {}
+
+/** Reactor bookkeeping on a linked thread; never sent to clients. */
+export interface WorkTaskReactorMark {
+  readonly threadId: ThreadId;
+  readonly autoLinkedPrKey: string | null;
+  readonly reviewWatch: "on" | "held" | null;
+}
 
 /** @public */
 export const make = Effect.gen(function* () {
@@ -289,6 +305,28 @@ export const make = Effect.gen(function* () {
       Effect.mapError(failed("Could not read Work Task worktrees.")),
     );
 
+  const reactorMarks = () =>
+    sql<WorkTaskReactorMark>`
+      SELECT thread_id AS "threadId", auto_linked_pr_key AS "autoLinkedPrKey",
+        review_watch AS "reviewWatch"
+      FROM merge_thread_links
+      WHERE task_id IS NOT NULL
+    `.pipe(Effect.mapError(failed("Could not read Work Task reactor marks.")));
+
+  const setReactorMark = (
+    threadId: ThreadId,
+    patch: Partial<Omit<WorkTaskReactorMark, "threadId">>,
+  ) => {
+    const columns = {
+      ...(patch.autoLinkedPrKey !== undefined && { auto_linked_pr_key: patch.autoLinkedPrKey }),
+      ...(patch.reviewWatch !== undefined && { review_watch: patch.reviewWatch }),
+    };
+    if (Object.keys(columns).length === 0) return Effect.void;
+    return sql`
+      UPDATE merge_thread_links SET ${sql.update(columns)} WHERE thread_id = ${threadId}
+    `.pipe(Effect.asVoid, Effect.mapError(failed("Could not write a Work Task reactor mark.")));
+  };
+
   // Subscribe before the first emit so a write between the two is never missed.
   const changes = Stream.unwrap(
     Effect.map(PubSub.subscribe(changed), (subscription) =>
@@ -306,6 +344,8 @@ export const make = Effect.gen(function* () {
     link,
     unlink,
     ownsWorktree,
+    reactorMarks,
+    setReactorMark,
     changes,
   });
 });

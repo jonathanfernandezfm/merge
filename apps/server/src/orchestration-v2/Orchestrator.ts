@@ -3588,13 +3588,14 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
                     }),
                     remarksThrough: startedAt,
                     remarkIds: [],
-                    // merge-seam: pr-watch-resume (Work Task hold: deliver remarks posted while unwatched)
+                    wakes: 0,
+                    // merge-seam: pr-watch-resume (Work Task hold: deliver held remarks, keep the wake count)
                     ...(command.resumeRemarksFromEndedWatch &&
                       existing.endedWatch && {
                         remarksThrough: existing.endedWatch.remarksThrough,
                         remarkIds: existing.endedWatch.remarkIds,
+                        wakes: existing.endedWatch.wakes,
                       }), // merge-seam: pr-watch-resume
-                    wakes: 0,
                   });
           if (watch === existing.watch && links === linked) return thread;
           const final =

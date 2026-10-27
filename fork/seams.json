@@ -178,12 +178,12 @@
   {
     "id": "pr-watch-resume",
     "file": "packages/contracts/src/orchestrationV2.ts",
-    "purpose": "Optional resumeRemarksFromEndedWatch on thread.pull-request.watch (set only by the Work Task feedback hold)"
+    "purpose": "Optional resumeRemarksFromEndedWatch on thread.pull-request.watch. The Work Task reactor sets it when a hold ends; WS clients can also send it (harmless: it only resumes their own ended watch)"
   },
   {
     "id": "pr-watch-resume",
     "file": "apps/server/src/orchestration-v2/Orchestrator.ts",
-    "purpose": "Re-watch with resumeRemarksFromEndedWatch keeps endedWatch's remark cursor, so comments posted during the hold are delivered once"
+    "purpose": "A re-watch with resumeRemarksFromEndedWatch keeps endedWatch's remark cursor and wake count, so held comments arrive once and a hold never resets the bot-loop limit"
   },
   {
     "id": "pr-watch-resume",

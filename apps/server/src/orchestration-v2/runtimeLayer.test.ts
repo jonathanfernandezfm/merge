@@ -2853,6 +2853,9 @@ it.layer(layerTest)("OrchestrationV2LayerLive lifecycle", (it) => {
 
       comments.push({ body: "while-watched", createdAt: at(5) });
       yield* sweepLater;
+      // A comment-only wake: the count is 1 when the hold starts.
+      comments.push({ body: "another-remark", createdAt: at(12) });
+      yield* sweepLater;
       yield* watch(false, "hold");
       comments.push({ body: "during-hold", createdAt: at(15) });
       yield* TestClock.adjust("10 minutes");
@@ -2862,6 +2865,12 @@ it.layer(layerTest)("OrchestrationV2LayerLive lifecycle", (it) => {
       assert.equal(yield* told("before-watch"), 0);
       assert.equal(yield* told("while-watched"), 1);
       assert.equal(yield* told("during-hold"), 1);
+      const wakes = Effect.map(
+        orchestrator.getThreadShell(threadId),
+        (thread) => thread?.pullRequests?.[0]?.watch?.wakes,
+      );
+      // The hold paused the comment-only wake count instead of resetting it.
+      assert.equal(yield* wakes, 2);
 
       // Without the flag, upstream keeps its rule: a re-watch starts at now.
       yield* watch(false, "gap");
@@ -2870,6 +2879,7 @@ it.layer(layerTest)("OrchestrationV2LayerLive lifecycle", (it) => {
       yield* watch(true, "plain");
       yield* sweepLater;
       assert.equal(yield* told("during-gap"), 0);
+      assert.equal(yield* wakes, 0);
       assert.equal(yield* told("during-hold"), 1);
       yield* watch(false, "end");
     }),
