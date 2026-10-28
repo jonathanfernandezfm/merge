@@ -22,7 +22,7 @@ const rules = {
     pattern: /\bT3 Code\b/g,
     replacement: "Merge",
     include: ["apps/web/src/**"],
-    exclude: ["apps/web/src/excluded.ts"],
+    exclude: ["apps/web/src/excluded.ts", "**/src/merge/**"],
   },
   overlays: [ICON],
 };
@@ -38,6 +38,7 @@ async function fixture(t: { after: (fn: () => Promise<void>) => void }) {
   await put(ENV_FILE, 'const APP_BASE_NAME = "T3 Code";\nconst ID = "com.t3tools.t3code";\n');
   await put("apps/web/src/included.ts", 'export const label = "Open T3 Code";\n');
   await put("apps/web/src/excluded.ts", 'export const label = "Open T3 Code";\n');
+  await put("apps/web/src/merge/fork.ts", 'export const label = "Open T3 Code";\n');
   await put(ICON, upstreamIcon);
   await put(`fork/brand/assets/${ICON}`, "merge-icon");
   await put("fork/brand/overlay.lock.json", JSON.stringify({ [ICON]: blobSha(upstreamIcon) }));
@@ -56,6 +57,10 @@ NodeTest.test("applies identity anchors, copy and overlays, then is idempotent",
   NodeAssert.equal(await read("apps/web/src/included.ts"), 'export const label = "Open Merge";\n');
   NodeAssert.equal(
     await read("apps/web/src/excluded.ts"),
+    'export const label = "Open T3 Code";\n',
+  );
+  NodeAssert.equal(
+    await read("apps/web/src/merge/fork.ts"),
     'export const label = "Open T3 Code";\n',
   );
   NodeAssert.equal(await read(ICON), "merge-icon");

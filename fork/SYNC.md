@@ -30,7 +30,7 @@ Deleted upstream workflows (a deleted file cannot hold a marker): re-delete on s
 
 `agent-context-budget.yml`, `deploy-relay.yml`, `desktop-macos-preview.yml`, `desktop-macos-preview-publish.yml`, `mobile-android-apk.yml`, `mobile-fingerprint-check.yml`, `mobile-showcase-screenshots.yml`, `pr-vouch.yml`, `publish-aur.yml`, `relay-preview.yml`, `relay-preview-cleanup.yml`, `stale-needs-more-info.yml`, `thread-transfer-report.yml`, `web-preview.yml`.
 
-Also deleted: `.github/actions/setup-apt-mirrors/` and the scripts only those workflows used (`relay-state-output.test.cjs`, `stage-preview-bundle.py`, `stage-preview-bundle.test.py`, `thread-transfer-report.cjs`, `thread-transfer-report.test.cjs`, `vercel-deployment-output.test.cjs`). `release.yml` also drops the `relay_public_config`, `publish_cli`, `publish_aur`, `build_web`, `deploy_web`, `build_marketing`, `deploy_marketing` and `announce_discord` jobs and the nightly `schedule`. When upstream edits those regions, keep the fork's version.
+Also deleted: `.github/actions/setup-apt-mirrors/` and the scripts only those workflows used (`relay-state-output.test.cjs`, `stage-preview-bundle.py`, `stage-preview-bundle.test.py`, `thread-transfer-report.cjs`, `thread-transfer-report.test.cjs`, `vercel-deployment-output.test.cjs`). `release.yml` also drops the `relay_public_config`, `publish_cli`, `publish_aur`, `build_web`, `deploy_web`, `build_marketing` and `deploy_marketing` jobs and the nightly `schedule`. It keeps upstream's `announce_discord` job (its steps are read by `scripts/notify-discord-release.test.ts`), gated on the repository variable `DISCORD_RELEASE_ANNOUNCEMENTS == 'true'`. When upstream edits those regions, keep the fork's version.
 
 ## When something breaks
 
