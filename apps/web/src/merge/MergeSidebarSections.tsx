@@ -1,8 +1,12 @@
+import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
+
 import { SidebarFolders } from "./folders/SidebarFolders";
+import { useMergeUnfiledThreads } from "./folders/state";
 import { folderThreadMenu } from "./folders/threadMenu";
 import { registerMergeThreadMenu } from "./threadMenu";
 import { SidebarWorkTasks } from "./workTasks/SidebarWorkTasks";
 import { useWorkTasksInSidebar } from "./workTasks/settings";
+import { useThreadsOutsideWorkTasks } from "./workTasks/state";
 
 // The sidebar seam always loads with the chat layout, before any thread menu opens.
 registerMergeThreadMenu(folderThreadMenu);
@@ -23,4 +27,11 @@ export function MergeSidebarSections({
       <SidebarFolders searchQuery={searchQuery} scopedProjectKeys={scopedProjectKeys} />
     </>
   );
+}
+
+/** At the `folders` seam: the Threads list leaves filed threads to Folders and task threads to their Work Task. */
+export function useMergeListedThreads<
+  T extends Pick<EnvironmentThreadShell, "environmentId" | "id" | "lineage">,
+>(threads: ReadonlyArray<T>): ReadonlyArray<T> {
+  return useThreadsOutsideWorkTasks(useMergeUnfiledThreads(threads));
 }

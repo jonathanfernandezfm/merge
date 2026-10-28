@@ -1,5 +1,6 @@
 import { useAtomValue } from "@effect/atom-react";
 import { enabledEnvironmentIds } from "@t3tools/client-runtime/state/connections";
+import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
 import { arrayElementsEqual } from "@t3tools/client-runtime/state/entities";
 import {
   createEnvironmentRpcCommand,
@@ -26,8 +27,10 @@ import {
   linkedWorkTasksByKey,
   workTaskIdOfThread,
   loadedWorkTasks,
+  threadsOutsideWorkTasks,
   workTaskOwnsWorktreePath,
   workTaskKey,
+  workTaskThreadKeys,
   type EnvironmentWorkTask,
   type WorkTaskView,
 } from "./logic";
@@ -136,6 +139,17 @@ const linksByEnvironmentAtom = Atom.make((get) => {
   }
   return next;
 }).pipe(Atom.withLabel("merge-work-task-links"));
+
+const workTaskThreadKeysAtom = Atom.make((get) =>
+  workTaskThreadKeys(get(linksByEnvironmentAtom)),
+).pipe(Atom.withLabel("merge-work-task-thread-keys"));
+
+/** The Threads list leaves a Work Task's threads to the task. */
+export function useThreadsOutsideWorkTasks<
+  T extends Pick<EnvironmentThreadShell, "environmentId" | "id" | "lineage">,
+>(threads: ReadonlyArray<T>): ReadonlyArray<T> {
+  return threadsOutsideWorkTasks(threads, useAtomValue(workTaskThreadKeysAtom));
+}
 
 let previousViews: ReadonlyMap<string, WorkTaskView> = new Map();
 /**

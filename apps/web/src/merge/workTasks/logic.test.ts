@@ -17,11 +17,13 @@ import {
   linkedWorkTasksByKey,
   loadedWorkTasks,
   remoteBranchOf,
+  threadsOutsideWorkTasks,
   workTaskboardColumnForStatus,
   workTaskKey,
   workTaskMenuItems,
   workTaskOwnsWorktreePath,
   workTaskTabState,
+  workTaskThreadKeys,
   workTaskTitleFromBranch,
   type EnvironmentWorkTask,
   type WorkTaskView,
@@ -394,5 +396,18 @@ describe("WORK_TASK_STATUS_PRESENTATION", () => {
     for (const status of WORK_TASK_STATUSES) {
       expect(WORK_TASK_STATUS_PRESENTATION[status].label.length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("threadsOutsideWorkTasks", () => {
+  it("drops task threads and their subagents, and keeps the array when nothing is linked", () => {
+    const threads = [
+      shell({ id: "task-thread" }),
+      shell({ id: "task-child", subagentOf: "task-thread" }),
+      shell({ id: "free" }),
+    ];
+    const keys = workTaskThreadKeys(new Map([[ENV, [link("task-thread", "t1")]]]));
+    expect(threadsOutsideWorkTasks(threads, keys).map((thread) => thread.id)).toEqual(["free"]);
+    expect(threadsOutsideWorkTasks(threads, workTaskThreadKeys(new Map()))).toBe(threads);
   });
 });

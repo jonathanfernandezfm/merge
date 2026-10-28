@@ -434,6 +434,33 @@ export function workTaskIdOfThread(
   );
 }
 
+/** `${environmentId}\0${threadId}` of every thread linked to a Work Task. */
+export function workTaskThreadKeys(
+  linksByEnvironment: ReadonlyMap<EnvironmentId, ReadonlyArray<WorkTaskLink>>,
+): ReadonlySet<string> {
+  const keys = new Set<string>();
+  for (const [environmentId, links] of linksByEnvironment) {
+    for (const link of links) keys.add(`${environmentId}\u0000${link.threadId}`);
+  }
+  return keys;
+}
+
+/** The threads that belong to no Work Task; a subagent goes with its root thread. */
+export function threadsOutsideWorkTasks<
+  T extends Pick<EnvironmentThreadShell, "environmentId" | "id" | "lineage">,
+>(threads: ReadonlyArray<T>, taskThreadKeys: ReadonlySet<string>): ReadonlyArray<T> {
+  if (taskThreadKeys.size === 0) return threads;
+  const kept = threads.filter(
+    (thread) =>
+      !taskThreadKeys.has(`${thread.environmentId}\u0000${thread.id}`) &&
+      !(
+        thread.lineage.relationshipToParent === "subagent" &&
+        taskThreadKeys.has(`${thread.environmentId}\u0000${thread.lineage.rootThreadId}`)
+      ),
+  );
+  return kept.length === threads.length ? threads : kept;
+}
+
 /** Trailing separators dropped; the server also resolves symlinks, which a client cannot. */
 function normalizeWorktreePath(path: string): string {
   const trimmed = path.trim();
