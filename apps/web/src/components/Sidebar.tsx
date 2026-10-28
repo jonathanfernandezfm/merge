@@ -7,9 +7,9 @@ import {
   moveThreadContextDrag as moveThreadContextDragGhost,
 } from "./chat/threadContextDrag";
 import { discardComposerDraft } from "../lib/discardComposerDraft";
-import { MergeSidebarSections } from "../merge/MergeSidebarSections"; // merge-seam: sidebar
+import { MergeSidebarSections, useMergeListedThreads } from "../merge/MergeSidebarSections"; // merge-seam: sidebar
 import { handleMergeThreadMenu } from "../merge/threadMenu"; // merge-seam: thread-menu
-import { useMergeFiledSearchThreads, useMergeUnfiledThreads } from "../merge/folders/state"; // merge-seam: folders
+import { useMergeFiledSearchThreads } from "../merge/folders/state"; // merge-seam: folders
 import { requestCustomSnooze } from "./CustomSnoozeDialog";
 import { useAtomValue } from "@effect/atom-react";
 import * as Option from "effect/Option";
@@ -1140,7 +1140,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     scopedProjectKeys,
     serverConfigs,
     optimisticDrop,
-    threads: useMergeUnfiledThreads(threads), // merge-seam: folders
+    threads: useMergeListedThreads(threads), // merge-seam: folders
     routeRowThreadKey,
   });
 
@@ -2853,6 +2853,10 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
           </SidebarGroup>
         }
       >
+        <MergeSidebarSections
+          searchQuery={threadSearchQuery} /* merge-seam: sidebar */
+          scopedProjectKeys={scopedProjectKeys} /* merge-seam: sidebar */
+        />
         <SidebarGroup className="flex-1" role="presentation">
           {isSearchingThreads ? (
             threadSearchResults.length > 0 ? (
@@ -3253,10 +3257,6 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
             </div>
           ) : null}
         </SidebarGroup>
-        <MergeSidebarSections
-          searchQuery={threadSearchQuery} /* merge-seam: sidebar */
-          scopedProjectKeys={scopedProjectKeys} /* merge-seam: sidebar */
-        />
       </SidebarContent>
       <SidebarChromeFooter
         showUndoNotice={isSearchingThreads || sidebarListItemsFresh.length === 0}

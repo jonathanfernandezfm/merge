@@ -228,7 +228,7 @@
   {
     "id": "folders",
     "file": "apps/web/src/components/Sidebar.tsx",
-    "purpose": "The Threads list leaves threads filed in a folder to the fork Folders section, and the sidebar search gets them back (v0.0.10 behaviour)"
+    "purpose": "The Threads list leaves threads filed in a folder to the fork Folders section and Work Task threads to their task; the sidebar search gets filed threads back (v0.0.10 behaviour)"
   },
   {
     "id": "compact-threads",
