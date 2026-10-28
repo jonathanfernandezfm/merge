@@ -44,6 +44,13 @@ export const identity: Array<{ file: string; from: string; to: string }> = [
     from: 'isDevelopment ? "com.t3tools.t3code.dev" : "com.t3tools.t3code",',
     to: `isDevelopment\n        ? "${APP_ID}.dev"\n        : "${APP_ID}",`,
   },
+  // Stable builds are labelled "Alpha", as in v0.0.10.
+  { file: DESKTOP_ENV, from: '? "Nightly" : "Beta";', to: '? "Nightly" : "Alpha";' },
+  {
+    file: "apps/web/src/branding.ts",
+    from: '(import.meta.env.DEV ? "Dev" : "Beta")',
+    to: '(import.meta.env.DEV ? "Dev" : "Alpha")',
+  },
   {
     file: DESKTOP_ENV,
     from: 'linuxWmClass: isDevelopment ? "t3code-dev" : "t3code",',
@@ -390,6 +397,12 @@ export const identity: Array<{ file: string; from: string; to: string }> = [
     to: "io.github.jonathanfernandezfm.Merge.desktop",
   },
   { file: PRE_READY_TEST, from: "x-scheme-handler/t3code", to: "x-scheme-handler/merge" },
+  { file: PRE_READY_TEST, from: "Name=T3 Code (Beta)", to: "Name=Merge (Alpha)" },
+  {
+    file: "apps/desktop/src/app/DesktopAppIdentity.test.ts",
+    from: '{ stage: "Beta", environment: {} }',
+    to: '{ stage: "Alpha", environment: {} }',
+  },
   // These launcher paths test Exec quoting, so they keep a space after copy would drop "T3 Code".
   { file: LINUX_URL_TEST, from: "/opt/T3 Code/t3code", to: "/opt/Merge App/merge" },
   { file: PRE_READY_TEST, from: "/opt/T3 Code/t3code", to: "/opt/Merge App/merge" },
@@ -464,6 +477,8 @@ export const copy = {
     // "T3 Code" here is test data (a thread title, an MCP server prefix), not copy.
     "packages/shared/src/paletteSearch.test.ts",
     "packages/shared/src/t3McpToolPresentation.test.ts",
+    // Fork code names upstream T3 Code on purpose; its own copy is already Merge.
+    "**/src/merge/**",
   ],
 };
 

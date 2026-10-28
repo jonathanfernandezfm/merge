@@ -254,7 +254,7 @@
   {
     "id": "release-fork",
     "file": ".github/workflows/release.yml",
-    "purpose": "hosted runners, GITHUB_TOKEN finalize, no schedule/relay/Clerk/npm/AUR/Vercel/marketing/Discord jobs, Merge release name and notes"
+    "purpose": "hosted runners, GITHUB_TOKEN finalize, no schedule/relay/Clerk/npm/AUR/Vercel/marketing jobs, Discord job kept but gated on vars.DISCORD_RELEASE_ANNOUNCEMENTS, Merge release name and notes"
   },
   {
     "id": "release-desktop-fork",
