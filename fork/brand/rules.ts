@@ -35,6 +35,11 @@ export const identity: Array<{ file: string; from: string; to: string }> = [
   },
   // Installer and app identity.
   {
+    file: "scripts/build-desktop-artifact.ts",
+    from: 'artifactName: "T3-Code-${version}-${arch}.${ext}",',
+    to: 'artifactName: "Merge-${version}-${arch}.${ext}",',
+  },
+  {
     file: "apps/desktop/package.json",
     from: '"productName": "T3 Code (Beta)"',
     to: '"productName": "Merge (Alpha)"',
