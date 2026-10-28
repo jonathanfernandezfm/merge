@@ -247,6 +247,13 @@ jobs:
       - name: Ensure Electron runtime is installed
         run: vp run --filter @t3tools/desktop ensure:electron
 
+      - name: Brand overlay applied # merge-seam: release-fork
+        run: |
+          node fork/brand/apply.ts --check || {
+            echo "::error::The tagged commit does not carry the generated brand commit. Run fork/sync.sh (or node fork/brand/apply.ts), commit the result, and tag that commit; see fork/SYNC.md."
+            exit 1
+          }
+
       - name: Check
         run: vp check
 

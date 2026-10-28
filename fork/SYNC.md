@@ -16,7 +16,7 @@ With Node 26 and `vp` on `PATH`, a clean tree and an `upstream` remote (`https:/
 3. Re-delete upstream workflows the fork does not use (see below).
 4. Verify:
    - `node --test 'fork/**/*.test.ts'` (includes the temp-repo test of `drop-overlay.sh`)
-   - `node fork/check-seams.ts`: every seam marker present, and `T3_CODE_BASELINE_VERSION` (`apps/server/src/merge/t3Baseline.ts`) equal to `upstream/main`'s `apps/server/package.json` version (the drift check).
+   - `node fork/check-seams.ts`: every seam marker present, and `T3_CODE_BASELINE_VERSION` (`apps/server/src/merge/t3Baseline.ts`) equal to the `apps/server/package.json` version at `git merge-base HEAD upstream/main` (the drift check). It compares against the merge-base, not live `upstream/main`, so it fires after a sync moves the merge-base, not on every upstream bump.
    - `node fork/brand/apply.ts --check` exits 0 on a fully branded tree. CI runs all three in the `Fork checks` job; the `--check` only passes on a branch that carries the generated brand commit.
    - the budget json: `cd apps/server && vp test run src/provider/AgentContextBudget.test.ts`.
    - the repo-wide checks AGENTS.md requires (`vp run fmt`, `vp run lint`, `vp run typecheck`, `vp run test`).
@@ -37,7 +37,8 @@ Also deleted: `.github/actions/setup-apt-mirrors/` and the scripts only those wo
 - **Rebase conflict**: resolve it as usual (keep the seam marker with its line), `git rebase --continue`, then rerun the rest of the script by hand from `node fork/check-seams.ts`.
 - **`missing seam <id> in <file>`**: upstream moved or rewrote the code around that seam. Re-add the call and its marker where the same hook now lives, or update the entry in `fork/seams.json` if the file moved.
 - **Conflict in `apps/server/src/provider/agentContextBudget.json`** (seam `context-budget`, `"check": "measured"`, so it has no marker): take upstream's file, run `cd apps/server && vp test run src/provider/AgentContextBudget.test.ts`, and commit the measured values the failure reports. The fork's MCP tools add to `mcpToolListJsonBytes`.
-- **`T3_CODE_BASELINE_VERSION is X but upstream/main is Y`**: the provider-manifest baseline in `apps/server/src/merge/t3Baseline.ts` must track upstream's `apps/server/package.json` version. Set it to Y after the rebase (`node fork/check-seams.ts` checks it whenever an `upstream/main` ref exists).
+- **Conflict in `LICENSE` or the generated `apps/mobile/generated-uniwind-theme-names.json`, `generated-uniwind-themes.css`, `uniwind-types.d.ts`** (seams with `"check": "measured"`, no marker): take upstream's version for `LICENSE` and re-apply the fork edit; regenerate the three mobile files with `apps/mobile/scripts/generate-uniwind-themes.mts`.
+- **`T3_CODE_BASELINE_VERSION is X but upstream at the merge-base is Y`**: the provider-manifest baseline in `apps/server/src/merge/t3Baseline.ts` must track upstream's `apps/server/package.json` version at the merge-base. Set it to Y after the rebase (`node fork/check-seams.ts` checks it whenever an `upstream/main` ref exists).
 - **`missing anchor <file>: <from>`**: upstream changed an identity string. Find its new form with `git grep`, update `from` (and `to`, if the shape changed) in `fork/brand/rules.ts`, and rerun `node fork/brand/apply.ts`. Anchors are exact strings on purpose, so drift fails loudly instead of shipping T3 Code identity.
 - **`drifted overlay <path>`**: upstream changed a file the overlay replaces (an icon or wordmark). Compare upstream's new version with `fork/brand/assets/<path>`, update the asset if needed, then run `node fork/brand/apply.ts --relock` to record the new upstream blob and rerun `node fork/brand/apply.ts`.
 

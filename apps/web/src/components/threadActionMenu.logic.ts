@@ -1,4 +1,4 @@
-import type { ContextMenuItem, ScopedThreadRef } from "@t3tools/contracts";
+import type { ContextMenuItem, ScopedThreadRef } from "@t3tools/contracts"; // merge-seam: thread-menu
 import type { SnoozePreset } from "@t3tools/client-runtime/state/thread-settled";
 import { mergeThreadMenuItems } from "../merge/threadMenu"; // merge-seam: thread-menu
 

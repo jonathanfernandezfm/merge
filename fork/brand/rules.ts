@@ -337,6 +337,17 @@ export const identity: Array<{ file: string; from: string; to: string }> = [
     from: "Application Support/T3 Code (Dev)",
     to: "Application Support/merge-dev",
   },
+  // WSL runtime stages under the fork's data home, as v0.0.10 did.
+  {
+    file: "apps/desktop/src/wsl/DesktopWslEnvironment.ts",
+    from: "/.t3/wsl-runtime",
+    to: "/.merge/wsl-runtime",
+  },
+  {
+    file: "apps/desktop/src/backend/DesktopBackendConfiguration.test.ts",
+    from: "/.t3/wsl-runtime",
+    to: "/.merge/wsl-runtime",
+  },
   {
     file: "apps/desktop/src/app/DesktopEnvironment.test.ts",
     from: '"/Users/alice/.t3/',

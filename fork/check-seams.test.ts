@@ -80,6 +80,10 @@ async function baselineFixture(
   git("add", "-A");
   git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "x");
   if (upstreamRef) git("update-ref", "refs/remotes/upstream/main", "HEAD");
+  if (upstreamRef) {
+    // The fork moves on, then upstream bumps past the merge-base.
+    git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "fork");
+  }
   return root;
 }
 
@@ -92,6 +96,20 @@ NodeTest.test("a stale baseline is reported with both versions", async (t) => {
     baseline: "1.2.0",
     upstream: "1.2.3",
   });
+});
+
+NodeTest.test("an upstream bump after the merge-base is not drift", async (t) => {
+  const root = await baselineFixture(t, "1.2.3", true);
+  const git = (...args: string[]) => NodeChildProcess.execFileSync("git", ["-C", root, ...args]);
+  git("checkout", "-q", "-b", "up", "upstream/main");
+  await NodeFSP.writeFile(
+    NodePath.join(root, "apps/server/package.json"),
+    JSON.stringify({ version: "9.9.9" }),
+  );
+  git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qam", "bump");
+  git("update-ref", "refs/remotes/upstream/main", "HEAD");
+  git("checkout", "-q", "-");
+  NodeAssert.equal(await checkBaseline(root), null);
 });
 
 NodeTest.test("without an upstream/main ref the baseline check is skipped", async (t) => {
