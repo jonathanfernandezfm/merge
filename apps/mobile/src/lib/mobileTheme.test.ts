@@ -211,7 +211,7 @@ describe("mobile themes", () => {
       resolveMobileThemeIds({ themeId: "grove", lightThemeId: "iris", darkThemeId: "ocean" }),
     ).toEqual({ light: "iris", dark: "ocean" });
     expect(resolveMobileThemeIds({ themeId: "grove", lightThemeId: "missing" })).toEqual({
-      light: DEFAULT_MOBILE_THEME_ID,
+      light: "merge",
       dark: "grove",
     });
   });

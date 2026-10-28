@@ -26,7 +26,7 @@ export const MOBILE_THEME_OPTIONS: ReadonlyArray<{
   readonly id: MobileThemeId;
   readonly label: string;
 }> = [
-  { id: DEFAULT_MOBILE_THEME_ID, label: "T3 Code" },
+  { id: DEFAULT_MOBILE_THEME_ID, label: "Classic" },
   { id: "material-you", label: "Material You" },
   ...BUILT_IN_THEMES.map((theme) => ({ id: theme.id as MobileThemeId, label: theme.label })),
 ];
@@ -37,7 +37,7 @@ export type MobileThemeVariables = Readonly<Record<MobileThemeVariable, string>>
 export function normalizeMobileThemeId(value: unknown): MobileThemeId {
   return typeof value === "string" && (MOBILE_THEME_IDS as readonly string[]).includes(value)
     ? (value as MobileThemeId)
-    : DEFAULT_MOBILE_THEME_ID;
+    : "merge";
 }
 
 export function normalizeMobileThemeMode(value: unknown): MobileThemeMode {

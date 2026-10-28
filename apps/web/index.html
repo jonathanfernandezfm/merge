@@ -239,7 +239,7 @@
           };
           const isLegacyT3ChatDark = storedTheme === "t3-chat-dark";
           const themeId =
-            storedTheme === null ? "" : (LEGACY_THEME_IDS[storedTheme] ?? storedTheme);
+            storedTheme === null ? "merge" : (LEGACY_THEME_IDS[storedTheme] ?? storedTheme);
           const legacyMode = isLegacyT3ChatDark ? "dark" : null;
           const builtInModes = BUILT_IN_THEME_MODES[themeId] ?? null;
           const customTheme = builtInModes ? null : findCustomTheme(themeId);
@@ -363,7 +363,7 @@
           }
           // A resolved half is a selection even when the base theme is gone
           // (deleting the base leaves the mix pointing at a real theme).
-          const hasSelection = halfThemeId !== null || (isKnownTheme && storedTheme !== null);
+          const hasSelection = halfThemeId !== null || isKnownTheme;
           if (hasSelection) {
             document.documentElement.dataset.themeSelected = "true";
           } else {
@@ -683,13 +683,13 @@
         white-space: nowrap;
       }
     </style>
-    <title>T3 Code (Beta)</title>
+    <title>Merge (Beta)</title>
   </head>
   <body>
     <div id="root">
       <div id="boot-shell">
-        <div id="boot-shell-card" aria-label="T3 Code splash screen">
-          <img id="boot-shell-logo" src="/apple-touch-icon.png" alt="T3 Code" />
+        <div id="boot-shell-card" aria-label="Merge splash screen">
+          <img id="boot-shell-logo" src="/apple-touch-icon.png" alt="Merge" />
         </div>
       </div>
     </div>

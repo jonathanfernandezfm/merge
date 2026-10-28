@@ -27,7 +27,7 @@ const makeEnvironment = (path: Path.Path, overrides: Record<string, unknown> = {
     platform: "linux",
     isPackaged: true,
     isDevelopment: false,
-    displayName: "T3 Code (Alpha)",
+    displayName: "Merge (Alpha)",
     linuxDesktopEntryName: "com.t3tools.T3Code.desktop",
     linuxWmClass: "t3code",
     linuxApplicationsDir: "/home/alice/.local/share/applications",
@@ -160,21 +160,21 @@ const emptyRecording = (): RecordedRegistration => ({
 describe("DesktopLinuxUrlHandler", () => {
   it("renders a scheme-handler desktop entry with freedesktop Exec quoting", () => {
     const entry = DesktopLinuxUrlHandler.renderUrlHandlerDesktopEntry({
-      displayName: "T3 Code (Nightly)",
+      displayName: "Merge (Nightly)",
       execTarget: '/home/al ice/Apps/T3 "100%" $HOME\\x.AppImage',
-      scheme: "t3code",
+      scheme: "merge",
       iconPath: "/home/al ice/icons/T3\\x.png",
     });
 
     assert.include(entry, "[Desktop Entry]");
-    assert.include(entry, "Name=T3 Code (Nightly)");
+    assert.include(entry, "Name=Merge (Nightly)");
     assert.include(
       entry,
       'Exec="/home/al ice/Apps/T3 \\\\"100%%\\\\" \\\\$HOME\\\\\\\\x.AppImage" %U',
     );
     assert.include(entry, "NoDisplay=true");
     assert.notInclude(entry, "StartupWMClass=");
-    assert.include(entry, "MimeType=x-scheme-handler/t3code;");
+    assert.include(entry, "MimeType=x-scheme-handler/merge;");
     assert.include(entry, "Icon=/home/al ice/icons/T3\\\\x.png");
   });
 
@@ -196,7 +196,7 @@ describe("DesktopLinuxUrlHandler", () => {
           recorded.files[0]?.content,
           "Exec=/home/alice/Applications/T3-Code.AppImage %U",
         );
-        assert.include(recorded.files[0]?.content, "MimeType=x-scheme-handler/t3code;");
+        assert.include(recorded.files[0]?.content, "MimeType=x-scheme-handler/merge;");
         assert.deepEqual(recorded.commands, [
           {
             command: "update-desktop-database",
@@ -204,7 +204,7 @@ describe("DesktopLinuxUrlHandler", () => {
           },
           {
             command: "xdg-mime",
-            args: ["default", "com.t3tools.T3Code.desktop", "x-scheme-handler/t3code"],
+            args: ["default", "com.t3tools.T3Code.desktop", "x-scheme-handler/merge"],
           },
         ]);
       });
@@ -220,9 +220,9 @@ describe("DesktopLinuxUrlHandler", () => {
       assert.include(
         recorded.files[0]?.content,
         DesktopLinuxUrlHandler.renderUrlHandlerDesktopEntry({
-          displayName: "T3 Code (Alpha)",
+          displayName: "Merge (Alpha)",
           execTarget: process.execPath,
-          scheme: "t3code",
+          scheme: "merge",
           iconPath: "/home/alice/.local/share/icons/com.t3tools.T3Code.desktop.png",
         }),
       );
@@ -234,10 +234,10 @@ describe("DesktopLinuxUrlHandler", () => {
 
     return Effect.gen(function* () {
       yield* runRegister(recorded, {
-        environment: { desktopLauncherPath: Option.some("/opt/T3 Code/t3code") },
+        environment: { desktopLauncherPath: Option.some("/opt/Merge App/merge") },
       });
 
-      assert.include(recorded.files[0]?.content, 'Exec="/opt/T3 Code/t3code" %U');
+      assert.include(recorded.files[0]?.content, 'Exec="/opt/Merge App/merge" %U');
     });
   });
 
@@ -247,9 +247,9 @@ describe("DesktopLinuxUrlHandler", () => {
     return Effect.gen(function* () {
       yield* runRegister(recorded, {
         existingEntry: DesktopLinuxUrlHandler.renderUrlHandlerDesktopEntry({
-          displayName: "T3 Code (Alpha)",
+          displayName: "Merge (Alpha)",
           execTarget: "/home/alice/Applications/T3-Code.AppImage",
-          scheme: "t3code",
+          scheme: "merge",
           iconPath: "/home/alice/.local/share/icons/com.t3tools.T3Code.desktop.png",
         }),
       });
@@ -263,7 +263,7 @@ describe("DesktopLinuxUrlHandler", () => {
         },
         {
           command: "xdg-mime",
-          args: ["default", "com.t3tools.T3Code.desktop", "x-scheme-handler/t3code"],
+          args: ["default", "com.t3tools.T3Code.desktop", "x-scheme-handler/merge"],
         },
       ]);
     });
@@ -276,9 +276,9 @@ describe("DesktopLinuxUrlHandler", () => {
       yield* runRegister(recorded, {
         iconSource: "/tmp/.mount_T3/resources/icon.png",
         existingEntry: DesktopLinuxUrlHandler.renderUrlHandlerDesktopEntry({
-          displayName: "T3 Code (Alpha)",
+          displayName: "Merge (Alpha)",
           execTarget: "/home/alice/Applications/T3-Code.AppImage",
-          scheme: "t3code",
+          scheme: "merge",
           iconPath,
         }),
       });

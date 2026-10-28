@@ -40,7 +40,7 @@ type DesktopThemeBridge = Pick<DesktopBridge, "setTheme">;
 const STORAGE_KEY = "t3code:theme";
 const MEDIA_QUERY = "(prefers-color-scheme: dark)";
 const DEFAULT_THEME_SNAPSHOT: ThemeSnapshot = {
-  theme: "system",
+  theme: "merge",
   resolvedTheme: "light",
   systemDark: false,
   followSystem: true,
@@ -143,7 +143,7 @@ function getSystemDark() {
 }
 
 function readStoredFollowSystem(theme: Theme): boolean {
-  if (typeof window === "undefined") return theme === "system";
+  if (typeof window === "undefined") return theme === "system" || theme === "merge";
 
   try {
     const raw = window.localStorage.getItem(THEME_FOLLOW_SYSTEM_STORAGE_KEY);
@@ -151,7 +151,7 @@ function readStoredFollowSystem(theme: Theme): boolean {
     if (raw === "false") return false;
   } catch {}
 
-  return theme === "system";
+  return theme === "system" || theme === "merge";
 }
 
 function isThemePreferenceMode(value: string | null): value is ThemePreferenceMode {
