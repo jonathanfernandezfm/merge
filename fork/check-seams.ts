@@ -31,9 +31,15 @@ const BASELINE_FILE = "apps/server/src/merge/t3Baseline.ts";
 export async function checkBaseline(root: string) {
   let upstream: string;
   try {
+    // The merge-base, not live upstream/main: a plain upstream bump must not turn fork CI red.
+    const base = NodeChildProcess.execFileSync(
+      "git",
+      ["-C", root, "merge-base", "HEAD", "upstream/main"],
+      { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
+    ).trim();
     const manifest = NodeChildProcess.execFileSync(
       "git",
-      ["-C", root, "show", "upstream/main:apps/server/package.json"],
+      ["-C", root, "show", `${base}:apps/server/package.json`],
       { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
     );
     upstream = JSON.parse(manifest).version;
@@ -51,7 +57,7 @@ if (import.meta.main) {
   const drift = await checkBaseline(NodePath.resolve(import.meta.dirname, ".."));
   if (drift) {
     console.error(
-      `T3_CODE_BASELINE_VERSION is ${drift.baseline} but upstream/main is ${drift.upstream}; update ${BASELINE_FILE}`,
+      `T3_CODE_BASELINE_VERSION is ${drift.baseline} but upstream at the merge-base is ${drift.upstream}; update ${BASELINE_FILE}`,
     );
   }
   process.exitCode = missing.length > 0 || drift ? 1 : 0;

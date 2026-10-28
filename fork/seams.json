@@ -62,7 +62,7 @@
   {
     "id": "right-panel",
     "file": "apps/web/src/reopenClosedView.ts",
-    "purpose": "Fork surfaces are not reopened"
+    "purpose": "Reopen fork surfaces through openMergeSurface"
   },
   {
     "id": "right-panel",
@@ -315,5 +315,29 @@
     "id": "release-doc-fork",
     "file": "docs/operations/release.md",
     "purpose": "Banner: Merge releases differ from the upstream runbook"
+  },
+  {
+    "id": "license-fork",
+    "file": "LICENSE",
+    "purpose": "Fork copyright line",
+    "check": "measured"
+  },
+  {
+    "id": "uniwind-names-fork",
+    "file": "apps/mobile/generated-uniwind-theme-names.json",
+    "purpose": "Generated: includes the merge theme id",
+    "check": "measured"
+  },
+  {
+    "id": "uniwind-themes-fork",
+    "file": "apps/mobile/generated-uniwind-themes.css",
+    "purpose": "Generated: includes the merge theme",
+    "check": "measured"
+  },
+  {
+    "id": "uniwind-types-fork",
+    "file": "apps/mobile/uniwind-types.d.ts",
+    "purpose": "Generated: includes the merge theme name",
+    "check": "measured"
   }
 ]
