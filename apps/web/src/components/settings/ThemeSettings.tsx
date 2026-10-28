@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useState, type ReactElement } from "react";
 import { useEnvironmentThemeDefinitions } from "../../hooks/useEnvironmentTheme";
+import { MERGE_THEME } from "@t3tools/shared/themePalettes"; // merge-seam: theme
 import { readThemeHalvesRaw } from "../../hooks/useTheme";
 import { cn } from "../../lib/utils";
 import {
@@ -55,6 +56,7 @@ import {
 import { ThemeWireframe } from "./ThemeWireframe";
 
 const MAINTAINER_THEMES: ReadonlyArray<ThemeDefinition> = [
+  MERGE_THEME, // merge-seam: theme
   T3_CHAT_THEME,
   GROVE_THEME,
   OCEAN_THEME,

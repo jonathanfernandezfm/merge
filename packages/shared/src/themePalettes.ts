@@ -1,4 +1,5 @@
 import { MERGE_THEME } from "./merge/mergeTheme.ts"; // merge-seam: theme
+export { MERGE_THEME } from "./merge/mergeTheme.ts"; // merge-seam: theme
 export const BUILT_IN_THEME_IDS = ["merge", "t3-chat", "grove", "ocean", "ember", "iris"] as const; // merge-seam: theme
 
 export const MOBILE_DEFAULT_THEME_ID = "t3-code";
