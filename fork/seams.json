@@ -160,6 +160,11 @@
     "purpose": "Re-queue button for expired Azure DevOps build policies"
   },
   {
+    "id": "storage-cleanup-gitfile",
+    "file": "apps/server/src/storageCleanup.ts",
+    "purpose": "Newer Git reports a broken worktree gitfile as 'does not point to a valid repository'; treat it like 'not a git repository' (repository changed) so the worktree is kept, not failed. Drop when upstream matches it"
+  },
+  {
     "id": "storage-cleanup",
     "file": "apps/server/src/storageCleanup.ts",
     "purpose": "Keep a worktree owned by an active Work Task, whatever cleanup rule applies"
