@@ -28,6 +28,11 @@ export const identity: Array<{ file: string; from: string; to: string }> = [
     from: "name: `T3 Code ${CHANNEL_RELEASE_LABELS[channel]}",
     to: "name: `Merge ${CHANNEL_RELEASE_LABELS[channel]}",
   },
+  {
+    file: "scripts/release-smoke.ts",
+    from: '"name=T3 Code Nightly 9.9.10-nightly.20260413.321 (abcdef123456)",',
+    to: '"name=Merge Nightly 9.9.10-nightly.20260413.321 (abcdef123456)",',
+  },
   // Installer and app identity.
   {
     file: "apps/desktop/package.json",
