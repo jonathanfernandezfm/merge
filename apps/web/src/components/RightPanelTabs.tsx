@@ -51,7 +51,8 @@ import {
 import { isElectron } from "~/env";
 import type { DesktopPreviewOverlay } from "~/previewStateStore";
 import type { RightPanelSurface } from "~/rightPanelStore";
-import { mergeRightPanelLabel } from "~/merge/rightPanelLabel"; // merge-seam: right-panel
+import { MergeRightPanelIcon, mergeRightPanelLabel } from "~/merge/rightPanelLabel"; // merge-seam: right-panel
+import { useMergeSurfaceActions } from "~/merge/surfaceActions"; // merge-seam: right-panel
 import { cn } from "~/lib/utils";
 import { resolveShortcutCommand, type ShortcutMatchContext } from "~/keybindings";
 import { readLocalApi } from "~/localApi";
@@ -372,6 +373,7 @@ function RightPanelEmptyState(props: {
       disabledReason: SURFACE_UNAVAILABLE_HINTS.device,
       onClick: props.onAddDevice,
     },
+    ...useMergeSurfaceActions(), // merge-seam: right-panel
   ] as const;
 
   type SurfaceAction = (typeof actions)[number];
@@ -646,6 +648,8 @@ function SurfaceIcon({
       );
     case "pull-requests":
       return <PullRequestGlyph.link className="size-3 shrink-0" />;
+    case "merge":
+      return <MergeRightPanelIcon id={surface.id} />; // merge-seam: right-panel
     case "device":
       return surface.target?.platform === "ios" ? (
         <AppleIcon className="size-3 shrink-0" />
@@ -1069,6 +1073,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
       disabledReason: SURFACE_DISABLED_REASONS.device,
       onClick: props.onAddDevice,
     },
+    ...useMergeSurfaceActions(), // merge-seam: right-panel
   ] as const;
 
   const handleAddSurfaceMenuKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
