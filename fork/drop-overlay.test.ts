@@ -31,7 +31,13 @@ async function repo(t: { after: (fn: () => Promise<void>) => void }, subjects: s
 }
 
 function run(root: string) {
-  return NodeChildProcess.spawnSync(SCRIPT, ["upstream/main"], { cwd: root, encoding: "utf8" });
+  // The script's rebase commits; CI runners have no git identity of their own.
+  const identity = { GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t" };
+  return NodeChildProcess.spawnSync(SCRIPT, ["upstream/main"], {
+    cwd: root,
+    encoding: "utf8",
+    env: { ...process.env, ...identity },
+  });
 }
 
 NodeTest.test("drops an overlay commit that sits below a release commit", async (t) => {
