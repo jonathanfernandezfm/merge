@@ -287,6 +287,12 @@ export const identity: Array<{ file: string; from: string; to: string }> = [
     from: '{ id: DEFAULT_MOBILE_THEME_ID, label: "T3 Code" },',
     to: '{ id: DEFAULT_MOBILE_THEME_ID, label: "Classic" },',
   },
+  // Web's stock theme card is "Default", as in v0.0.10, beside the Merge theme's own card.
+  {
+    file: "apps/web/src/components/settings/ThemePreviewCircles.tsx",
+    from: '    id: "default",\n    label: "T3 Code",',
+    to: '    id: "default",\n    label: "Default",',
+  },
   {
     file: "apps/mobile/src/lib/mobileTheme.ts",
     from: "    : DEFAULT_MOBILE_THEME_ID;",

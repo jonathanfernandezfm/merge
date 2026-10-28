@@ -105,6 +105,11 @@
     "purpose": "Boot-time copy of the merge palette and reserved id"
   },
   {
+    "id": "theme",
+    "file": "apps/web/src/components/settings/ThemeSettings.tsx",
+    "purpose": "List the Merge theme first among the built-in theme cards"
+  },
+  {
     "id": "texture",
     "file": "apps/web/src/components/SidebarStageBackdrop.tsx",
     "purpose": "Release and Dev builds render the Merge texture in the stage backdrop"
