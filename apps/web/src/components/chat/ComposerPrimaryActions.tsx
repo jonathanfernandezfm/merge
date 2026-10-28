@@ -7,7 +7,10 @@ import { formatContextWindowTokens } from "~/lib/contextWindow";
 import { cn } from "~/lib/utils";
 import { useShortcutModifierState } from "../../shortcutModifierState";
 import { StageBackdropButtonArt, useSidebarStageBackdropVariant } from "../SidebarStageBackdrop";
-import { SEND_BUTTON_STAGE_ART_ENABLED } from "../../merge/brandTexture/flags"; // merge-seam: texture
+import {
+  MERGE_SEND_BUTTON_CLASS,
+  SEND_BUTTON_STAGE_ART_ENABLED,
+} from "../../merge/brandTexture/flags"; // merge-seam: texture
 import { Button } from "../ui/button";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
 import { Spinner } from "../ui/spinner";
@@ -315,6 +318,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
         stageBackdropVariant
           ? "bg-transparent text-white enabled:shadow-black/24 enabled:hover:brightness-110 disabled:opacity-64"
           : "bg-message-action text-message-action-foreground enabled:shadow-message-action/24 hover:bg-message-action-hover disabled:bg-foreground/12 disabled:text-muted-foreground",
+        !stageBackdropVariant && MERGE_SEND_BUTTON_CLASS, // merge-seam: texture
       )}
       {...pointerFocusProps}
       onClick={showResume ? onResume : onSubmitMessage}
