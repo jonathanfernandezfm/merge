@@ -4553,7 +4553,10 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
       const hash = yield* digest.digest(Digest.sha256, new TextEncoder().encode(identity));
       // UTF-8 bytes bound UTF-16 length too, leaving room for files on Windows.
       let prefix = "";
-      for (const character of targetBranch.replace(/\//g, "-")) {
+      // Dev servers serve files by absolute path, so URL-significant characters
+      // like `#` in the folder name break module loading (`bugfix/#123-x`).
+      for (const character of targetBranch.replace(/[^\w.-]+/g, "-")) {
+        // merge-seam: worktree-path
         if (Buffer.byteLength(prefix + character) > 23) break;
         prefix += character;
       }

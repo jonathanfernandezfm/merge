@@ -344,5 +344,10 @@
     "file": "apps/mobile/uniwind-types.d.ts",
     "purpose": "Generated: includes the merge theme name",
     "check": "measured"
+  },
+  {
+    "id": "worktree-path",
+    "file": "apps/server/src/vcs/GitVcsDriverCore.ts",
+    "purpose": "Worktree folder names replace every URL-significant character (like #), not only '/', so dev servers can load files from them"
   }
 ]
