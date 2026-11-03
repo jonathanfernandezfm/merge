@@ -3304,6 +3304,26 @@ it.layer(layerTest)("GitVcsDriver core integration", (it) => {
       }),
     );
 
+    it.effect("keeps URL-significant characters like # out of worktree folder names", () =>
+      Effect.gen(function* () {
+        const pathService = yield* Path.Path;
+        const cwd = yield* makeTmpDir();
+        const { initialBranch } = yield* initRepoWithCommit(cwd);
+        const worktreesDirectory = yield* makeTmpDir("hash-worktrees-");
+        const driver = yield* GitVcsDriver.GitVcsDriver;
+
+        const created = yield* driver.createWorktree(
+          { cwd, path: null, refName: initialBranch, newRefName: "bugfix/#123-fix" },
+          { worktreesDirectory },
+        );
+        assert.equal(
+          created.worktree.path,
+          pathService.join(worktreesDirectory, pathService.basename(cwd), "bugfix-123-fix"),
+        );
+        assert.equal(created.worktree.refName, "bugfix/#123-fix");
+      }),
+    );
+
     it.effect("creates worktrees under the configured worktrees directory", () =>
       Effect.gen(function* () {
         const fileSystem = yield* FileSystem.FileSystem;
