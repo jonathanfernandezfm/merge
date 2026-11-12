@@ -57,14 +57,9 @@ export const identity: Array<{ file: string; from: string; to: string }> = [
   // Stable builds are labelled "Alpha", as in v0.0.10.
   { file: DESKTOP_ENV, from: '? "Nightly" : "Beta";', to: '? "Nightly" : "Alpha";' },
   {
-    file: "apps/web/src/branding.ts",
-    from: '(import.meta.env.DEV ? "Dev" : "Beta")',
-    to: '(import.meta.env.DEV ? "Dev" : "Alpha")',
-  },
-  {
-    file: DESKTOP_ENV,
-    from: 'linuxWmClass: isDevelopment ? "t3code-dev" : "t3code",',
-    to: 'linuxWmClass: isDevelopment ? "merge-dev" : "merge",',
+    file: "apps/web/src/branding.logic.ts",
+    from: '(input.development ? "Dev" : "Beta")',
+    to: '(input.development ? "Dev" : "Alpha")',
   },
   {
     file: EARLY_STARTUP,
@@ -72,17 +67,21 @@ export const identity: Array<{ file: string; from: string; to: string }> = [
     to: 'isDevelopment\n    ? "io.github.jonathanfernandezfm.Merge.Development.desktop"\n    : "io.github.jonathanfernandezfm.Merge.desktop";',
   },
   {
-    file: EARLY_STARTUP,
-    from: 'linuxWmClass: isDevelopment ? "t3code-dev" : "t3code",',
-    to: 'linuxWmClass: isDevelopment ? "merge-dev" : "merge",',
-  },
-  {
     file: BUILD,
     from: 'const DESKTOP_APP_ID = "com.t3tools.t3code";',
     to: `const DESKTOP_APP_ID = "${APP_ID}";`,
   },
   { file: BUILD, from: 'executableName: "t3code",', to: 'executableName: "merge",' },
-  { file: BUILD, from: 'StartupWMClass: "t3code",', to: 'StartupWMClass: "merge",' },
+  {
+    file: BUILD,
+    from: 'StartupWMClass: "com.t3tools.T3Code",',
+    to: 'StartupWMClass: "io.github.jonathanfernandezfm.Merge",',
+  },
+  {
+    file: "scripts/build-desktop-artifact.test.ts",
+    from: '"linux.desktop.entry.StartupWMClass", "com.t3tools.T3Code"',
+    to: '"linux.desktop.entry.StartupWMClass", "io.github.jonathanfernandezfm.Merge"',
+  },
   { file: BUILD, from: 'name: "t3code",', to: 'name: "merge",' },
   {
     file: BUILD,
@@ -111,8 +110,8 @@ export const identity: Array<{ file: string; from: string; to: string }> = [
   },
   {
     file: MOBILE_CONFIG,
-    from: 'eas: {\n      projectId: "d763fcb8-d37c-41ea-a773-b54a0ab4a454",\n    },',
-    to: "...(process.env.EAS_PROJECT_ID ? { eas: { projectId: process.env.EAS_PROJECT_ID } } : {}),",
+    from: 'projectId: "d763fcb8-d37c-41ea-a773-b54a0ab4a454",',
+    to: "...(process.env.EAS_PROJECT_ID ? { projectId: process.env.EAS_PROJECT_ID } : {}),",
   },
   {
     file: MOBILE_CONFIG,
@@ -218,8 +217,8 @@ export const identity: Array<{ file: string; from: string; to: string }> = [
   { file: MOBILE_CONFIG, from: 'scheme: "t3code', to: 'scheme: "merge' },
   {
     file: "apps/mobile/src/App.tsx",
-    from: '"t3code://", "t3code-dev://", "t3code-preview://"',
-    to: '"merge://", "merge-dev://", "merge-preview://"',
+    from: '"t3code://",\n    "t3code-dev://",\n    "t3code-preview://",',
+    to: '"merge://",\n    "merge-dev://",\n    "merge-preview://",',
   },
   {
     file: "apps/mobile/src/features/connection/pairing.ts",
@@ -254,7 +253,8 @@ export const identity: Array<{ file: string; from: string; to: string }> = [
     from: "https://raw.githubusercontent.com/pingdotgg/t3code/main/",
     to: `https://raw.githubusercontent.com/${REPO}/main/`,
   },
-  { file: "apps/server/src/cli/triagePrompt.ts", from: "pingdotgg/t3code", to: REPO },
+  { file: "apps/server/src/triage/triagePrompt.ts", from: "pingdotgg/t3code", to: REPO },
+  { file: "apps/server/src/triage/TriageService.ts", from: "pingdotgg/t3code", to: REPO },
   // triagePrompt.test.ts keeps the prompt byte-identical to this file, which the prompt fetches.
   { file: ".github/triage/PLAYBOOK.md", from: "pingdotgg/t3code", to: REPO },
   {
@@ -469,13 +469,13 @@ export const identity: Array<{ file: string; from: string; to: string }> = [
   // Copy shortens the agent instructions ("T3 Code" -> "Merge"); the budget measures what ships.
   {
     file: "apps/server/src/provider/agentContextBudget.json",
-    from: '"claudeSystemAppendBytes": 4857,',
-    to: '"claudeSystemAppendBytes": 4851,',
+    from: '"claudeSystemAppendBytes": 5597,',
+    to: '"claudeSystemAppendBytes": 0,',
   },
   {
     file: "apps/server/src/provider/agentContextBudget.json",
-    from: '"codexAdditionalContextBytes": 5409,',
-    to: '"codexAdditionalContextBytes": 5399,',
+    from: '"codexAdditionalContextBytes": 7327,',
+    to: '"codexAdditionalContextBytes": 0,',
   },
   // The mock agent's page text, which AcpAdapterV2.test.ts expects after copy.
   { file: "apps/server/scripts/acp-mock-agent.ts", from: '"T3 Code page"', to: '"Merge page"' },
