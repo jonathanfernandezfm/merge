@@ -25,6 +25,7 @@ import { toastManager } from "~/components/ui/toast";
 import { environmentCatalog } from "~/connection/catalog";
 import { connectionAtomRuntime } from "~/connection/runtime";
 import { appAtomRegistry } from "~/rpc/atomRegistry";
+import { useDelegatedUnderParent } from "~/state/entities";
 import { environmentThreadShells } from "~/state/threads";
 import {
   buildFolderViews,
@@ -126,7 +127,8 @@ export function useFolderViews(
   const folders = useAtomValue(foldersAtom);
   const filed = useAtomValue(filedAtom);
   const shells = useAtomValue(environmentThreadShells.quietThreadShellsAtom);
-  return buildFolderViews({ folders, filed, shells, scopedProjectKeys });
+  const delegatedUnderParent = useDelegatedUnderParent();
+  return buildFolderViews({ folders, filed, shells, scopedProjectKeys, delegatedUnderParent });
 }
 
 /** At the `folders` seam: filed threads join upstream's sidebar search, messages included. */
@@ -135,7 +137,7 @@ export function useMergeFiledSearchThreads(
 ): ReadonlyArray<EnvironmentThreadShell> {
   const filed = useAtomValue(filedAtom);
   const shells = useAtomValue(environmentThreadShells.quietThreadShellsAtom);
-  return filedVisibleThreads(shells, filed, scopedProjectKeys);
+  return filedVisibleThreads(shells, filed, scopedProjectKeys, useDelegatedUnderParent());
 }
 
 let previousEnvironments: ReadonlyArray<EnvironmentId> = [];

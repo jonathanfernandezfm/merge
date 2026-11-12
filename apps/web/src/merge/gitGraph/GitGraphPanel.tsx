@@ -67,7 +67,7 @@ export function GitGraphPanel(props: {
     refresh,
     resourceKey: `git-graph:${threadRef.environmentId}:${threadRef.threadId}`,
   });
-  // oxlint-disable-next-line t3code/react-effect-budget -- subscribes to window focus, an external event, for the panel's lifetime
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- subscribes to window focus, an external event, for the panel's lifetime
   useEffect(() => {
     window.addEventListener("focus", refresh);
     return () => window.removeEventListener("focus", refresh);

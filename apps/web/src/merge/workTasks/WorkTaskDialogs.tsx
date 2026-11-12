@@ -186,7 +186,7 @@ function NewWorkTaskDialog({
   const [heldAt, setHeldAt] = useState<{ branch: string; path: string } | null>(null);
   const createWorkTask = useAtomCommand(workTasksEnvironment.create, { reportFailure: false });
 
-  // oxlint-disable-next-line t3code/react-effect-budget -- debounces typing before a git query
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- debounces typing before a git query
   useEffect(() => {
     const timeout = window.setTimeout(() => setDebouncedQuery(branchQuery.trim()), 200);
     return () => window.clearTimeout(timeout);

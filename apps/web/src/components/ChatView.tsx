@@ -3353,7 +3353,9 @@ export default function ChatView(props: ChatViewProps) {
             />
           </header>
         )}
-        {embedded ? null : <MergeChatHeader threadRef={activeThreadRef} /* merge-seam: chat-header */ />}
+        {embedded ? null : (
+          <MergeChatHeader threadRef={activeThreadRef} /* merge-seam: chat-header */ />
+        )}
 
         <div className="relative flex min-h-0 min-w-0 flex-1">
           <ThreadFindCanvas

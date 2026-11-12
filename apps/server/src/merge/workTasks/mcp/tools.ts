@@ -4,7 +4,7 @@ import {
   TrimmedNonEmptyString,
   WorkTaskId,
 } from "@t3tools/contracts";
-import * as Crypto from "effect/Crypto";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Schema from "effect/Schema";
 import * as Tool from "effect/ai/Tool";
 import * as Toolkit from "effect/ai/Toolkit";
@@ -36,7 +36,7 @@ const CreateWorkTaskTool = Tool.make("create_work_task", {
     McpInvocationContext.McpInvocationContext,
     ThreadManagementService.ThreadManagementService,
     ProjectService.ProjectService,
-    Crypto.Crypto,
+    SecureRandom.SecureRandom,
   ],
 })
   .annotate(Tool.Title, "Create Work Task")

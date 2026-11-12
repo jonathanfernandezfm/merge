@@ -50,7 +50,13 @@ describe("folders logic", () => {
       shell({ id: "t2", archivedAt: "2026-10-02T00:00:00.000Z" }),
       shell({ id: "t4" }),
     ];
-    const views = buildFolderViews({ folders, filed, shells, scopedProjectKeys: null });
+    const views = buildFolderViews({
+      folders,
+      filed,
+      shells,
+      scopedProjectKeys: null,
+      delegatedUnderParent: new Set(),
+    });
     expect(views.map((view) => [view.folder.title, view.threads.map((t) => t.id)])).toEqual([
       ["Parked", ["t1"]],
       ["Later", []],
@@ -58,9 +64,13 @@ describe("folders logic", () => {
     // Another project in scope: folders stay, their threads leave.
     const otherScope = new Set([`${ENV}:other`]);
     expect(
-      buildFolderViews({ folders, filed, shells, scopedProjectKeys: otherScope }).map(
-        (view) => view.threads.length,
-      ),
+      buildFolderViews({
+        folders,
+        filed,
+        shells,
+        scopedProjectKeys: otherScope,
+        delegatedUnderParent: new Set(),
+      }).map((view) => view.threads.length),
     ).toEqual([0, 0]);
   });
 
@@ -75,12 +85,14 @@ describe("folders logic", () => {
       ...filed,
       [scopedThreadKey(scopeThreadRef(ENV, ThreadId.make("t4"))), "folder"],
     ]);
-    expect(filedVisibleThreads(shells, filedWithChild, null).map((thread) => thread.id)).toEqual([
-      "t1",
-    ]);
-    expect(filedVisibleThreads(shells, filed, new Set([`${ENV}:${PROJECT}`]))).toHaveLength(1);
-    expect(filedVisibleThreads(shells, filed, new Set([`${ENV}:other`]))).toEqual([]);
-    expect(filedVisibleThreads(shells, new Map(), null)).toEqual([]);
+    expect(
+      filedVisibleThreads(shells, filedWithChild, null, new Set()).map((thread) => thread.id),
+    ).toEqual(["t1"]);
+    expect(
+      filedVisibleThreads(shells, filed, new Set([`${ENV}:${PROJECT}`]), new Set()),
+    ).toHaveLength(1);
+    expect(filedVisibleThreads(shells, filed, new Set([`${ENV}:other`]), new Set())).toEqual([]);
+    expect(filedVisibleThreads(shells, new Map(), null, new Set())).toEqual([]);
   });
 
   it("builds the Move to folder menu and parses its ids back", () => {

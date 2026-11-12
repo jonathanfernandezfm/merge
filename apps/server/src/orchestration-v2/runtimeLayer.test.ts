@@ -4274,6 +4274,7 @@ it.layer(layerTest)("OrchestrationV2LayerLive lifecycle", (it) => {
       ];
       const host = Layer.mergeAll(
         NodeServices.layer,
+        NodeCrypto.layer,
         Layer.mock(PullRequestService.PullRequestService)({
           detail: () =>
             Effect.sync(() => ({

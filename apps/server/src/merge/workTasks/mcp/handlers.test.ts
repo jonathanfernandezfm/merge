@@ -1,3 +1,4 @@
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
 import {
@@ -67,6 +68,7 @@ const makeHarness = (createError: WorkTaskOperationError | null = null) =>
       }),
       McpToolAccessTestkit.liveThreadsLayer,
       NodeServices.layer,
+      NodeCrypto.layer,
     );
     const toolkit = yield* MergeToolkit.pipe(
       Effect.provide(

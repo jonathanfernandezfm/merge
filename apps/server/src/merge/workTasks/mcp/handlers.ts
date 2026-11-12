@@ -60,5 +60,7 @@ export const MergeToolkitHandlers = McpToolAccess.toLayer(MergeToolkit, {
           .pipe(Effect.mapError(operationFailure));
         return { workTaskId: created.taskId, threadId: created.threadId };
       }),
+    // A Work Task's thread is created by WorkTaskWorkspace, which has no caller link to stamp.
+    { refused: "create Work Tasks in this environment" },
   ),
 });

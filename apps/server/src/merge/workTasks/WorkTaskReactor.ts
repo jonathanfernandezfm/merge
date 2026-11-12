@@ -10,7 +10,7 @@ import {
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
-import * as Crypto from "effect/Crypto";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -86,7 +86,7 @@ export const make = Effect.gen(function* () {
   const projections = yield* ProjectionStore.ProjectionStoreV2;
   const store = yield* WorkTaskStore;
   const workspace = yield* WorkTaskWorkspace;
-  const crypto = yield* Crypto.Crypto;
+  const crypto = yield* SecureRandom.SecureRandom;
   // Event wakes and the timer must not reconcile at once.
   const lock = yield* Semaphore.make(1);
   // Event filter only: threads of active tasks and their subagents, refreshed every pass.
@@ -94,7 +94,7 @@ export const make = Effect.gen(function* () {
   const archivedDue = yield* Ref.make(false);
 
   const dispatch = (tag: string, command: (commandId: CommandId) => OrchestrationV2ServerCommand) =>
-    crypto.randomUUIDv4().pipe(
+    crypto.uuidV4().pipe(
       Effect.orDie,
       Effect.flatMap((id) =>
         engine.dispatch(command(CommandId.make(`merge:work-task-${tag}:${id}`))),

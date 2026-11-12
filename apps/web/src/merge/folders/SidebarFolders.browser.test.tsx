@@ -39,7 +39,13 @@ vi.mock("./state", async () => {
   const command = { label: "stub" };
   return {
     useFolderViews: (scopedProjectKeys: ReadonlySet<string> | null) =>
-      logic.buildFolderViews({ folders, filed, shells, scopedProjectKeys }),
+      logic.buildFolderViews({
+        folders,
+        filed,
+        shells,
+        scopedProjectKeys,
+        delegatedUnderParent: new Set(),
+      }),
     useFolderEnvironments: () => [fixtures.ENV],
     readFolderMenuItems: () => [],
     runFolderCommand,

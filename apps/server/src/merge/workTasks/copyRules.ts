@@ -40,6 +40,11 @@ export type WorkTaskStepOutcome =
 
 const failure = (error: string): WorkTaskStepOutcome => ({ status: "failed", log: null, error });
 
+const isWorkTaskOperationError = Schema.is(WorkTaskOperationError);
+
+const copyError = (cause: unknown) =>
+  new WorkTaskOperationError({ reason: "failed", message: String(cause), cause });
+
 /** The copy rules in `<root>/t3.json`; none when the file is absent. */
 export const readCopyRules = Effect.fn("WorkTaskCopyRules.read")(function* (root: string) {
   const fs = yield* FileSystem.FileSystem;
@@ -101,7 +106,10 @@ export const applyCopyRule = Effect.fn("WorkTaskCopyRules.apply")(
     if (!inside(yield* fs.realPath(worktreePath), yield* canonical(destination))) {
       return failure(`Copy destination '${to}' resolves outside the worktree.`);
     }
-    const destinationLink = yield* Effect.tryPromise(() => NodeFSP.lstat(destination)).pipe(
+    const destinationLink = yield* Effect.tryPromise({
+      try: () => NodeFSP.lstat(destination),
+      catch: copyError,
+    }).pipe(
       Effect.map((stat) => stat.isSymbolicLink()),
       Effect.orElseSucceed(() => false),
     );
@@ -114,19 +122,25 @@ export const applyCopyRule = Effect.fn("WorkTaskCopyRules.apply")(
     }
     yield* fs.makeDirectory(path.dirname(destination), { recursive: true });
     // Node's cp rejects sockets, FIFOs and devices (a daemon socket in `.codegraph`, say).
-    yield* Effect.tryPromise(() =>
-      NodeFSP.cp(source, destination, {
-        recursive: true,
-        filter: async (entry) => {
-          const stat = await NodeFSP.lstat(entry);
-          return stat.isFile() || stat.isDirectory() || stat.isSymbolicLink();
-        },
-      }),
-    );
+    yield* Effect.tryPromise({
+      try: () =>
+        NodeFSP.cp(source, destination, {
+          recursive: true,
+          filter: async (entry) => {
+            const stat = await NodeFSP.lstat(entry);
+            return stat.isFile() || stat.isDirectory() || stat.isSymbolicLink();
+          },
+        }),
+      catch: copyError,
+    });
     return { status: "done", log: `Copied ${rule.from} to ${to}` } as const;
   },
   (effect, _root, _worktree, rule) =>
     Effect.catch(effect, (cause) =>
-      Effect.succeed(failure(`Could not copy ${rule.from}: ${String(cause)}`)),
+      Effect.succeed(
+        failure(
+          `Could not copy ${rule.from}: ${isWorkTaskOperationError(cause) ? cause.message : String(cause)}`,
+        ),
+      ),
     ),
 );

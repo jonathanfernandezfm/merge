@@ -94,7 +94,7 @@ export function useBranchWorkItems(environmentId: EnvironmentId, cwd: string) {
     ?.refName;
   const cachedBranch = query.data?.branch;
   const { refresh, isPending } = query;
-  // oxlint-disable-next-line t3code/react-effect-budget -- Follows the checkout's branch from the git status stream.
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Follows the checkout's branch from the git status stream.
   useEffect(() => {
     if (branch !== undefined && cachedBranch !== undefined && branch !== cachedBranch && !isPending)
       refresh();

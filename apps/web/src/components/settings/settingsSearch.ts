@@ -161,7 +161,7 @@ export const SETTINGS_NAV_GROUPS: ReadonlyArray<{
       ...(isSecretsFeatureEnabled ? (["/settings/secrets"] as const) : []),
     ],
   },
-  { heading: null, paths: ["/settings/merge"] }, // merge-seam: settings
+  { heading: "Merge", headingHidden: true, paths: ["/settings/merge"] }, // merge-seam: settings
   {
     heading: msg("More"),
     headingHidden: true,

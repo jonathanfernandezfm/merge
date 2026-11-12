@@ -1,13 +1,11 @@
 import type { FileDiffContentsLoader } from "@pierre/diffs";
 import type { EnvironmentId, ScopedThreadRef } from "@t3tools/contracts";
-import { ChevronDown, ChevronRight } from "lucide";
-import { FolderTreeIcon } from "lucide-react";
+import { ChevronDownIcon, ChevronRightIcon, FolderTreeIcon } from "lucide-react";
 import * as Schema from "effect/Schema";
 import { useState } from "react";
 
 import { DiffStatLabel } from "~/components/chat/DiffStatLabel";
 import { DiffFilePathCopyButton } from "~/components/DiffFilePathCopyButton";
-import { MorphIcon } from "~/components/MorphIcon";
 import { DiffPanelLoadingState } from "~/components/DiffPanelShell";
 import { AnnotatableCodeView } from "~/components/diffs/AnnotatableCodeView";
 import { DiffFileTree } from "~/components/diffs/DiffFileTree";
@@ -206,10 +204,11 @@ export function GitGraphCommitDiff(props: {
                       />
                     }
                   >
-                    <MorphIcon
-                      className="size-4 text-muted-foreground/80"
-                      icon={isCollapsed ? ChevronRight : ChevronDown}
-                    />
+                    {isCollapsed ? (
+                      <ChevronRightIcon className="size-4 text-muted-foreground/80" />
+                    ) : (
+                      <ChevronDownIcon className="size-4 text-muted-foreground/80" />
+                    )}
                   </TooltipTrigger>
                   <TooltipPopup side="top">
                     {isCollapsed ? "Expand diff" : "Collapse diff"}

@@ -1,3 +1,4 @@
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import { FolderId, ThreadId, WorkTaskId } from "@t3tools/contracts";
@@ -29,7 +30,7 @@ const freshLayer = stores.pipe(
       Layer.provideMerge(NodeSqliteClient.layer({ filename: ":memory:" })),
     ),
   ),
-  Layer.provideMerge(NodeServices.layer),
+  Layer.provideMerge(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
 );
 
 /** v0.0.10 with old migration 057: folders in projection_folders, links on projection_threads. */
@@ -60,7 +61,7 @@ const legacyLayer = stores.pipe(
       }),
     ).pipe(Layer.provideMerge(NodeSqliteClient.layer({ filename: ":memory:" }))),
   ),
-  Layer.provideMerge(NodeServices.layer),
+  Layer.provideMerge(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
 );
 
 const thread = ThreadId.make("thread-a");

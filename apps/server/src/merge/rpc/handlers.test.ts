@@ -13,6 +13,7 @@ import {
   RpcScopeAuthorization,
   type AuthEnvironmentScope,
 } from "@t3tools/contracts";
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { ProjectId, ThreadId, WorkTaskId, WorkTaskOperationError } from "@t3tools/contracts";
 import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
@@ -110,7 +111,7 @@ const productionLayers = (projectRoot: string) =>
     Layer.provide(SqlitePersistence.layerMemory),
     Layer.provide(ServerSettings.ServerSettingsService.layerTest({})),
     Layer.provideMerge(ServerConfig.layerTest(process.cwd(), { prefix: "t3-merge-rpc-" })),
-    Layer.provideMerge(NodeServices.layer),
+    Layer.provideMerge(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
   );
 
 const gitGraphLogViaRpc = (
@@ -221,7 +222,7 @@ const workTasksLayer = WorkTaskStore.layer.pipe(
       Layer.provideMerge(NodeSqliteClient.layer({ filename: ":memory:" })),
     ),
   ),
-  Layer.provideMerge(NodeServices.layer),
+  Layer.provideMerge(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
 );
 
 it.effect("merge.workTasks.subscribe streams the snapshot, then again after a change", () =>
@@ -260,7 +261,7 @@ it.effect("merge.workTasks.subscribe streams the snapshot, then again after a ch
         const first = yield* next;
         assert.strictEqual(first._tag, "Chunk");
         if (first._tag === "Chunk") {
-          assert.deepStrictEqual(first.values, [{ tasks: [], links: [] }]);
+          assert.deepStrictEqual<unknown>(first.values, [{ tasks: [], links: [] }]);
         }
         yield* store.link(ThreadId.make("thread-a"), WorkTaskId.make("task-1"), "user");
         const second = yield* next;
@@ -382,7 +383,7 @@ const foldersLayer = FolderStore.layer.pipe(
       Layer.provideMerge(NodeSqliteClient.layer({ filename: ":memory:" })),
     ),
   ),
-  Layer.provideMerge(NodeServices.layer),
+  Layer.provideMerge(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
 );
 
 it.effect("merge.folders mutations need the operate scope and reach subscribers", () =>
@@ -447,7 +448,7 @@ it.effect("merge.folders mutations need the operate scope and reach subscribers"
         // Subscribing needs only the read scope.
         yield* reader.send(MERGE_WS_METHODS.foldersSubscribe, {});
         const first = yield* reader.next;
-        assert.deepStrictEqual(first._tag === "Chunk" ? first.values : null, [
+        assert.deepStrictEqual<unknown>(first._tag === "Chunk" ? first.values : null, [
           { folders: [], links: [] },
         ]);
 
@@ -482,7 +483,7 @@ it.effect("merge.folders mutations need the operate scope and reach subscribers"
         ) {
           const chunk = yield* reader.next;
           const value = chunk._tag === "Chunk" ? chunk.values.at(-1) : null;
-          const snapshot = value as {
+          const snapshot = value as unknown as {
             folders: ReadonlyArray<{ id: string; title: string }>;
             links: unknown;
           };

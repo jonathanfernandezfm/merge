@@ -66,6 +66,7 @@ export function filedVisibleThreads(
   shells: ReadonlyArray<EnvironmentThreadShell>,
   filed: ReadonlyMap<string, string>,
   scopedProjectKeys: ReadonlySet<string> | null,
+  delegatedUnderParent: ReadonlySet<string>,
 ): ReadonlyArray<EnvironmentThreadShell> {
   if (filed.size === 0) return [];
   return filterSidebarV2VisibleThreads(
@@ -73,6 +74,7 @@ export function filedVisibleThreads(
       filed.has(scopedThreadKey(scopeThreadRef(shell.environmentId, shell.id))),
     ),
     scopedProjectKeys,
+    delegatedUnderParent,
   );
 }
 
@@ -82,9 +84,15 @@ export function buildFolderViews(input: {
   readonly filed: ReadonlyMap<string, string>;
   readonly shells: ReadonlyArray<EnvironmentThreadShell>;
   readonly scopedProjectKeys: ReadonlySet<string> | null;
+  readonly delegatedUnderParent: ReadonlySet<string>;
 }): ReadonlyArray<FolderView> {
   const byFolder = new Map<string, EnvironmentThreadShell[]>();
-  for (const shell of filedVisibleThreads(input.shells, input.filed, input.scopedProjectKeys)) {
+  for (const shell of filedVisibleThreads(
+    input.shells,
+    input.filed,
+    input.scopedProjectKeys,
+    input.delegatedUnderParent,
+  )) {
     const key = input.filed.get(scopedThreadKey(scopeThreadRef(shell.environmentId, shell.id)));
     if (key === undefined) continue;
     const list = byFolder.get(key);

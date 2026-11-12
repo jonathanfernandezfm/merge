@@ -293,7 +293,7 @@ function WorkTaskTabs({
   const archived = task.archivedAt !== null || !canOperate;
   const navRef = useRef<HTMLElement>(null);
 
-  // oxlint-disable-next-line t3code/react-effect-budget -- scrolls the open tab into the DOM viewport
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- scrolls the open tab into the DOM viewport
   useEffect(() => {
     if (activeThreadId === null) return;
     navRef.current

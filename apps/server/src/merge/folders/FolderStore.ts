@@ -7,7 +7,7 @@ import {
   type ThreadId,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
-import * as Crypto from "effect/Crypto";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -48,7 +48,7 @@ export class FolderStore extends Context.Service<
 /** @public */
 export const make = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
-  const crypto = yield* Crypto.Crypto;
+  const crypto = yield* SecureRandom.SecureRandom;
   const projections = yield* ProjectionStore.ProjectionStoreV2;
   const changed = yield* PubSub.sliding<void>(1);
   const notify = PubSub.publish(changed, undefined).pipe(Effect.asVoid);
@@ -92,7 +92,7 @@ export const make = Effect.gen(function* () {
     );
 
   const create = Effect.fn("FolderStore.create")(function* (title: string) {
-    const id = FolderId.make(yield* crypto.randomUUIDv4().pipe(Effect.orDie));
+    const id = FolderId.make(yield* crypto.uuidV4().pipe(Effect.orDie));
     const at = yield* now;
     yield* sql`
       INSERT INTO projection_folders (folder_id, title, created_at, updated_at, deleted_at)

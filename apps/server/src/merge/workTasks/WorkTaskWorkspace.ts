@@ -32,7 +32,7 @@ import {
 } from "@t3tools/contracts";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import * as Context from "effect/Context";
-import * as Crypto from "effect/Crypto";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -178,7 +178,7 @@ export const make = Effect.gen(function* () {
   const orchestrator = yield* Orchestrator.OrchestratorV2;
   const terminals = yield* TerminalManager.TerminalManager;
   const settingsService = yield* ServerSettings.ServerSettingsService;
-  const crypto = yield* Crypto.Crypto;
+  const crypto = yield* SecureRandom.SecureRandom;
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
 
@@ -195,7 +195,7 @@ export const make = Effect.gen(function* () {
       return lock.withPermit(effect);
     });
 
-  const uuid = crypto.randomUUIDv4().pipe(Effect.orDie);
+  const uuid = crypto.uuidV4().pipe(Effect.orDie);
   const commandId = (tag: string) =>
     uuid.pipe(Effect.map((id) => CommandId.make(`merge:work-task-${tag}:${id}`)));
   const nowIso = Effect.map(DateTime.now, DateTime.formatIso);

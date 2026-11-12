@@ -1,3 +1,4 @@
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it } from "@effect/vitest";
 import {
@@ -171,7 +172,7 @@ it.live("storage cleanup keeps a single-thread Work Task worktree that a rule wo
         Layer.provideMerge(layerDatabase),
         Layer.provideMerge(GitVcsDriver.layer),
         Layer.provideMerge(ServerConfig.layerTest(process.cwd(), { prefix: "merge-cleanup-" })),
-        Layer.provideMerge(NodeServices.layer),
+        Layer.provideMerge(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
       ),
     ),
     Effect.scoped,

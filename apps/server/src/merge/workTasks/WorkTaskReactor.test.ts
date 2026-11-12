@@ -1,3 +1,4 @@
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
 import {
@@ -176,7 +177,7 @@ const layerStore = WorkTaskStore.layer.pipe(
       Layer.provideMerge(NodeSqliteClient.layer({ filename: ":memory:" })),
     ),
   ),
-  Layer.provideMerge(NodeServices.layer),
+  Layer.provideMerge(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
 );
 
 const layerFakes = Layer.mergeAll(

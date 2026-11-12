@@ -352,7 +352,6 @@ jobs:
             echo "CMAKE_CXX_COMPILER_LAUNCHER=ccache"
           } >> "$GITHUB_ENV"
 
-
       - name: Configure Gradle and ccache
         if: steps.record.outputs.built != 'true'
         run: |

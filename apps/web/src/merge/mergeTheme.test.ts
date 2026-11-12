@@ -26,6 +26,6 @@ describe("merge theme", () => {
     expect(resolveSidebarStageBackdropVariant("Alpha")).toBe("dev");
     expect(resolveSidebarStageBackdropVariant("Dev")).toBe("dev");
     expect(resolveSidebarStageBackdropVariant("Nightly")).toBe("nightly");
-    expect(resolveSidebarStageBackdropVariant("Alpha", false)).toBeNull();
+    expect(resolveSidebarStageBackdropVariant("Alpha", "pill")).toBeNull();
   });
 });
