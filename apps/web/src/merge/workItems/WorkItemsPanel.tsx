@@ -247,7 +247,10 @@ function WorkItemFamily({
               variant="ghost-muted"
               className="shrink-0"
               onClick={() =>
-                copyText(children.map((child) => `#${child.id}`).join(" "), "Subtask ids")
+                copyText(
+                  children.map((child) => `#${child.id} ${child.title}`).join("\n"),
+                  "Subtask ids",
+                )
               }
             >
               <CopyIcon aria-hidden className="size-3" />
