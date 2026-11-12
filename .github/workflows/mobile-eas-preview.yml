@@ -146,6 +146,9 @@ jobs:
       EXPO_TOKEN: ${{ secrets.EXPO_PREVIEW_TOKEN }}
       GH_TOKEN: ${{ github.token }}
       PR: ${{ github.event.pull_request.number }}
+      # app.config.ts reads the Expo account and project from these.
+      EXPO_OWNER: ${{ vars.EXPO_OWNER }}
+      EAS_PROJECT_ID: ${{ vars.EAS_PROJECT_ID }}
     steps:
       - id: expo-token
         name: Check for EXPO_PREVIEW_TOKEN
@@ -248,11 +251,11 @@ jobs:
             # A client EAS built before this job existed; expired ones are gone.
             link="$(eas build:list --platform android --build-profile preview:dev --runtime-version "$hash" --status finished --limit 5 --json --non-interactive \
               | sed -n '/^\[/,$p' \
-              | jq -r --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '[.[] | select((.expirationDate // "9999") > $now)][0] | select(. != null) | "https://expo.dev/accounts/pingdotgg/projects/t3-code/builds/\(.id)"')"
+              | jq -r --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg owner "$EXPO_OWNER" '[.[] | select((.expirationDate // "9999") > $now)][0] | select(. != null) | "https://expo.dev/accounts/\($owner)/projects/merge/builds/\(.id)"')"
           fi
           echo "link=$link" >> "$GITHUB_OUTPUT"
           if [ -z "$link" ]; then echo "build=true" >> "$GITHUB_OUTPUT"; fi
-          echo "android fingerprint \`$hash\`: ${link:-no client yet, building on Blacksmith}" >> "$GITHUB_STEP_SUMMARY"
+          echo "android fingerprint \`$hash\`: ${link:-no client yet, building one}" >> "$GITHUB_STEP_SUMMARY"
 
       - id: update
         name: Publish the update
