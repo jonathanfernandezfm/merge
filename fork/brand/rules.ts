@@ -79,8 +79,9 @@ export const identity: Array<{ file: string; from: string; to: string }> = [
   },
   {
     file: "scripts/build-desktop-artifact.test.ts",
-    from: '"linux.desktop.entry.StartupWMClass", "com.t3tools.T3Code"',
-    to: '"linux.desktop.entry.StartupWMClass", "io.github.jonathanfernandezfm.Merge"',
+    // The formatter wraps the branded call, so the anchor is the value alone.
+    from: '"com.t3tools.T3Code"',
+    to: '"io.github.jonathanfernandezfm.Merge"',
   },
   { file: BUILD, from: 'name: "t3code",', to: 'name: "merge",' },
   {
