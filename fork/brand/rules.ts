@@ -470,12 +470,12 @@ export const identity: Array<{ file: string; from: string; to: string }> = [
   {
     file: "apps/server/src/provider/agentContextBudget.json",
     from: '"claudeSystemAppendBytes": 5597,',
-    to: '"claudeSystemAppendBytes": 0,',
+    to: '"claudeSystemAppendBytes": 5591,',
   },
   {
     file: "apps/server/src/provider/agentContextBudget.json",
     from: '"codexAdditionalContextBytes": 7327,',
-    to: '"codexAdditionalContextBytes": 0,',
+    to: '"codexAdditionalContextBytes": 7317,',
   },
   // The mock agent's page text, which AcpAdapterV2.test.ts expects after copy.
   { file: "apps/server/scripts/acp-mock-agent.ts", from: '"T3 Code page"', to: '"Merge page"' },
