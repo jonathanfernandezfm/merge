@@ -63,7 +63,7 @@ export function SidebarStageBackdrop({ variant }: { variant: SidebarStageBackdro
   );
 }
 
-export function StageBackdropArt({ variant }: { variant: SidebarStageBackdropVariant }) {
+function StageBackdropArt({ variant }: { variant: SidebarStageBackdropVariant }) {
   if (variant === "dev") return <MergeTextureArt />; // merge-seam: texture
   return variant === "nightly" ? <NightlySkyArt /> : <DevBlueprintArt />;
 }

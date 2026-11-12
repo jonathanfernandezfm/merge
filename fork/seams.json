@@ -120,14 +120,9 @@
     "purpose": "Send button keeps the accent fill instead of stage art"
   },
   {
-    "id": "texture",
-    "file": "apps/web/src/components/settings/AppearanceSettingsPanel.tsx",
-    "purpose": "Environment identification setting always visible so the texture can be turned off"
-  },
-  {
     "id": "hosted-services",
     "file": "apps/web/src/components/settings/LabsSettingsPanel.tsx",
-    "purpose": "Hide the guest links section when the build has no T3 Connect config"
+    "purpose": "Hide the guest links row when the build has no T3 Connect config"
   },
   {
     "id": "hosted-services",
@@ -148,11 +143,6 @@
     "id": "work-items",
     "file": "apps/web/src/components/chat/ChatHeader.tsx",
     "purpose": "Header chip for the branch's Azure Boards work item; opens the work items panel"
-  },
-  {
-    "id": "scm-ado",
-    "file": "packages/source-control-azure-devops/src/server/AzureDevOpsCli.ts",
-    "purpose": "URL-encode --source-branch so branches like feature/#123-x find their pull request"
   },
   {
     "id": "scm-ado",

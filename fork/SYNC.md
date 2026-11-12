@@ -2,7 +2,7 @@
 
 Merge is upstream T3 Code plus three things:
 
-1. **Fork code** in `fork/`, `*/src/merge/` and `packages/source-control-azure-devops/`.
+1. **Fork code** in `fork/` and `*/src/merge/` (including `packages/source-control-azure-devops/src/merge/`; the rest of that package is upstream's).
 2. **Seams**: small edits to upstream files, each marked `// merge-seam: <id>` (`{/* merge-seam: <id> */}` in JSX, `# merge-seam: <id>` in YAML, `<!-- merge-seam: <id> -->` in Markdown) and listed in `fork/seams.json`.
 3. **Brand overlay**: one generated commit, `chore(brand): apply Merge brand overlay [generated]`, always on top. Never edit it by hand; change `fork/brand/rules.ts` or `fork/brand/assets/` and regenerate.
 
@@ -28,9 +28,9 @@ CI and release run from the fork on GitHub-hosted runners. Kept: `ci.yml`, `rele
 
 Deleted upstream workflows (a deleted file cannot hold a marker): re-delete on sync if upstream re-adds or changes them.
 
-`agent-context-budget.yml`, `deploy-relay.yml`, `desktop-macos-preview.yml`, `desktop-macos-preview-publish.yml`, `mobile-android-apk.yml`, `mobile-fingerprint-check.yml`, `mobile-showcase-screenshots.yml`, `pr-vouch.yml`, `publish-aur.yml`, `relay-preview.yml`, `relay-preview-cleanup.yml`, `stale-needs-more-info.yml`, `thread-transfer-report.yml`, `web-preview.yml`.
+`agent-context-budget.yml`, `deploy-relay.yml`, `desktop-macos-preview.yml`, `desktop-macos-preview-publish.yml`, `mobile-android-apk.yml`, `mobile-fingerprint-check.yml`, `mobile-showcase-screenshots.yml`, `pr-vouch.yml`, `publish-aur.yml`, `relay-preview.yml`, `relay-preview-cleanup.yml`, `stale-needs-more-info.yml`, `thread-transfer-report.yml`, `web-preview.yml`, `pr-limits.yml`, `mobile-dev-client.yml`, `mobile-eas-preview-fork.yml`, `mobile-fingerprint-label.yml`.
 
-Also deleted: `.github/actions/setup-apt-mirrors/` and the scripts only those workflows used (`relay-state-output.test.cjs`, `stage-preview-bundle.py`, `stage-preview-bundle.test.py`, `thread-transfer-report.cjs`, `thread-transfer-report.test.cjs`, `vercel-deployment-output.test.cjs`). `release.yml` also drops the `relay_public_config`, `publish_cli`, `publish_aur`, `build_web`, `deploy_web`, `build_marketing` and `deploy_marketing` jobs and the nightly `schedule`. It keeps upstream's `announce_discord` job (its steps are read by `scripts/notify-discord-release.test.ts`), gated on the repository variable `DISCORD_RELEASE_ANNOUNCEMENTS == 'true'`. When upstream edits those regions, keep the fork's version.
+Also deleted: `.github/actions/setup-apt-mirrors/` (drop any `uses:` of it, and Blacksmith runners or `useblacksmith/stickydisk` steps, from kept workflows) and the scripts only those workflows used (`pr-limits.cjs`, `relay-state-output.test.cjs`, `stage-preview-bundle.py`, `stage-preview-bundle.test.py`, `thread-transfer-report.cjs`, `thread-transfer-report.test.cjs`, `vercel-deployment-output.test.cjs`). `release.yml` also drops the `relay_public_config`, `publish_cli`, `publish_aur`, `build_web`, `deploy_web`, `build_marketing` and `deploy_marketing` jobs and the nightly `schedule`. It keeps upstream's `announce_discord` job (its steps are read by `scripts/notify-discord-release.test.ts`), gated on the repository variable `DISCORD_RELEASE_ANNOUNCEMENTS == 'true'`. When upstream edits those regions, keep the fork's version.
 
 ## When something breaks
 
