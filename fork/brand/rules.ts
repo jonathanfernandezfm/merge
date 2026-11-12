@@ -478,6 +478,11 @@ export const identity: Array<{ file: string; from: string; to: string }> = [
     from: '"codexAdditionalContextBytes": 7327,',
     to: '"codexAdditionalContextBytes": 7317,',
   },
+  {
+    file: "packages/shared/src/promptLinks.test.ts",
+    from: '"t3code://threads/',
+    to: '"merge://threads/',
+  },
   // The mock agent's page text, which AcpAdapterV2.test.ts expects after copy.
   { file: "apps/server/scripts/acp-mock-agent.ts", from: '"T3 Code page"', to: '"Merge page"' },
 ];
@@ -505,6 +510,7 @@ export const copy = {
     // "T3 Code" here is test data (a thread title, an MCP server prefix), not copy.
     "packages/shared/src/paletteSearch.test.ts",
     "packages/shared/src/t3McpToolPresentation.test.ts",
+    "packages/shared/src/speech.test.ts",
     // Fork code names upstream T3 Code on purpose; its own copy is already Merge.
     "**/src/merge/**",
   ],
