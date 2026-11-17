@@ -307,8 +307,8 @@ describe("workTaskItemMenuItems", () => {
       "open-ado",
       "copy-id",
       "copy-branch",
-      "open-pr",
-      "new-thread",
+      "open-pr:0",
+      "new-thread:0",
       "rename",
       "rename-ai",
       "mark-waiting",
@@ -341,9 +341,17 @@ describe("workTaskItemMenuItems", () => {
     ]);
   });
 
+  it("flattens open-pr and new-thread for a single member", () => {
+    const items = workTaskItemMenuItems(menuItem([{ id: "a", pr: true }]));
+    expect(items.filter((i) => i.id === "open-pr:0" || i.id === "new-thread:0")).toEqual([
+      { id: "open-pr:0", label: "Open pull request", disabled: false },
+      { id: "new-thread:0", label: "New thread", disabled: false },
+    ]);
+  });
+
   it("disables open pull request when no member has one", () => {
     const items = workTaskItemMenuItems(menuItem([{ id: "a" }]));
-    expect(items.find((item) => item.id === "open-pr")?.disabled).toBe(true);
+    expect(items.find((item) => item.id === "open-pr:0")?.disabled).toBe(true);
   });
 
   it("offers clear waiting when a member waits, and keeps linked repos", () => {
@@ -360,7 +368,7 @@ describe("workTaskItemMenuItems", () => {
       canOperate: false,
     });
     expect(readOnly.filter((item) => item.disabled).map((item) => item.id)).toEqual([
-      "new-thread",
+      "new-thread:0",
       "rename",
       "rename-ai",
       "mark-waiting",

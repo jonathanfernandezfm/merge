@@ -7,7 +7,8 @@ import { readLocalApi } from "~/localApi";
 import { readProject, waitForThreadShell } from "~/state/entities";
 import { readEnvironmentScope } from "~/state/session";
 import { useAtomCommand } from "~/state/use-atom-command";
-import { writeTextToClipboard } from "~/hooks/useCopyToClipboard";
+import { toastManager } from "~/components/ui/toast";
+import { copyText } from "../workItems/workItemPresentation";
 import type { WorkTaskItem } from "./grouping";
 import {
   latestWorkTaskMember,
@@ -103,6 +104,13 @@ export function useWorkTaskContextMenu(onNavigate?: () => void) {
     if (clicked._tag === "Failure" || clicked.value == null) return;
     const id = clicked.value;
     const refs = tasks.map((task) => ({ environmentId: task.environmentId, taskId: task.id }));
+    const openLink = async (url: string) => {
+      try {
+        await api.shell.openExternal(url);
+      } catch {
+        toastManager.add({ type: "error", title: "Could not open the link" });
+      }
+    };
     const memberAt = (prefix: string) => item.members[Number(id.slice(prefix.length))]?.view;
     if (id.startsWith("open-linked:")) {
       const sibling = linked[Number(id.slice("open-linked:".length))];
@@ -117,7 +125,7 @@ export function useWorkTaskContextMenu(onNavigate?: () => void) {
     }
     if (id.startsWith("open-pr:")) {
       const url = memberAt("open-pr:")?.pullRequest?.url;
-      if (url !== undefined) await api.shell.openExternal(url);
+      if (url !== undefined) await openLink(url);
       return;
     }
     if (id.startsWith("new-thread:")) {
@@ -129,21 +137,20 @@ export function useWorkTaskContextMenu(onNavigate?: () => void) {
     }
     switch (id) {
       case "open-ado":
-        if (item.workItem?.url) await api.shell.openExternal(item.workItem.url);
+        if (item.workItem?.url) await openLink(item.workItem.url);
         return;
       case "copy-id":
-        if (item.workItem !== null) {
-          await writeTextToClipboard(String(item.workItem.id), "work item ID").catch(() => false);
-        }
+        if (item.workItem !== null) copyText(String(item.workItem.id), "Work item ID");
         return;
       case "copy-branch":
-        await writeTextToClipboard(latest.task.workspace.branch, "branch name").catch(() => false);
+        copyText(latest.task.workspace.branch, "Branch name");
         return;
       case "rename":
         openRenameWorkTaskDialog({ refs, title: item.title });
         return;
       case "rename-ai":
-        for (const ref of refs) await rename({ environmentId: ref.environmentId, input: ref });
+        for (const ref of refs)
+          await rename({ environmentId: ref.environmentId, input: { taskId: ref.taskId } });
         return;
       case "mark-waiting":
         openWaitingReasonDialog(refs);
@@ -174,7 +181,7 @@ export function useWorkTaskContextMenu(onNavigate?: () => void) {
           return;
         }
         const confirmed = await api.dialogs.confirm(
-          `Archive ${item.title}? This archives its ${refs.length} Work Tasks, stops their agents and removes their worktrees.`,
+          `Archive ${item.title}? This archives its ${refs.length} Work Tasks, stops their agents and removes their worktrees, except any with uncommitted changes.`,
           { variant: "destructive" },
         );
         if (!confirmed) return;

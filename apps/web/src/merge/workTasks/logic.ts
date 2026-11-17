@@ -300,6 +300,7 @@ export function workTaskItemMenuItems(
 ): ContextMenuItem<string>[] {
   const { linkedProjectTitles = [], canOperate = true } = options;
   const tasks = item.members.map((member) => member.view.task);
+  const single = item.members.length === 1;
   const archived = tasks.every((task) => task.archivedAt !== null) || !canOperate;
   const withPr = item.members.flatMap((member, index) =>
     member.view.pullRequest === null
@@ -315,24 +316,33 @@ export function workTaskItemMenuItems(
       ...(item.workItem !== null ? { detail: String(item.workItem.id) } : {}),
     },
     { id: "copy-branch", label: "Copy branch name" },
-    {
-      id: "open-pr",
-      label: "Open pull request",
-      disabled: withPr.length === 0,
-      children: withPr.map(({ member, index, pullRequest }) => ({
-        id: `open-pr:${index}`,
-        label: `${member.label} #${pullRequest.number}`,
-      })),
-    },
-    {
-      id: "new-thread",
-      label: "New thread in",
-      disabled: archived,
-      children: item.members.map((member, index) => ({
-        id: `new-thread:${index}`,
-        label: member.label,
-      })),
-    },
+    // One member needs no submenu: the action sits directly in the menu.
+    single
+      ? {
+          id: "open-pr:0",
+          label: "Open pull request",
+          disabled: withPr.length === 0,
+        }
+      : {
+          id: "open-pr",
+          label: "Open pull request",
+          disabled: withPr.length === 0,
+          children: withPr.map(({ member, index, pullRequest }) => ({
+            id: `open-pr:${index}`,
+            label: `${member.label} #${pullRequest.number}`,
+          })),
+        },
+    single
+      ? { id: "new-thread:0", label: "New thread", disabled: archived }
+      : {
+          id: "new-thread",
+          label: "New thread in",
+          disabled: archived,
+          children: item.members.map((member, index) => ({
+            id: `new-thread:${index}`,
+            label: member.label,
+          })),
+        },
     ...linkedProjectTitles.map((title, index) => ({
       id: `open-linked:${index}`,
       label: `Open in ${title}`,
