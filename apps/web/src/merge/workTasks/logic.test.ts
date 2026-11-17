@@ -126,7 +126,7 @@ describe("buildWorkTaskViews", () => {
       ],
     );
     expect(view(result, "t").pullRequest).toMatchObject({ number: 8, state: "draft" });
-    expect(view(result, "t").status).toBe("approved");
+    expect(view(result, "t").status).toBe("idle");
   });
 });
 
@@ -155,13 +155,13 @@ describe("workTaskboardColumnForStatus", () => {
       monitoring: "working",
       "waiting-for-user": "needs-you",
       idle: "working",
-      "ci-running": "in-review",
-      "ci-failing": "needs-you",
+      "merge-conflicts": "needs-you",
       "changes-requested": "needs-you",
+      "unresolved-comments": "needs-you",
+      "approved-checks-failing": "needs-you",
       "addressing-comments": "working",
       "waiting-for-review": "in-review",
       approved: "ready-to-merge",
-      "merge-ready": "ready-to-merge",
       merged: "merged",
       archived: "archive",
     });

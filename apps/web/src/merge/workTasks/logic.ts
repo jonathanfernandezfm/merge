@@ -144,10 +144,11 @@ function workTaskPullRequestSummary(
       number: link.number,
       url: link.url,
       title: link.snapshot.title,
-      ...workTaskPullRequestFromSnapshot(link.snapshot),
+      ...workTaskPullRequestFromSnapshot(link.snapshot, null),
     };
   }
-  return task.legacyPullRequest;
+  const legacy = task.legacyPullRequest;
+  return legacy && { ...legacy, mergeConflicts: false, unresolvedComments: 0 };
 }
 
 function latestWorkTaskThread(tabs: ReadonlyArray<WorkTaskTab>): EnvironmentThreadShell | null {
@@ -201,14 +202,14 @@ export function workTaskboardColumnForStatus(status: WorkTaskStatus): WorkTaskbo
       return "working";
     case "waiting-for-user":
     case "setup-failed":
-    case "ci-failing":
+    case "merge-conflicts":
     case "changes-requested":
+    case "unresolved-comments":
+    case "approved-checks-failing":
       return "needs-you";
-    case "ci-running":
     case "waiting-for-review":
       return "in-review";
     case "approved":
-    case "merge-ready":
       return "ready-to-merge";
     case "merged":
       return "merged";

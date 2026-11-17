@@ -4,21 +4,34 @@ import { ThreadId } from "../baseSchemas.ts";
 import type { ThreadPullRequestLink, ThreadPullRequestSnapshot } from "../threadPullRequest.ts";
 import {
   deriveWorkTaskStatus,
+  WORK_TASK_STATUS_URGENCY,
+  WORK_TASK_STATUSES,
   workTaskPullRequestFromSnapshot,
+  workTaskSection,
   workTaskStatusInputs,
   workTaskThreadState,
   type WorkTaskPullRequestView,
+  type WorkTaskSection,
+  type WorkTaskStatus,
   type WorkTaskStatusShell,
   type WorkTaskStatusTask,
   type WorkTaskStatusThread,
 } from "./workTaskStatus.ts";
+import type { WorkTaskPullRequestFacts } from "./workTaskInsights.ts";
 import { WorkTaskId, type WorkTaskLegacyPullRequest } from "./workTasks.ts";
 
 const NOW = "2026-10-01T12:00:00.000Z";
 const BRANCH = "feature/widgets";
 
 function pullRequest(overrides: Partial<WorkTaskPullRequestView> = {}): WorkTaskPullRequestView {
-  return { state: "open", checks: "none", review: "none", ...overrides };
+  return {
+    state: "open",
+    checks: "none",
+    review: "none",
+    mergeConflicts: false,
+    unresolvedComments: 0,
+    ...overrides,
+  };
 }
 
 function task(overrides: Partial<WorkTaskStatusTask> = {}): WorkTaskStatusTask {
@@ -45,14 +58,15 @@ const idle: WorkTaskStatusThread = { origin: null, state: "idle" };
 const fresh: WorkTaskStatusThread = { origin: "user", state: "new" };
 
 describe("deriveWorkTaskStatus", () => {
-  it("puts archived above everything, then merged", () => {
-    const busy = [waiting, reviewRunning];
-    expect(status(task({ archivedAt: NOW, mergedAt: NOW }), busy)).toBe("archived");
-    expect(status(task({ mergedAt: NOW }), busy)).toBe("merged");
-    expect(status(task(), busy, pullRequest({ state: "merged" }))).toBe("merged");
+  const monitoring: WorkTaskStatusThread = { origin: "user", state: "monitoring" };
+
+  it("1. puts archived above everything", () => {
+    expect(status(task({ archivedAt: NOW, mergedAt: NOW }), [waiting, reviewRunning])).toBe(
+      "archived",
+    );
   });
 
-  it("reports setup before agent and pull request state", () => {
+  it("2-3. reports setup above the user, agents and the pull request", () => {
     const setup = (s: "pending" | "running" | "failed") =>
       task({
         workspace: { branch: BRANCH, setup: { status: s } },
@@ -63,52 +77,134 @@ describe("deriveWorkTaskStatus", () => {
     expect(status(setup("failed"), [running])).toBe("setup-failed");
   });
 
-  it("waits for the user on a reason or a blocked thread, above automated work", () => {
+  it("4. waits for the user on a reason or a blocked thread, above automated work", () => {
     expect(status(task({ waitingForUserReason: "Approve the plan" }), [])).toBe("waiting-for-user");
-    expect(status(task(), [reviewRunning, waiting], pullRequest({ checks: "failing" }))).toBe(
+    expect(status(task({ mergedAt: NOW }), [waiting])).toBe("waiting-for-user");
+    expect(status(task(), [reviewRunning, waiting], pullRequest({ mergeConflicts: true }))).toBe(
       "waiting-for-user",
     );
   });
 
-  it("shows an automated review thread above failing checks", () => {
-    const failing = pullRequest({ checks: "failing", review: "changes-requested" });
-    expect(status(task(), [reviewRunning], failing)).toBe("addressing-comments");
-    expect(status(task(), [running], failing)).toBe("ci-failing");
+  it("5. shows an automated review thread above requested changes", () => {
+    const pr = pullRequest({ review: "changes-requested", mergeConflicts: true });
+    expect(status(task(), [reviewRunning], pr)).toBe("addressing-comments");
   });
 
-  it("ranks requested changes above a running user thread", () => {
-    expect(status(task(), [running], pullRequest({ review: "changes-requested" }))).toBe(
-      "changes-requested",
+  it("6. is merged once merged, or monitoring while a thread still runs", () => {
+    const failingMerged = pullRequest({ state: "merged", checks: "failing" });
+    expect(status(task({ mergedAt: NOW }), [idle])).toBe("merged");
+    expect(status(task(), [idle], failingMerged)).toBe("merged");
+    expect(status(task(), [running], pullRequest({ state: "merged" }))).toBe("monitoring");
+    expect(status(task({ mergedAt: NOW }), [monitoring])).toBe("monitoring");
+  });
+
+  it("7. ranks merge conflicts above a running thread", () => {
+    expect(status(task(), [running], pullRequest({ mergeConflicts: true }))).toBe(
+      "merge-conflicts",
     );
+    expect(
+      status(task(), [], pullRequest({ mergeConflicts: true, review: "changes-requested" })),
+    ).toBe("merge-conflicts");
+    expect(status(task(), [], pullRequest({ state: "draft", mergeConflicts: true }))).toBe(
+      "merge-conflicts",
+    );
+  });
+
+  it("8. ranks requested changes above unresolved comments and a running thread", () => {
+    const pr = pullRequest({ review: "changes-requested", unresolvedComments: 2 });
+    expect(status(task(), [running], pr)).toBe("changes-requested");
+  });
+
+  it("9. ranks unresolved comments above failing approved checks", () => {
+    const pr = pullRequest({ review: "approved", checks: "failing", unresolvedComments: 1 });
+    expect(status(task(), [running], pr)).toBe("unresolved-comments");
+  });
+
+  it("10. surfaces failing checks only on an approved pull request", () => {
+    expect(status(task(), [], pullRequest({ review: "approved", checks: "failing" }))).toBe(
+      "approved-checks-failing",
+    );
+    expect(status(task(), [], pullRequest({ review: "pending", checks: "failing" }))).toBe(
+      "waiting-for-review",
+    );
+  });
+
+  it("11. is working while a thread runs, even with pending checks", () => {
     expect(status(task(), [running], pullRequest())).toBe("working");
+    expect(status(task(), [monitoring, running])).toBe("working");
+    expect(status(task(), [running], pullRequest({ state: "draft" }))).toBe("working");
   });
 
-  it("derives the review lifecycle of an open pull request", () => {
+  it("12. monitors while only watch loops run", () => {
+    expect(status(task(), [idle, monitoring])).toBe("monitoring");
+  });
+
+  it("13-14. derives approval and review of an open pull request", () => {
     const of = (pr: Partial<WorkTaskPullRequestView>) => status(task(), [idle], pullRequest(pr));
-    expect(of({ review: "approved", checks: "passing" })).toBe("merge-ready");
-    expect(of({ review: "approved", checks: "none" })).toBe("merge-ready");
+    expect(of({ review: "approved", checks: "passing" })).toBe("approved");
     expect(of({ review: "approved", checks: "pending" })).toBe("approved");
-    expect(of({ review: "pending", checks: "pending" })).toBe("ci-running");
-    expect(of({ review: "pending", checks: "passing" })).toBe("waiting-for-review");
-    expect(of({ state: "draft" })).toBe("waiting-for-review");
+    expect(of({ review: "approved", checks: "none" })).toBe("approved");
+    expect(of({ review: "pending", checks: "pending" })).toBe("waiting-for-review");
+    expect(of({ review: "none", checks: "passing" })).toBe("waiting-for-review");
   });
 
-  it("treats a closed pull request like no pull request", () => {
-    expect(status(task(), [idle], pullRequest({ state: "closed", checks: "failing" }))).toBe(
+  it("15. is idle when nothing runs, on a draft or a closed pull request too", () => {
+    expect(status(task(), [fresh, idle])).toBe("idle");
+    expect(status(task(), [])).toBe("idle");
+    expect(status(task(), [idle], pullRequest({ state: "draft", review: "approved" }))).toBe(
       "idle",
     );
+    expect(
+      status(
+        task(),
+        [idle],
+        pullRequest({ state: "closed", checks: "failing", mergeConflicts: true }),
+      ),
+    ).toBe("idle");
+  });
+});
+
+describe("workTaskSection", () => {
+  const SECTIONS: Record<WorkTaskSection, ReadonlyArray<WorkTaskStatus>> = {
+    attention: [
+      "setup-failed",
+      "waiting-for-user",
+      "idle",
+      "merge-conflicts",
+      "changes-requested",
+      "unresolved-comments",
+      "approved-checks-failing",
+    ],
+    working: ["setting-up", "working", "addressing-comments", "monitoring"],
+    review: ["waiting-for-review", "approved"],
+    done: ["merged", "archived"],
+  };
+
+  it("places every status in exactly one section", () => {
+    const listed = Object.values(SECTIONS).flat();
+    expect([...listed].sort()).toEqual([...WORK_TASK_STATUSES].sort());
+    for (const [section, statuses] of Object.entries(SECTIONS)) {
+      for (const s of statuses) expect(workTaskSection(s, false)).toBe(section);
+    }
   });
 
-  it("monitors while only watch loops run, below running agents", () => {
-    const monitoring: WorkTaskStatusThread = { origin: "user", state: "monitoring" };
-    expect(status(task(), [idle, monitoring])).toBe("monitoring");
-    expect(status(task(), [monitoring, running])).toBe("working");
+  it("raises an unseen task to attention unless it is working", () => {
+    for (const s of WORK_TASK_STATUSES) {
+      expect(workTaskSection(s, true)).toBe(SECTIONS.working.includes(s) ? "working" : "attention");
+    }
   });
+});
 
-  it("is idle whenever nothing is running, even before any agent worked", () => {
-    expect(status(task(), [fresh, idle])).toBe("idle");
-    expect(status(task(), [fresh])).toBe("idle");
-    expect(status(task(), [])).toBe("idle");
+describe("WORK_TASK_STATUS_URGENCY", () => {
+  it("lists every status once, in rule order", () => {
+    expect([...WORK_TASK_STATUS_URGENCY].sort()).toEqual([...WORK_TASK_STATUSES].sort());
+    expect(WORK_TASK_STATUS_URGENCY.indexOf("merge-conflicts")).toBeLessThan(
+      WORK_TASK_STATUS_URGENCY.indexOf("changes-requested"),
+    );
+    expect(WORK_TASK_STATUS_URGENCY.indexOf("working")).toBeLessThan(
+      WORK_TASK_STATUS_URGENCY.indexOf("approved"),
+    );
+    expect(WORK_TASK_STATUS_URGENCY.at(-1)).toBe("idle");
   });
 });
 
@@ -190,26 +286,59 @@ const snapshot = (
   ...overrides,
 });
 
+const facts = (overrides: Partial<WorkTaskPullRequestFacts> = {}): WorkTaskPullRequestFacts => ({
+  number: 7 as never,
+  review: "none",
+  checks: "none",
+  mergeConflicts: false,
+  unresolvedComments: 0,
+  syncedAt: NOW,
+  ...overrides,
+});
+
 describe("workTaskPullRequestFromSnapshot", () => {
+  const from = (snap: ThreadPullRequestSnapshot, f: WorkTaskPullRequestFacts | null = null) =>
+    workTaskPullRequestFromSnapshot(snap, f);
+
   it("maps draft, closed, null checks and review-required", () => {
-    expect(workTaskPullRequestFromSnapshot(snapshot())).toEqual({
+    expect(from(snapshot())).toEqual({
       state: "open",
       checks: "none",
       review: "none",
+      mergeConflicts: false,
+      unresolvedComments: 0,
     });
-    expect(workTaskPullRequestFromSnapshot(snapshot({ isDraft: true })).state).toBe("draft");
-    expect(workTaskPullRequestFromSnapshot(snapshot({ state: "closed" })).state).toBe("closed");
-    expect(workTaskPullRequestFromSnapshot(snapshot({ state: "merged" })).state).toBe("merged");
-    expect(workTaskPullRequestFromSnapshot(snapshot({ checksState: null })).checks).toBe("none");
-    expect(workTaskPullRequestFromSnapshot(snapshot({ checksState: "failing" })).checks).toBe(
-      "failing",
-    );
+    expect(from(snapshot({ isDraft: true })).state).toBe("draft");
+    expect(from(snapshot({ state: "closed" })).state).toBe("closed");
+    expect(from(snapshot({ state: "merged" })).state).toBe("merged");
+    expect(from(snapshot({ checksState: null })).checks).toBe("none");
+    expect(from(snapshot({ checksState: "failing" })).checks).toBe("failing");
+    expect(from(snapshot({ reviewDecision: "review-required" })).review).toBe("pending");
+    expect(from(snapshot({ reviewDecision: "approved" })).review).toBe("approved");
+    expect(from(snapshot({ mergeability: "conflicting" })).mergeConflicts).toBe(true);
+  });
+
+  it("lets facts override review and checks and add conflicts and comments", () => {
+    const snap = snapshot({ reviewDecision: "approved", checksState: "passing" });
     expect(
-      workTaskPullRequestFromSnapshot(snapshot({ reviewDecision: "review-required" })).review,
-    ).toBe("pending");
-    expect(workTaskPullRequestFromSnapshot(snapshot({ reviewDecision: "approved" })).review).toBe(
-      "approved",
-    );
+      from(
+        snap,
+        facts({
+          review: "changes-requested",
+          checks: "failing",
+          mergeConflicts: true,
+          unresolvedComments: 3,
+        }),
+      ),
+    ).toEqual({
+      state: "open",
+      checks: "failing",
+      review: "changes-requested",
+      mergeConflicts: true,
+      unresolvedComments: 3,
+    });
+    // A conflicting snapshot stays conflicting even when facts say otherwise.
+    expect(from(snapshot({ mergeability: "conflicting" }), facts()).mergeConflicts).toBe(true);
   });
 });
 
@@ -284,7 +413,7 @@ describe("workTaskStatusInputs", () => {
       review: "approved",
     } as WorkTaskLegacyPullRequest;
     const withLegacy = task({ legacyPullRequest: legacy });
-    expect(derive([shell("a", ran)], withLegacy)).toBe("merge-ready");
+    expect(derive([shell("a", ran)], withLegacy)).toBe("approved");
 
     const other = snapshot({ headBranch: "elsewhere", reviewDecision: "changes-requested" });
     const ours = snapshot({ checksState: "pending" });
@@ -292,9 +421,42 @@ describe("workTaskStatusInputs", () => {
       ...ran,
       pullRequests: [prLink(other, NOW, 1), prLink(ours, NOW, 2), prLink(null, NOW, 3)],
     });
-    expect(derive([a], withLegacy)).toBe("ci-running");
+    expect(derive([a], withLegacy)).toBe("waiting-for-review");
     expect(
       workTaskStatusInputs({ taskId, task: withLegacy, links, shells: [a] }).pullRequest,
-    ).toEqual({ state: "open", checks: "pending", review: "none" });
+    ).toEqual({
+      state: "open",
+      checks: "pending",
+      review: "none",
+      mergeConflicts: false,
+      unresolvedComments: 0,
+    });
+  });
+
+  it("passes facts through to the linked snapshot, but not to the legacy row", () => {
+    const a = shell("a", { ...ran, pullRequests: [prLink(snapshot())] });
+    const withFacts = facts({ review: "approved", checks: "failing" });
+    expect(
+      deriveWorkTaskStatus({
+        task: task(),
+        ...workTaskStatusInputs({ taskId, task: task(), links, shells: [a], facts: withFacts }),
+      }),
+    ).toBe("approved-checks-failing");
+    const legacy = { state: "open", checks: "none", review: "none" } as WorkTaskLegacyPullRequest;
+    expect(
+      workTaskStatusInputs({
+        taskId,
+        task: task({ legacyPullRequest: legacy }),
+        links,
+        shells: [shell("a", ran)],
+        facts: facts({ unresolvedComments: 2 }),
+      }).pullRequest,
+    ).toEqual({
+      state: "open",
+      checks: "none",
+      review: "none",
+      mergeConflicts: false,
+      unresolvedComments: 0,
+    });
   });
 });

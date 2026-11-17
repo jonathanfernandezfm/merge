@@ -29,13 +29,22 @@ export const WORK_TASK_STATUS_PRESENTATION: Readonly<
   working: { label: "Working", glyph: glyph("dashed", 0.25), tone: "info" },
   monitoring: { label: "Monitoring", glyph: glyph("solid", 0.25), tone: "info" },
   "waiting-for-user": { label: "Needs you", glyph: glyph("filled", 0, "alert"), tone: "warning" },
-  idle: { label: "Idle", glyph: glyph("solid", 0.5), tone: "neutral" },
-  "ci-running": { label: "Checks running", glyph: glyph("dashed", 0.5), tone: "info" },
-  "ci-failing": { label: "Checks failing", glyph: glyph("filled", 0, "x"), tone: "danger" },
+  idle: { label: "Agent finished", glyph: glyph("solid", 0.5), tone: "neutral" },
+  "merge-conflicts": { label: "Merge conflicts", glyph: glyph("filled", 0, "x"), tone: "danger" },
   "changes-requested": {
     label: "Changes requested",
     glyph: glyph("solid", 0, "alert"),
     tone: "warning",
+  },
+  "unresolved-comments": {
+    label: "Unresolved comments",
+    glyph: glyph("solid", 0.5, "alert"),
+    tone: "warning",
+  },
+  "approved-checks-failing": {
+    label: "Approved, checks failing",
+    glyph: glyph("solid", 1, "x"),
+    tone: "danger",
   },
   "addressing-comments": {
     label: "Addressing comments",
@@ -44,7 +53,6 @@ export const WORK_TASK_STATUS_PRESENTATION: Readonly<
   },
   "waiting-for-review": { label: "In review", glyph: glyph("solid", 0.75), tone: "neutral" },
   approved: { label: "Approved", glyph: glyph("solid", 1), tone: "success" },
-  "merge-ready": { label: "Ready to merge", glyph: glyph("solid", 0, "check"), tone: "success" },
   merged: { label: "Merged", glyph: glyph("filled", 0, "check"), tone: "success" },
   archived: { label: "Archived", glyph: glyph("solid", 0, "minus"), tone: "neutral" },
 };

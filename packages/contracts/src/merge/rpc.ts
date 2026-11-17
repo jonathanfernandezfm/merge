@@ -54,6 +54,7 @@ export * from "./gitGraph.ts";
 export * from "./workItems.ts";
 export * from "./pullRequests.ts";
 export * from "./workTasks.ts";
+export * from "./workTaskInsights.ts";
 export * from "./workTaskStatus.ts";
 
 export const MERGE_WS_METHODS = {

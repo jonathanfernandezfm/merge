@@ -1,5 +1,6 @@
 import type { OrchestrationV2ThreadShell } from "../orchestrationV2.ts";
 import type { ThreadPullRequestSnapshot } from "../threadPullRequest.ts";
+import type { WorkTaskPullRequestFacts } from "./workTaskInsights.ts";
 import type {
   WorkTask,
   WorkTaskChecksState,
@@ -17,17 +18,57 @@ export const WORK_TASK_STATUSES = [
   "monitoring",
   "waiting-for-user",
   "idle",
-  "ci-running",
-  "ci-failing",
+  "merge-conflicts",
   "changes-requested",
+  "unresolved-comments",
+  "approved-checks-failing",
   "addressing-comments",
   "waiting-for-review",
   "approved",
-  "merge-ready",
   "merged",
   "archived",
 ] as const;
 export type WorkTaskStatus = (typeof WORK_TASK_STATUSES)[number];
+
+/** Statuses in `deriveWorkTaskStatus` rule order, which breaks ties between tasks in a section. */
+export const WORK_TASK_STATUS_URGENCY: ReadonlyArray<WorkTaskStatus> = [
+  "archived",
+  "setting-up",
+  "setup-failed",
+  "waiting-for-user",
+  "addressing-comments",
+  "merged",
+  "merge-conflicts",
+  "changes-requested",
+  "unresolved-comments",
+  "approved-checks-failing",
+  "working",
+  "monitoring",
+  "approved",
+  "waiting-for-review",
+  "idle",
+];
+
+/** Who has the ball: the user (`attention`, no header), an agent, reviewers, or nobody. */
+export type WorkTaskSection = "attention" | "working" | "review" | "done";
+
+export function workTaskSection(status: WorkTaskStatus, unseen: boolean): WorkTaskSection {
+  switch (status) {
+    case "setting-up":
+    case "working":
+    case "addressing-comments":
+    case "monitoring":
+      return "working";
+    case "waiting-for-review":
+    case "approved":
+      return unseen ? "attention" : "review";
+    case "merged":
+    case "archived":
+      return unseen ? "attention" : "done";
+    default:
+      return "attention";
+  }
+}
 
 /**
  * What a Work Task thread is doing: `waiting` while it blocks on the user, `running` while a run
@@ -46,6 +87,8 @@ export interface WorkTaskPullRequestView {
   readonly state: WorkTaskPullRequestState;
   readonly checks: WorkTaskChecksState;
   readonly review: WorkTaskReviewState;
+  readonly mergeConflicts: boolean;
+  readonly unresolvedComments: number;
 }
 
 export type WorkTaskStatusTask = Pick<
@@ -90,14 +133,20 @@ export function workTaskThreadState(shell: WorkTaskStatusShell): WorkTaskThreadS
   return shell.latestRunId === null ? "new" : "idle";
 }
 
+/** `facts` (the fork's per-PR cache) override the snapshot's review and checks. */
 export function workTaskPullRequestFromSnapshot(
   snapshot: ThreadPullRequestSnapshot,
+  facts: WorkTaskPullRequestFacts | null,
 ): WorkTaskPullRequestView {
   const review = snapshot.reviewDecision ?? null;
   return {
     state: snapshot.state === "open" && snapshot.isDraft ? "draft" : snapshot.state,
-    checks: snapshot.checksState ?? "none",
-    review: review === null ? "none" : review === "review-required" ? "pending" : review,
+    checks: facts?.checks ?? snapshot.checksState ?? "none",
+    review:
+      facts?.review ??
+      (review === null ? "none" : review === "review-required" ? "pending" : review),
+    mergeConflicts: snapshot.mergeability === "conflicting" || (facts?.mergeConflicts ?? false),
+    unresolvedComments: facts?.unresolvedComments ?? 0,
   };
 }
 
@@ -110,6 +159,7 @@ export function workTaskStatusInputs(input: {
   readonly task: WorkTaskStatusTask;
   readonly links: ReadonlyArray<WorkTaskLink>;
   readonly shells: ReadonlyArray<WorkTaskStatusShell>;
+  readonly facts?: WorkTaskPullRequestFacts | null;
 }): {
   readonly threads: ReadonlyArray<WorkTaskStatusThread>;
   readonly pullRequest: WorkTaskPullRequestView | null;
@@ -135,18 +185,34 @@ export function workTaskStatusInputs(input: {
     .flatMap((shell) => shell.pullRequests ?? [])
     .filter((link) => link.snapshot?.headBranch === input.task.workspace.branch)
     .sort((a, b) => b.linkedAt.localeCompare(a.linkedAt))[0]?.snapshot;
+  const legacy = input.task.legacyPullRequest;
   return {
     threads,
     pullRequest: snapshot
-      ? workTaskPullRequestFromSnapshot(snapshot)
-      : (input.task.legacyPullRequest ?? null),
+      ? workTaskPullRequestFromSnapshot(snapshot, input.facts ?? null)
+      : legacy
+        ? legacyPullRequestView(legacy)
+        : null,
+  };
+}
+
+/** The legacy row knows nothing of conflicts or comments. */
+function legacyPullRequestView(
+  legacy: NonNullable<WorkTaskStatusTask["legacyPullRequest"]>,
+): WorkTaskPullRequestView {
+  return {
+    state: legacy.state,
+    checks: legacy.checks,
+    review: legacy.review,
+    mergeConflicts: false,
+    unresolvedComments: 0,
   };
 }
 
 /**
- * The single place a Work Task's status is decided. The first matching rule wins: archived,
- * merged, setup, waiting on the user, automated review work, failing checks, requested changes,
- * running agents, watch loops, approval, pending checks, an open pull request, then idle.
+ * The single place a Work Task's status is decided: who has the ball. The first matching rule
+ * wins, in `WORK_TASK_STATUS_URGENCY` order. Failing checks count only on an approved PR, so
+ * expired checks make no noise.
  */
 export function deriveWorkTaskStatus(input: {
   readonly task: WorkTaskStatusTask;
@@ -154,9 +220,10 @@ export function deriveWorkTaskStatus(input: {
   readonly pullRequest: WorkTaskPullRequestView | null;
 }): WorkTaskStatus {
   const { task, threads, pullRequest } = input;
+  const running = threads.some((thread) => thread.state === "running");
+  const monitoring = threads.some((thread) => thread.state === "monitoring");
 
   if (task.archivedAt !== null) return "archived";
-  if (task.mergedAt !== null || pullRequest?.state === "merged") return "merged";
 
   const setup = task.workspace.setup.status;
   if (setup === "pending" || setup === "running") return "setting-up";
@@ -168,24 +235,24 @@ export function deriveWorkTaskStatus(input: {
   if (threads.some((thread) => thread.state === "running" && thread.origin === "review-feedback")) {
     return "addressing-comments";
   }
+  if (task.mergedAt !== null || pullRequest?.state === "merged") {
+    return running || monitoring ? "monitoring" : "merged";
+  }
 
   // A closed pull request no longer gates anything; the task is back to no PR.
   const open =
     pullRequest !== null && (pullRequest.state === "open" || pullRequest.state === "draft")
       ? pullRequest
       : null;
-  if (open?.checks === "failing") return "ci-failing";
-  if (open?.review === "changes-requested") return "changes-requested";
-  if (threads.some((thread) => thread.state === "running")) return "working";
-  if (threads.some((thread) => thread.state === "monitoring")) return "monitoring";
-
   if (open !== null) {
-    if (open.review === "approved") {
-      // A repository without checks has nothing left to wait for.
-      return open.checks === "pending" ? "approved" : "merge-ready";
-    }
-    if (open.checks === "pending") return "ci-running";
-    return "waiting-for-review";
+    if (open.mergeConflicts) return "merge-conflicts";
+    if (open.review === "changes-requested") return "changes-requested";
+    if (open.unresolvedComments > 0) return "unresolved-comments";
+    if (open.review === "approved" && open.checks === "failing") return "approved-checks-failing";
   }
+  if (running) return "working";
+  if (monitoring) return "monitoring";
+
+  if (open?.state === "open") return open.review === "approved" ? "approved" : "waiting-for-review";
   return "idle";
 }
