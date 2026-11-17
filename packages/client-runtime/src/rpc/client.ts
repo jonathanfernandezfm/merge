@@ -76,6 +76,7 @@ export type EnvironmentSubscriptionRpcTag =
   | typeof WS_METHODS.terminalAttach
   | typeof WS_METHODS.terminalObserve
   | typeof MERGE_WS_METHODS.workTasksSubscribe // merge-seam: client-subscribe
+  | typeof MERGE_WS_METHODS.workTasksInsights // merge-seam: client-subscribe
   | typeof MERGE_WS_METHODS.foldersSubscribe; // merge-seam: client-subscribe
 
 export type EnvironmentStreamCommandRpcTag =

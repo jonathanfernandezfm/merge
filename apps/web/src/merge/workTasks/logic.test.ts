@@ -128,6 +128,51 @@ describe("buildWorkTaskViews", () => {
     expect(view(result, "t").pullRequest).toMatchObject({ number: 8, state: "draft" });
     expect(view(result, "t").status).toBe("idle");
   });
+
+  it("applies insight facts to the matching PR only", () => {
+    const pr = (number: number) =>
+      ({
+        host: "github.com",
+        repository: "acme/app",
+        number,
+        url: `https://github.com/acme/app/pull/${number}`,
+        source: "agent",
+        linkedAt: "2026-10-01T10:00:00.000Z",
+        stack: null,
+        snapshot: {
+          state: "open",
+          title: "t",
+          headBranch: "feature/x",
+          baseBranch: "main",
+          isDraft: false,
+          updatedAt: null,
+          syncedAt: "2026-10-01T10:00:00.000Z",
+          checksState: "pending",
+          reviewDecision: "approved",
+        },
+      }) as ThreadPullRequestLink;
+    const facts = (number: number) => ({
+      taskId: WorkTaskId.make("t"),
+      workItem: null,
+      pullRequest: {
+        number: number as never,
+        review: "approved" as const,
+        checks: "none" as const,
+        mergeConflicts: true,
+        unresolvedComments: 0,
+        syncedAt: "2026-10-01T10:00:00.000Z" as never,
+      },
+    });
+    const build = (number: number) =>
+      buildWorkTaskViews({
+        tasks: [workTask({ id: "t", branch: "feature/x" })],
+        linksByEnvironment: new Map([[ENV, [link("a", "t")]]]),
+        shells: [shell({ id: "a", ran: true, pullRequests: [pr(7)] })],
+        insights: new Map([[workTaskKey(ENV, WorkTaskId.make("t")), facts(number)]]),
+      });
+    expect(view(build(7), "t").status).toBe("merge-conflicts");
+    expect(view(build(8), "t").status).toBe("approved");
+  });
 });
 
 describe("workTaskTabState", () => {

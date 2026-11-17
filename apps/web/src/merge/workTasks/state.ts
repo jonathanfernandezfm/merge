@@ -12,6 +12,8 @@ import {
   type EnvironmentId,
   type ScopedThreadRef,
   type WorkTaskId,
+  type WorkTaskInsight,
+  type WorkTaskInsightsSnapshot,
   type WorkTaskLink,
   type WorkTasksSnapshot,
 } from "@t3tools/contracts";
@@ -21,6 +23,8 @@ import { AsyncResult, Atom } from "effect/reactivity";
 import { environmentCatalog } from "~/connection/catalog";
 import { connectionAtomRuntime } from "~/connection/runtime";
 import { appAtomRegistry } from "~/rpc/atomRegistry";
+import { hasUnseenCompletion } from "~/components/Sidebar.logic";
+import { useProjects } from "~/state/entities";
 import { environmentThreadShells } from "~/state/threads";
 import {
   buildWorkTaskViews,
@@ -34,10 +38,16 @@ import {
   type EnvironmentWorkTask,
   type WorkTaskView,
 } from "./logic";
+import { groupWorkTaskItems, type WorkTaskItem } from "./grouping";
 
 const live = createEnvironmentRpcSubscriptionAtomFamily(connectionAtomRuntime, {
   label: "environment-data:merge:work-tasks",
   tag: MERGE_WS_METHODS.workTasksSubscribe,
+});
+
+const liveInsights = createEnvironmentRpcSubscriptionAtomFamily(connectionAtomRuntime, {
+  label: "environment-data:merge:work-tasks-insights",
+  tag: MERGE_WS_METHODS.workTasksInsights,
 });
 
 const taskCommand = <
@@ -151,6 +161,32 @@ export function useThreadsOutsideWorkTasks<
   return threadsOutsideWorkTasks(threads, useAtomValue(workTaskThreadKeysAtom));
 }
 
+const insightsAtom = Atom.family((environmentId: EnvironmentId) =>
+  Atom.make((get): WorkTaskInsightsSnapshot | null =>
+    Option.getOrNull(AsyncResult.value(get(liveInsights({ environmentId, input: {} })))),
+  ).pipe(Atom.withLabel(`merge-work-task-insights-snapshot:${environmentId}`)),
+);
+
+let previousInsights: ReadonlyMap<string, WorkTaskInsight> = new Map();
+/**
+ * Insights keyed like `WorkTaskView.key`. A failed or unavailable stream reads empty, so every
+ * task stays its own item.
+ */
+const workTaskInsightsAtom = Atom.make((get) => {
+  const next = new Map<string, WorkTaskInsight>();
+  for (const environmentId of enabledEnvironmentIds(get(environmentCatalog.catalogValueAtom))) {
+    for (const insight of get(insightsAtom(environmentId))?.insights ?? []) {
+      next.set(workTaskKey(environmentId, insight.taskId), insight);
+    }
+  }
+  const unchanged =
+    previousInsights.size === next.size &&
+    [...next].every(([key, value]) => previousInsights.get(key) === value);
+  if (unchanged) return previousInsights;
+  previousInsights = next;
+  return next;
+}).pipe(Atom.withLabel("merge-work-task-insights"));
+
 let previousViews: ReadonlyMap<string, WorkTaskView> = new Map();
 /**
  * Every task joined with its threads. Reads the quiet shells, so streaming ticks do not rebuild
@@ -161,6 +197,7 @@ const workTaskViewsAtom = Atom.make((get) => {
     tasks: get(workTasksAtom),
     linksByEnvironment: get(linksByEnvironmentAtom),
     shells: get(environmentThreadShells.quietThreadShellsAtom),
+    insights: get(workTaskInsightsAtom),
   });
   const next = new Map<string, WorkTaskView>();
   for (const [key, view] of built) {
@@ -199,6 +236,32 @@ const linkedWorkTasksAtom = Atom.make((get) => {
 
 export function useWorkTaskViews(): ReadonlyMap<string, WorkTaskView> {
   return useAtomValue(workTaskViewsAtom);
+}
+
+/**
+ * Work Tasks grouped by ADO item (each task alone when insights are unavailable).
+ * @public Rendered by the sidebar in the next change.
+ */
+export function useWorkTaskItems(): ReadonlyArray<WorkTaskItem> {
+  const views = useWorkTaskViews();
+  const insights = useAtomValue(workTaskInsightsAtom);
+  const projects = useProjects();
+  const titles = new Map(
+    projects.map((project) => [`${project.environmentId}:${project.id}`, project.title]),
+  );
+  return groupWorkTaskItems({
+    views: [...views.values()],
+    insights,
+    repoName: ({ task }) => titles.get(`${task.environmentId}:${task.projectId}`) ?? task.projectId,
+    // Live work and waiting outrank a new response, which only replaces calmer statuses.
+    unseen: ({ status, tabs }) =>
+      status !== "working" &&
+      status !== "monitoring" &&
+      status !== "waiting-for-user" &&
+      tabs.some(({ shell }) =>
+        hasUnseenCompletion({ ...shell, lastVisitedAt: shell.lastVisitedAt }),
+      ),
+  });
 }
 
 export function useLinkedWorkTasks(): ReadonlyMap<string, ReadonlyArray<EnvironmentWorkTask>> {
@@ -265,4 +328,5 @@ export function mergeWorkTaskOwnsWorktreePath(
 /** Keeps every environment's Work Tasks stream open; mounted by the always-mounted dialogs host. */
 export function useKeepWorkTasksLive(): void {
   useAtomValue(workTasksAtom);
+  useAtomValue(workTaskInsightsAtom);
 }

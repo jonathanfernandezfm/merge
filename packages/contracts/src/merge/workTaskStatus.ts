@@ -215,15 +215,18 @@ export function workTaskStatusInputs(input: {
     origin,
     state: workTaskThreadState(shell),
   }));
-  const snapshot = newestBranchPullRequest(
+  const link = newestBranchPullRequest(
     members.map((member) => member.shell),
     input.task.workspace.branch,
-  )?.snapshot;
+  );
+  const snapshot = link?.snapshot;
+  // Facts only describe the PR they were computed for.
+  const facts = input.facts?.number === link?.number ? (input.facts ?? null) : null;
   const legacy = input.task.legacyPullRequest;
   return {
     threads,
     pullRequest: snapshot
-      ? workTaskPullRequestFromSnapshot(snapshot, input.facts ?? null)
+      ? workTaskPullRequestFromSnapshot(snapshot, facts)
       : legacy
         ? legacyPullRequestView(legacy)
         : null,

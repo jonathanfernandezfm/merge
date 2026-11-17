@@ -433,6 +433,20 @@ describe("workTaskStatusInputs", () => {
     });
   });
 
+  it("ignores facts computed for a different pull request number", () => {
+    const a = shell("a", { ...ran, pullRequests: [prLink(snapshot(), NOW, 7)] });
+    const stale = facts({ number: 8 as never, review: "approved", checks: "failing" });
+    expect(
+      workTaskStatusInputs({ taskId, task: task(), links, shells: [a], facts: stale }).pullRequest,
+    ).toEqual({
+      state: "open",
+      checks: "none",
+      review: "none",
+      mergeConflicts: false,
+      unresolvedComments: 0,
+    });
+  });
+
   it("passes facts through to the linked snapshot, but not to the legacy row", () => {
     const a = shell("a", { ...ran, pullRequests: [prLink(snapshot())] });
     const withFacts = facts({ review: "approved", checks: "failing" });

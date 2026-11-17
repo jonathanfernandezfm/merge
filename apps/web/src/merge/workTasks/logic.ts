@@ -10,6 +10,8 @@ import {
   type ThreadId,
   type VcsRef,
   type WorkTask,
+  type WorkTaskInsight,
+  type WorkTaskPullRequestFacts,
   type WorkTaskId,
   type WorkTaskLink,
   type WorkTaskPullRequestView,
@@ -69,6 +71,8 @@ export function buildWorkTaskViews(input: {
   readonly tasks: ReadonlyArray<EnvironmentWorkTask>;
   readonly linksByEnvironment: ReadonlyMap<EnvironmentId, ReadonlyArray<WorkTaskLink>>;
   readonly shells: ReadonlyArray<EnvironmentThreadShell>;
+  /** Per-task insights keyed like `WorkTaskView.key`; absent means no facts. */
+  readonly insights?: ReadonlyMap<string, WorkTaskInsight>;
 }): ReadonlyMap<string, WorkTaskView> {
   const linkByThread = new Map<string, WorkTaskLink>();
   for (const [environmentId, links] of input.linksByEnvironment) {
@@ -110,6 +114,7 @@ export function buildWorkTaskViews(input: {
         task,
         links,
         shells: members.map((shell) => shell.source),
+        facts: input.insights?.get(key)?.pullRequest ?? null,
       }),
     });
     const latestThread = latestWorkTaskThread(tabs);
@@ -119,7 +124,11 @@ export function buildWorkTaskViews(input: {
       task,
       tabs,
       status,
-      pullRequest: workTaskPullRequestSummary(task, members),
+      pullRequest: workTaskPullRequestSummary(
+        task,
+        members,
+        input.insights?.get(key)?.pullRequest ?? null,
+      ),
       latestThread,
       activityAt:
         latestActivity !== null && latestActivity > task.updatedAt
@@ -134,6 +143,7 @@ export function buildWorkTaskViews(input: {
 function workTaskPullRequestSummary(
   task: EnvironmentWorkTask,
   members: ReadonlyArray<EnvironmentThreadShell>,
+  facts: WorkTaskPullRequestFacts | null,
 ): WorkTaskPullRequestSummary | null {
   const link = members
     .flatMap((shell) => shell.pullRequests)
@@ -144,7 +154,10 @@ function workTaskPullRequestSummary(
       number: link.number,
       url: link.url,
       title: link.snapshot.title,
-      ...workTaskPullRequestFromSnapshot(link.snapshot, null),
+      ...workTaskPullRequestFromSnapshot(
+        link.snapshot,
+        facts?.number === link.number ? facts : null,
+      ),
     };
   }
   const legacy = task.legacyPullRequest;

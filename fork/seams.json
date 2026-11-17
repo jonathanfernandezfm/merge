@@ -213,7 +213,7 @@
   {
     "id": "client-subscribe",
     "file": "packages/client-runtime/src/rpc/client.ts",
-    "purpose": "merge.workTasks.subscribe and merge.folders.subscribe join the typed subscription tags"
+    "purpose": "merge.workTasks.subscribe, merge.workTasks.insights and merge.folders.subscribe join the typed subscription tags"
   },
   {
     "id": "work-task-dialogs",
