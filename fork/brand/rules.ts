@@ -542,6 +542,17 @@ export const identity: Array<{ file: string; from: string; to: string }> = [
     from: 'NodePath.join(home, ".t3",',
     to: 'NodePath.join(home, ".merge",',
   },
+  {
+    file: "apps/web/src/components/desktop/DesktopWebLinkCoordinator.browser.test.tsx",
+    from: "`t3code://pair?pairingUrl=",
+    to: "`merge://pair?pairingUrl=",
+  },
+  // evals/ is outside the copy rule, but this test reads the server's branded system prompt.
+  {
+    file: "evals/mcp-tool-use/run.test.ts",
+    from: 't3SystemAppend("claude-sonnet-5-5"), "## T3 Code devices"',
+    to: 't3SystemAppend("claude-sonnet-5-5"), "## Merge devices"',
+  },
   // The mock agent's page text, which AcpAdapterV2.test.ts expects after copy.
   { file: "apps/server/scripts/acp-mock-agent.ts", from: '"T3 Code page"', to: '"Merge page"' },
 ];
