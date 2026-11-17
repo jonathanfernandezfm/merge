@@ -21,6 +21,7 @@ import {
   updateWorkItem,
 } from "../workItems/workItems.ts";
 import { lookup } from "../workspaceGuard.ts";
+import { WorkTaskInsights } from "../workTasks/WorkTaskInsights.ts";
 import { WorkTaskStore } from "../workTasks/WorkTaskStore.ts";
 import { WorkTaskWorkspace } from "../workTasks/WorkTaskWorkspace.ts";
 
@@ -33,6 +34,9 @@ const workTasksSubscribe = () =>
       );
     }),
   );
+
+const workTasksInsights = () =>
+  Stream.unwrap(Effect.map(lookup(WorkTaskInsights), (insights) => insights.stream));
 
 const foldersSubscribe = () =>
   Stream.unwrap(
@@ -68,6 +72,7 @@ export const mergeRpcHandlers = MergeRpcGroup.of({
   [MERGE_WS_METHODS.workItemsCreateChild]: createChildWorkItem,
   [MERGE_WS_METHODS.pullRequestsRequeueExpiredChecks]: requeueExpiredChecks,
   [MERGE_WS_METHODS.workTasksSubscribe]: workTasksSubscribe,
+  [MERGE_WS_METHODS.workTasksInsights]: workTasksInsights,
   [MERGE_WS_METHODS.workTasksArchiveCheck]: workTasks((actions, input: { taskId: WorkTaskId }) =>
     actions.archiveCheck(input.taskId),
   ),
@@ -114,6 +119,7 @@ export const MERGE_RPC_REQUIRED_SCOPES = {
   [MERGE_WS_METHODS.pullRequestsRequeueExpiredChecks]: AuthSourceControlWriteScope,
   // Same scope as upstream's orchestration shell subscriptions.
   [MERGE_WS_METHODS.workTasksSubscribe]: AuthOrchestrationReadScope,
+  [MERGE_WS_METHODS.workTasksInsights]: AuthOrchestrationReadScope,
   // v0.0.10 gave task.archiveCheck the operate scope, next to the archive it guards.
   [MERGE_WS_METHODS.workTasksArchiveCheck]: AuthOrchestrationOperateScope,
   // v0.0.10 gave every task mutation the operate scope, as upstream does for thread launch and archive.
@@ -144,6 +150,7 @@ export const MERGE_RPC_AGGREGATES = {
   [MERGE_WS_METHODS.workItemsCreateChild]: "merge",
   [MERGE_WS_METHODS.pullRequestsRequeueExpiredChecks]: "merge",
   [MERGE_WS_METHODS.workTasksSubscribe]: "merge",
+  [MERGE_WS_METHODS.workTasksInsights]: "merge",
   [MERGE_WS_METHODS.workTasksArchiveCheck]: "merge",
   [MERGE_WS_METHODS.workTasksCreate]: "merge",
   [MERGE_WS_METHODS.workTasksRetrySetup]: "merge",

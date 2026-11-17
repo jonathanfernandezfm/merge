@@ -645,7 +645,7 @@ const layerServerRestart = Layer.effect(
 );
 
 const layerRuntimeCoreDependenciesBase = Layer.mergeAll(
-  MergeServerLayer, // merge-seam: server-layer
+  MergeServerLayer.pipe(Layer.provide(layerPullRequestService)), // merge-seam: server-layer
   AgentAwarenessRelay.layer,
   HeldHooksWaker.layer,
   layerThreadSettlementWorker,

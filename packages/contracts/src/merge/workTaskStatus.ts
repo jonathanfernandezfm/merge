@@ -1,5 +1,5 @@
 import type { OrchestrationV2ThreadShell } from "../orchestrationV2.ts";
-import type { ThreadPullRequestSnapshot } from "../threadPullRequest.ts";
+import type { ThreadPullRequestLink, ThreadPullRequestSnapshot } from "../threadPullRequest.ts";
 import type { WorkTaskPullRequestFacts } from "./workTaskInsights.ts";
 import type {
   WorkTask,
@@ -150,6 +150,52 @@ export function workTaskPullRequestFromSnapshot(
   };
 }
 
+interface WorkTaskMembersInput {
+  readonly taskId: WorkTaskId;
+  readonly task: { readonly workspace: { readonly branch: string } };
+  readonly links: ReadonlyArray<WorkTaskLink>;
+  readonly shells: ReadonlyArray<WorkTaskStatusShell>;
+}
+
+/** Linked threads plus their subagent descendants, each with its root's origin. */
+function workTaskMembers(input: WorkTaskMembersInput) {
+  const origins = new Map(
+    input.links
+      .filter((link) => link.taskId === input.taskId)
+      .map((link) => [link.threadId as string, link.origin] as const),
+  );
+  // Forks share rootThreadId and copy pullRequests too, so only subagent descendants join.
+  const rootOf = (shell: WorkTaskStatusShell) =>
+    origins.has(shell.id)
+      ? shell.id
+      : shell.lineage.relationshipToParent === "subagent" && origins.has(shell.lineage.rootThreadId)
+        ? shell.lineage.rootThreadId
+        : null;
+  return input.shells.flatMap((shell) => {
+    const root = rootOf(shell);
+    return root === null ? [] : [{ shell, origin: origins.get(root) ?? null }];
+  });
+}
+
+const newestBranchPullRequest = (
+  shells: ReadonlyArray<WorkTaskStatusShell>,
+  branch: string,
+): ThreadPullRequestLink | undefined =>
+  shells
+    .flatMap((shell) => shell.pullRequests ?? [])
+    .filter((link) => link.snapshot?.headBranch === branch)
+    .sort((a, b) => b.linkedAt.localeCompare(a.linkedAt))[0];
+
+/** The task's pull request link: the most recently linked snapshot on the task branch. */
+export function workTaskPullRequestLink(
+  input: WorkTaskMembersInput,
+): ThreadPullRequestLink | undefined {
+  return newestBranchPullRequest(
+    workTaskMembers(input).map((member) => member.shell),
+    input.task.workspace.branch,
+  );
+}
+
 /**
  * The task's threads (linked ones plus their subagent descendants, which carry the root's origin)
  * and its pull request: the most recently linked snapshot on the task branch, else the legacy row.
@@ -164,27 +210,15 @@ export function workTaskStatusInputs(input: {
   readonly threads: ReadonlyArray<WorkTaskStatusThread>;
   readonly pullRequest: WorkTaskPullRequestView | null;
 } {
-  const origins = new Map(
-    input.links
-      .filter((link) => link.taskId === input.taskId)
-      .map((link) => [link.threadId as string, link.origin] as const),
-  );
-  // Forks share rootThreadId and copy pullRequests too, so only subagent descendants join.
-  const rootOf = (shell: WorkTaskStatusShell) =>
-    origins.has(shell.id)
-      ? shell.id
-      : shell.lineage.relationshipToParent === "subagent" && origins.has(shell.lineage.rootThreadId)
-        ? shell.lineage.rootThreadId
-        : null;
-  const members = input.shells.filter((shell) => rootOf(shell) !== null);
-  const threads = members.map((shell) => ({
-    origin: origins.get(rootOf(shell) ?? "") ?? null,
+  const members = workTaskMembers(input);
+  const threads = members.map(({ shell, origin }) => ({
+    origin,
     state: workTaskThreadState(shell),
   }));
-  const snapshot = members
-    .flatMap((shell) => shell.pullRequests ?? [])
-    .filter((link) => link.snapshot?.headBranch === input.task.workspace.branch)
-    .sort((a, b) => b.linkedAt.localeCompare(a.linkedAt))[0]?.snapshot;
+  const snapshot = newestBranchPullRequest(
+    members.map((member) => member.shell),
+    input.task.workspace.branch,
+  )?.snapshot;
   const legacy = input.task.legacyPullRequest;
   return {
     threads,

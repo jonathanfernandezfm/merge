@@ -48,6 +48,7 @@ import {
   WorkTasksError,
   WorkTasksSnapshot,
 } from "./workTasks.ts";
+import { WorkTaskInsightsSnapshot } from "./workTaskInsights.ts";
 
 export * from "./folders.ts";
 export * from "./gitGraph.ts";
@@ -67,6 +68,7 @@ export const MERGE_WS_METHODS = {
   workItemsCreateChild: "merge.workItems.createChild",
   pullRequestsRequeueExpiredChecks: "merge.pullRequests.requeueExpiredChecks",
   workTasksSubscribe: "merge.workTasks.subscribe",
+  workTasksInsights: "merge.workTasks.insights",
   workTasksArchiveCheck: "merge.workTasks.archiveCheck",
   workTasksCreate: "merge.workTasks.create",
   workTasksRetrySetup: "merge.workTasks.retrySetup",
@@ -135,6 +137,14 @@ const MergePullRequestsRequeueExpiredChecksRpc = Rpc.make(
 const MergeWorkTasksSubscribeRpc = Rpc.make(MERGE_WS_METHODS.workTasksSubscribe, {
   payload: Schema.Struct({}),
   success: WorkTasksSnapshot,
+  error: WorkTasksError,
+  stream: true,
+});
+
+/** Work item and PR review facts per active Work Task, latest first, then on each refresh. */
+const MergeWorkTasksInsightsRpc = Rpc.make(MERGE_WS_METHODS.workTasksInsights, {
+  payload: Schema.Struct({}),
+  success: WorkTaskInsightsSnapshot,
   error: WorkTasksError,
   stream: true,
 });
@@ -224,6 +234,7 @@ export const MergeRpcGroup = RpcGroup.make(
   MergeWorkItemsCreateChildRpc,
   MergePullRequestsRequeueExpiredChecksRpc,
   MergeWorkTasksSubscribeRpc,
+  MergeWorkTasksInsightsRpc,
   MergeWorkTasksArchiveCheckRpc,
   MergeWorkTasksCreateRpc,
   MergeWorkTasksRetrySetupRpc,
