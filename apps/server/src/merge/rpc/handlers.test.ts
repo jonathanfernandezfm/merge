@@ -32,12 +32,15 @@ import { runMigrations } from "../../persistence/Migrations.ts";
 import * as SqlitePersistence from "../../persistence/Sqlite.ts";
 import * as ServerSettings from "../../serverSettings.ts";
 import * as GitVcsDriver from "../../vcs/GitVcsDriver.ts";
+import { TextGeneration } from "../../textGeneration/TextGeneration.ts";
 import * as VcsDriverRegistry from "../../vcs/VcsDriverRegistry.ts";
 import * as VcsProcess from "../../vcs/VcsProcess.ts";
 import * as VcsProjectConfig from "../../vcs/VcsProjectConfig.ts";
 import * as KnownWorkspaces from "../../workspace/KnownWorkspaces.ts";
 import { WS_RPC_SERVER_OPTIONS } from "../../ws.ts";
 import * as FolderStore from "../folders/FolderStore.ts";
+import { WorkTaskInsights } from "../workTasks/WorkTaskInsights.ts";
+import * as WorkTaskNaming from "../workTasks/WorkTaskNaming.ts";
 import * as WorkTaskStore from "../workTasks/WorkTaskStore.ts";
 import * as WorkTaskWorkspace from "../workTasks/WorkTaskWorkspace.ts";
 import { mergeRpcHandlers } from "./handlers.ts";
@@ -371,6 +374,75 @@ it.effect(
       }
       assert.strictEqual(calls.length, 1);
     }),
+);
+
+it.effect("merge.workTasks.rename sets the user's title through the real WorkTaskNaming", () =>
+  Effect.gen(function* () {
+    const store = yield* WorkTaskStore.WorkTaskStore;
+    const taskId = WorkTaskId.make("task-rename");
+    const NOW = "2026-10-01T12:00:00.000Z";
+    yield* store.insert({
+      id: taskId,
+      projectId: ProjectId.make("project-1"),
+      title: "Old",
+      titleSource: "branch",
+      description: null,
+      workspace: {
+        path: null,
+        branch: "b",
+        remoteName: "origin",
+        remoteBranch: "b",
+        baseBranch: null,
+        setup: { status: "ready", steps: [], error: null, updatedAt: NOW },
+      },
+      legacyPullRequest: null,
+      autoHandleReviewFeedback: false,
+      waitingForUserReason: null,
+      createdAt: NOW,
+      updatedAt: NOW,
+      mergedAt: null,
+      archivedAt: null,
+      deletedAt: null,
+    });
+    const responses = yield* Queue.unbounded<Exit.Exit<unknown, unknown>>();
+    const server = yield* RpcServer.makeNoSerialization(
+      MergeRpcGroup.middleware(RpcScopeAuthorization),
+      {
+        ...WS_RPC_SERVER_OPTIONS,
+        onFromServer: (response) =>
+          response._tag === "Exit" ? Queue.offer(responses, response.exit) : Effect.void,
+      },
+    ).pipe(
+      Effect.provide(
+        Layer.mergeAll(
+          MergeRpcGroup.toLayer(mergeRpcHandlers),
+          RpcAuthorization.layer([AuthOrchestrationOperateScope]),
+        ),
+      ),
+    );
+    yield* server.write(0, {
+      _tag: "Request",
+      id: RpcMessage.RequestId("rename"),
+      tag: MERGE_WS_METHODS.workTasksRename,
+      payload: { taskId, title: "Mine" },
+      headers: Headers.empty,
+    });
+    const exit = yield* Queue.take(responses);
+    assert.isTrue(Exit.isSuccess(exit));
+    const stored = yield* store.get(taskId);
+    assert.strictEqual(stored?.title, "Mine");
+    assert.strictEqual(stored?.titleSource, "user");
+  }).pipe(
+    Effect.scoped,
+    Effect.provide(
+      WorkTaskNaming.layer.pipe(
+        Layer.provide(Layer.succeed(WorkTaskInsights, {} as never)),
+        Layer.provide(ServerSettings.ServerSettingsService.layerTest({})),
+        Layer.provide(Layer.succeed(TextGeneration, {} as never)),
+        Layer.provideMerge(workTasksLayer),
+      ),
+    ),
+  ),
 );
 
 const foldersLayer = FolderStore.layer.pipe(

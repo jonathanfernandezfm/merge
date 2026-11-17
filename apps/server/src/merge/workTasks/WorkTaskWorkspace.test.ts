@@ -23,6 +23,7 @@ import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as TestClock from "effect/testing/TestClock";
 
 import * as ServerConfig from "../../config.ts";
 import * as GitWorkflow from "../../git/GitWorkflowService.ts";
@@ -125,6 +126,8 @@ const shells = new Map<string, OrchestrationV2ThreadShell>();
 const launches: Array<ThreadLaunch.ThreadLaunchInput> = [];
 const receipts = new Map<string, ThreadId>();
 const commands: Array<OrchestrationV2ServerCommand> = [];
+/** Each `WorkTaskNaming.name` call with the worktree path the task had at that moment. */
+const named: Array<{ taskId: WorkTaskId; path: string | null }> = [];
 const PROJECT_ID = ProjectId.make("project-1");
 let projectRoot = "/nowhere";
 let worktreesDirectory = "/nowhere";
@@ -154,13 +157,27 @@ const layerGitWorkflow = Layer.effect(
 
 const layer = WorkTaskWorkspace.layer.pipe(
   Layer.provideMerge(WorkTaskStore.layer),
+  Layer.provide(
+    Layer.effect(
+      WorkTaskNaming,
+      Effect.map(WorkTaskStore.WorkTaskStore, (store) =>
+        WorkTaskNaming.of({
+          name: (taskId) =>
+            store.get(taskId).pipe(
+              Effect.map((task) => void named.push({ taskId, path: task?.workspace.path ?? null })),
+              Effect.orDie,
+            ),
+          rename: () => Effect.die("unused"),
+        }),
+      ),
+    ).pipe(Layer.provide(WorkTaskStore.layer)),
+  ),
   Layer.provideMerge(
     Layer.effectDiscard(runMigrations()).pipe(
       Layer.provideMerge(NodeSqliteClient.layer({ filename: ":memory:" })),
     ),
   ),
   Layer.provide(layerGitWorkflow),
-  Layer.provide(Layer.mock(WorkTaskNaming)({ name: () => Effect.void })),
   Layer.provide(
     Layer.mock(ProjectService.ProjectService)({
       getById: (id) => Effect.succeed(id === PROJECT_ID ? Option.some(project()) : Option.none()),
@@ -240,6 +257,7 @@ const reset = () => {
   shells.clear();
   receipts.clear();
   launches.length = 0;
+  named.length = 0;
   commands.length = 0;
 };
 
@@ -384,6 +402,32 @@ it.effect("create on a remote-only branch tracks origin/<b> and creates no new b
 
     // The branch belongs to this task now.
     assert.strictEqual((yield* Effect.flip(workspace.create(createInput()))).reason, "failed");
+    NodeFS.rmSync(repo.root, { recursive: true, force: true });
+  }).pipe(Effect.provide(layer)),
+);
+
+it.effect("create names the task only after setup set its worktree", () =>
+  Effect.gen(function* () {
+    reset();
+    const workspace = yield* WorkTaskWorkspace.WorkTaskWorkspace;
+    const repo = projectRepo();
+    const { taskId } = yield* workspace.create(createInput());
+    yield* TestClock.adjust("50 millis");
+    assert.strictEqual(named.length, 1);
+    assert.strictEqual(named[0]?.taskId, taskId);
+    assert.isNotNull(named[0]?.path);
+    NodeFS.rmSync(repo.root, { recursive: true, force: true });
+  }).pipe(Effect.provide(layer)),
+);
+
+it.effect("create does not name a task whose title the user typed", () =>
+  Effect.gen(function* () {
+    reset();
+    const workspace = yield* WorkTaskWorkspace.WorkTaskWorkspace;
+    const repo = projectRepo();
+    yield* workspace.create(createInput({ titleSource: "user" }));
+    yield* TestClock.adjust("50 millis");
+    assert.strictEqual(named.length, 0);
     NodeFS.rmSync(repo.root, { recursive: true, force: true });
   }).pipe(Effect.provide(layer)),
 );

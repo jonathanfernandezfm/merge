@@ -240,6 +240,21 @@ it.effect("a work item failure gives workItem null and keeps the PR facts", () =
   }).pipe(Effect.provide(service));
 });
 
+it.effect("a task without a worktree yet is not cached as having no work item", () => {
+  const tasks = [task("a", { workspace: { ...task("a").workspace, path: null } })];
+  const { calls, service } = harness({ tasks });
+  return Effect.gen(function* () {
+    const insights = yield* WorkTaskInsights.WorkTaskInsights;
+    assert.equal(yield* insights.workItem(WorkTaskId.make("a")), null);
+    assert.equal(calls.workItems, 0);
+    // Setup set the path.
+    tasks[0] = task("a");
+    const found = yield* insights.workItem(WorkTaskId.make("a"));
+    assert.equal(found?.item.id, 123);
+    assert.equal(calls.workItems, 1);
+  }).pipe(Effect.provide(service));
+});
+
 it.effect("an archived task is not in the snapshot", () => {
   const { service } = harness({
     tasks: [task("a"), task("b", { archivedAt: NOW })],

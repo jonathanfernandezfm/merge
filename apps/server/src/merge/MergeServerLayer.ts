@@ -11,7 +11,7 @@ import * as WorkTaskWorkspace from "./workTasks/WorkTaskWorkspace.ts";
 
 // Workspace -> Naming -> Insights -> Store: Insights sits below Workspace so there is no cycle.
 const layerWorkTaskServices = WorkTaskWorkspace.layer.pipe(
-  Layer.provide(WorkTaskNaming.layer),
+  Layer.provideMerge(WorkTaskNaming.layer),
   Layer.provide(ProjectionStore.layer),
   Layer.provideMerge(WorkTaskInsights.layer),
   Layer.provideMerge(WorkTaskStore.layer),

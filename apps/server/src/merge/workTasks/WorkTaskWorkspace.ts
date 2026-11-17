@@ -773,14 +773,15 @@ export const make = Effect.gen(function* () {
       archivedAt: null,
       deletedAt: null,
     });
-    if ((input.titleSource ?? "branch") !== "user") {
-      // Never delays or fails the create; `name` logs its own failures.
-      yield* Effect.forkDetach(naming.name(taskId));
-    }
     return yield* exclusive(
       taskId,
       Effect.gen(function* () {
         const task = yield* runSetup(taskId, root, rules);
+        if ((input.titleSource ?? "branch") !== "user") {
+          // After setup, which sets the worktree path the work item is read from. Detached:
+          // never delays or fails the create; `name` logs its own failures.
+          yield* Effect.forkDetach(naming.name(taskId));
+        }
         const { threadId } = yield* launchThread(task, project, { origin: "user" }, launcher, true);
         return { taskId, threadId };
       }),

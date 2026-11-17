@@ -136,22 +136,22 @@ export const make = Effect.fn("WorkTaskInsights.make")(function* (
             return null;
           });
 
-  const loadWorkItem = (task: WorkTask) =>
-    cached(
+  const loadWorkItem = (task: WorkTask) => {
+    const path = task.workspace.path;
+    // No worktree yet is not an answer worth caching for 10 minutes.
+    if (path === null) return Effect.succeed(null);
+    return cached(
       workItems,
       task.id,
       WORK_ITEM_TTL_MS,
-      task.workspace.path === null
-        ? Effect.succeed(null)
-        : readWorkItems({ cwd: task.workspace.path }).pipe(
-            Effect.map(({ root, rootDetails, source }) =>
-              root === null || source === null
-                ? null
-                : { item: root, details: rootDetails, source },
-            ),
-            Effect.catchCause(orNull(task.id, "work item")),
-          ),
+      readWorkItems({ cwd: path }).pipe(
+        Effect.map(({ root, rootDetails, source }) =>
+          root === null || source === null ? null : { item: root, details: rootDetails, source },
+        ),
+        Effect.catchCause(orNull(task.id, "work item")),
+      ),
     );
+  };
 
   const loadFacts = (
     task: WorkTask,

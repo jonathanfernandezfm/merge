@@ -60,7 +60,9 @@ export const make = Effect.gen(function* () {
     if (task === null || (!force && task.titleSource === "user")) return;
     const found = yield* insights.workItem(taskId);
     if (found === null) return;
-    const fallback = stripWorkItemPrefixes(found.item.title);
+    // A bare ticket number must never become the title (the ADO number stays out of row views).
+    const stripped = stripWorkItemPrefixes(found.item.title);
+    const fallback = /^#?\d+$/.test(stripped) ? null : stripped;
     const description = htmlToText(found.details?.descriptionHtml ?? "").slice(0, 1000);
     const resolved = resolveProjectSettings(
       yield* settings.getSettings.pipe(
@@ -76,7 +78,10 @@ export const make = Effect.gen(function* () {
       task.projectId,
     ).settings;
     const title = yield* Effect.gen(function* () {
-      if (task.workspace.path === null) return fallback;
+      if (task.workspace.path === null) {
+        yield* Effect.logDebug("Work Task naming skipped: no worktree", { taskId });
+        return fallback;
+      }
       const result = yield* textGeneration.generateThreadTitle({
         cwd: task.workspace.path,
         message: `${found.item.type ?? "Work item"}: ${found.item.title}\n\n${description}`,
@@ -94,6 +99,7 @@ export const make = Effect.gen(function* () {
         }).pipe(Effect.as(fallback)),
       ),
     );
+    if (title === null) return;
     // The write itself skips a title the user typed while the model was running.
     yield* store.update(
       taskId,

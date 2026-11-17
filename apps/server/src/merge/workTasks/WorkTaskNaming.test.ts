@@ -40,9 +40,12 @@ const task = (overrides: Partial<WorkTask> = {}): WorkTask => ({
   ...overrides,
 });
 
+let itemTitle = "#607374 MXC00463 - AgentUI: Copying ticket link";
 const item = {
   id: 607374,
-  title: "#607374 MXC00463 - AgentUI: Copying ticket link",
+  get title() {
+    return itemTitle;
+  },
   type: "Bug",
   state: "Active",
   parentId: null,
@@ -140,6 +143,22 @@ describe("WorkTaskNaming", () => {
       assert.equal(stored?.title, "AgentUI: Copying ticket link");
       assert.equal(stored?.titleSource, "generated");
     }).pipe(Effect.provide(layer));
+  });
+
+  it.effect("a failed generation never stores a bare ticket number", () => {
+    itemTitle = "#123";
+    const { layer } = harness({ generate: () => Effect.fail("boom") });
+    return Effect.gen(function* () {
+      yield* (yield* WorkTaskNaming.WorkTaskNaming).name(ID);
+      const stored = yield* (yield* WorkTaskStore.WorkTaskStore).get(ID);
+      assert.equal(stored?.title, "feature/607374-copy-link");
+      assert.equal(stored?.titleSource, "branch");
+    }).pipe(
+      Effect.provide(layer),
+      Effect.ensuring(
+        Effect.sync(() => void (itemTitle = "#607374 MXC00463 - AgentUI: Copying ticket link")),
+      ),
+    );
   });
 
   it.effect("no work item leaves the title alone", () => {
