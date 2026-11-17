@@ -80,7 +80,7 @@ const archiveDialogAtom = Atom.make<WorkTaskRef | null>(null).pipe(
   Atom.keepAlive,
   Atom.withLabel("merge-work-tasks:archive-dialog"),
 );
-const waitingDialogAtom = Atom.make<WorkTaskRef | null>(null).pipe(
+const waitingDialogAtom = Atom.make<ReadonlyArray<WorkTaskRef> | null>(null).pipe(
   Atom.keepAlive,
   Atom.withLabel("merge-work-tasks:waiting-dialog"),
 );
@@ -93,8 +93,23 @@ export function openArchiveWorkTaskDialog(ref: WorkTaskRef): void {
   appAtomRegistry.set(archiveDialogAtom, ref);
 }
 
-export function openWaitingReasonDialog(ref: WorkTaskRef): void {
-  appAtomRegistry.set(waitingDialogAtom, ref);
+/** More than one ref sets the same reason on each task (a work item's members). */
+export function openWaitingReasonDialog(refs: WorkTaskRef | ReadonlyArray<WorkTaskRef>): void {
+  appAtomRegistry.set(waitingDialogAtom, "taskId" in refs ? [refs] : refs);
+}
+
+interface RenameTarget {
+  readonly refs: ReadonlyArray<WorkTaskRef>;
+  readonly title: string;
+}
+const renameDialogAtom = Atom.make<RenameTarget | null>(null).pipe(
+  Atom.keepAlive,
+  Atom.withLabel("merge-work-tasks:rename-dialog"),
+);
+
+/** Each ref's task gets the typed title: a work item's title comes from its members. */
+export function openRenameWorkTaskDialog(target: RenameTarget): void {
+  appAtomRegistry.set(renameDialogAtom, target);
 }
 
 const isWorkTaskOperationError = Schema.is(WorkTaskOperationError);
@@ -114,6 +129,7 @@ export function WorkTaskDialogsHost() {
   const newTarget = useAtomValue(newDialogAtom);
   const archiveTarget = useAtomValue(archiveDialogAtom);
   const waitingTarget = useAtomValue(waitingDialogAtom);
+  const renameTarget = useAtomValue(renameDialogAtom);
   return (
     <>
       <FolderDialogsHost />
@@ -131,8 +147,14 @@ export function WorkTaskDialogsHost() {
       ) : null}
       {waitingTarget !== null ? (
         <WaitingReasonDialog
-          taskRef={waitingTarget}
+          taskRefs={waitingTarget}
           onClose={() => appAtomRegistry.set(waitingDialogAtom, null)}
+        />
+      ) : null}
+      {renameTarget !== null ? (
+        <RenameWorkTaskDialog
+          target={renameTarget}
+          onClose={() => appAtomRegistry.set(renameDialogAtom, null)}
         />
       ) : null}
     </>
@@ -567,8 +589,14 @@ function ArchiveWorkTaskDialog({
   );
 }
 
-function WaitingReasonDialog({ taskRef, onClose }: { taskRef: WorkTaskRef; onClose: () => void }) {
-  const view = useWorkTaskView(taskRef.environmentId, taskRef.taskId);
+function WaitingReasonDialog({
+  taskRefs,
+  onClose,
+}: {
+  taskRefs: ReadonlyArray<WorkTaskRef>;
+  onClose: () => void;
+}) {
+  const view = useWorkTaskView(taskRefs[0]!.environmentId, taskRefs[0]!.taskId);
   const setWaiting = useAtomCommand(workTasksEnvironment.setWaiting, { reportFailure: false });
   const [reason, setReason] = useState(view?.task.waitingForUserReason ?? "");
   const [pending, setPending] = useState(false);
@@ -579,16 +607,20 @@ function WaitingReasonDialog({ taskRef, onClose }: { taskRef: WorkTaskRef; onClo
     if (pending || trimmed.length === 0) return;
     setPending(true);
     setError(null);
-    const result = await setWaiting({
-      environmentId: taskRef.environmentId,
-      input: { taskId: taskRef.taskId, reason: trimmed },
-    });
+    let failed: AtomCommandResult<unknown, unknown> | null = null;
+    for (const taskRef of taskRefs) {
+      const result = await setWaiting({
+        environmentId: taskRef.environmentId,
+        input: { taskId: taskRef.taskId, reason: trimmed },
+      });
+      if (result._tag !== "Success") failed ??= result;
+    }
     setPending(false);
-    if (result._tag === "Success") {
+    if (failed === null) {
       onClose();
       return;
     }
-    setError(commandErrorMessage(result, "Could not update the Work Task."));
+    setError(commandErrorMessage(failed, "Could not update the Work Task."));
   };
 
   return (
@@ -630,6 +662,78 @@ function WaitingReasonDialog({ taskRef, onClose }: { taskRef: WorkTaskRef; onClo
           >
             {pending ? <Spinner /> : null}
             Mark waiting
+          </Button>
+        </DialogFooter>
+      </DialogPopup>
+    </Dialog>
+  );
+}
+
+function RenameWorkTaskDialog({ target, onClose }: { target: RenameTarget; onClose: () => void }) {
+  const rename = useAtomCommand(workTasksEnvironment.rename, { reportFailure: false });
+  const [title, setTitle] = useState(target.title);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async () => {
+    const trimmed = title.trim();
+    if (pending || trimmed.length === 0) return;
+    setPending(true);
+    setError(null);
+    let failed: AtomCommandResult<unknown, unknown> | null = null;
+    for (const ref of target.refs) {
+      const result = await rename({
+        environmentId: ref.environmentId,
+        input: { taskId: ref.taskId, title: trimmed },
+      });
+      if (result._tag !== "Success") failed ??= result;
+    }
+    setPending(false);
+    if (failed === null) {
+      onClose();
+      return;
+    }
+    setError(commandErrorMessage(failed, "Could not rename the Work Task."));
+  };
+
+  return (
+    <Dialog open onOpenChange={(open) => (!open && !pending ? onClose() : undefined)}>
+      <DialogPopup>
+        <DialogHeader>
+          <DialogTitle>Rename</DialogTitle>
+          <DialogDescription>
+            Your title stays until you rename it again. It is never replaced automatically.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogPanel>
+          <Input
+            autoFocus
+            aria-label="Title"
+            value={title}
+            maxLength={200}
+            onChange={(event) => setTitle(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter") return;
+              event.preventDefault();
+              void submit();
+            }}
+          />
+          {error !== null ? (
+            <p className="mt-2 text-destructive-foreground text-xs">{error}</p>
+          ) : null}
+        </DialogPanel>
+        <DialogFooter>
+          <Button type="button" variant="outline" size="sm" onClick={onClose} disabled={pending}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            disabled={pending || title.trim().length === 0}
+            onClick={() => void submit()}
+          >
+            {pending ? <Spinner /> : null}
+            Rename
           </Button>
         </DialogFooter>
       </DialogPopup>

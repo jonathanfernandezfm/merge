@@ -7,9 +7,20 @@ import { readLocalApi } from "~/localApi";
 import { readProject, waitForThreadShell } from "~/state/entities";
 import { readEnvironmentScope } from "~/state/session";
 import { useAtomCommand } from "~/state/use-atom-command";
-import { workTaskKey, workTaskMenuItems, type WorkTaskMenuId, type WorkTaskView } from "./logic";
+import { writeTextToClipboard } from "~/hooks/useCopyToClipboard";
+import type { WorkTaskItem } from "./grouping";
+import {
+  latestWorkTaskMember,
+  workTaskItemMenuItems,
+  workTaskKey,
+  type WorkTaskView,
+} from "./logic";
 import { readLinkedWorkTasks, readWorkTaskView, workTasksEnvironment } from "./state";
-import { openArchiveWorkTaskDialog, openWaitingReasonDialog } from "./WorkTaskDialogs";
+import {
+  openArchiveWorkTaskDialog,
+  openRenameWorkTaskDialog,
+  openWaitingReasonDialog,
+} from "./WorkTaskDialogs";
 
 /** Opens a task on its latest live thread, or on the Work Task page when every tab is closed. */
 export function useOpenWorkTask() {
@@ -64,33 +75,37 @@ function projectTitle(task: WorkTaskView["task"]): string {
   );
 }
 
-/** The task right-click menu. `onNavigate` runs before the menu opens another thread. */
+/** The work item right-click menu. `onNavigate` runs before the menu opens another thread. */
 export function useWorkTaskContextMenu(onNavigate?: () => void) {
   const { createWorkTaskThread } = useCreateWorkTaskThread();
   const openWorkTask = useOpenWorkTask();
   const setWaiting = useAtomCommand(workTasksEnvironment.setWaiting, "Work Task update");
   const setAutoHandle = useAtomCommand(workTasksEnvironment.setAutoHandle, "Work Task update");
-  return async (view: WorkTaskView, position: { x: number; y: number }) => {
+  const rename = useAtomCommand(workTasksEnvironment.rename, "Work Task rename");
+  const archive = useAtomCommand(workTasksEnvironment.archive, "Work Task archive");
+  return async (item: WorkTaskItem, position: { x: number; y: number }) => {
     const api = readLocalApi();
     if (!api) return;
-    const { task } = view;
-    const linked = readLinkedWorkTasks(view.key);
+    const tasks = item.members.map((member) => member.view.task);
+    const latest = latestWorkTaskMember(item).view;
+    const linked = readLinkedWorkTasks(latest.key);
     const clicked = await settlePromise(() =>
-      api.contextMenu.show<WorkTaskMenuId>(
-        [
-          ...workTaskMenuItems({
-            task,
-            linkedProjectTitles: linked.map(projectTitle),
-            canOperate: readEnvironmentScope(task.environmentId, AuthOrchestrationOperateScope),
-          }),
-        ],
+      api.contextMenu.show<string>(
+        workTaskItemMenuItems(item, {
+          linkedProjectTitles: linked.map(projectTitle),
+          canOperate: tasks.every((task) =>
+            readEnvironmentScope(task.environmentId, AuthOrchestrationOperateScope),
+          ),
+        }),
         position,
       ),
     );
     if (clicked._tag === "Failure" || clicked.value == null) return;
-    const taskRef = { environmentId: task.environmentId, taskId: task.id };
-    if (clicked.value.startsWith("open-linked:")) {
-      const sibling = linked[Number(clicked.value.slice("open-linked:".length))];
+    const id = clicked.value;
+    const refs = tasks.map((task) => ({ environmentId: task.environmentId, taskId: task.id }));
+    const memberAt = (prefix: string) => item.members[Number(id.slice(prefix.length))]?.view;
+    if (id.startsWith("open-linked:")) {
+      const sibling = linked[Number(id.slice("open-linked:".length))];
       const siblingView =
         sibling === undefined
           ? null
@@ -100,29 +115,78 @@ export function useWorkTaskContextMenu(onNavigate?: () => void) {
       openWorkTask(siblingView);
       return;
     }
-    switch (clicked.value) {
-      case "new-thread":
-        onNavigate?.();
-        await createWorkTaskThread(task);
+    if (id.startsWith("open-pr:")) {
+      const url = memberAt("open-pr:")?.pullRequest?.url;
+      if (url !== undefined) await api.shell.openExternal(url);
+      return;
+    }
+    if (id.startsWith("new-thread:")) {
+      const member = memberAt("new-thread:");
+      if (member === undefined) return;
+      onNavigate?.();
+      await createWorkTaskThread(member.task);
+      return;
+    }
+    switch (id) {
+      case "open-ado":
+        if (item.workItem?.url) await api.shell.openExternal(item.workItem.url);
+        return;
+      case "copy-id":
+        if (item.workItem !== null) {
+          await writeTextToClipboard(String(item.workItem.id), "work item ID").catch(() => false);
+        }
+        return;
+      case "copy-branch":
+        await writeTextToClipboard(latest.task.workspace.branch, "branch name").catch(() => false);
+        return;
+      case "rename":
+        openRenameWorkTaskDialog({ refs, title: item.title });
+        return;
+      case "rename-ai":
+        for (const ref of refs) await rename({ environmentId: ref.environmentId, input: ref });
         return;
       case "mark-waiting":
-        openWaitingReasonDialog(taskRef);
+        openWaitingReasonDialog(refs);
         return;
       case "clear-waiting":
-        await setWaiting({
-          environmentId: task.environmentId,
-          input: { taskId: task.id, reason: null },
-        });
+        for (const task of tasks) {
+          if (task.waitingForUserReason === null) continue;
+          await setWaiting({
+            environmentId: task.environmentId,
+            input: { taskId: task.id, reason: null },
+          });
+        }
         return;
-      case "auto-handle":
-        await setAutoHandle({
-          environmentId: task.environmentId,
-          input: { taskId: task.id, enabled: !task.autoHandleReviewFeedback },
-        });
+      case "auto-handle": {
+        const enabled = !tasks.every((task) => task.autoHandleReviewFeedback);
+        for (const task of tasks) {
+          await setAutoHandle({
+            environmentId: task.environmentId,
+            input: { taskId: task.id, enabled },
+          });
+        }
         return;
-      case "archive":
-        openArchiveWorkTaskDialog(taskRef);
+      }
+      case "archive": {
+        // One task keeps its dialog, which checks the worktree for blockers.
+        if (refs.length === 1) {
+          openArchiveWorkTaskDialog(refs[0]!);
+          return;
+        }
+        const confirmed = await api.dialogs.confirm(
+          `Archive ${item.title}? This archives its ${refs.length} Work Tasks, stops their agents and removes their worktrees.`,
+          { variant: "destructive" },
+        );
+        if (!confirmed) return;
+        for (const task of tasks) {
+          if (task.archivedAt !== null) continue;
+          await archive({
+            environmentId: task.environmentId,
+            input: { taskId: task.id },
+          });
+        }
         return;
+      }
     }
   };
 }

@@ -21,6 +21,8 @@ import {
 import * as Option from "effect/Option";
 import { AsyncResult } from "effect/reactivity";
 
+import type { WorkTaskItem, WorkTaskItemMember } from "./grouping";
+
 export interface EnvironmentWorkTask extends WorkTask {
   readonly environmentId: EnvironmentId;
 }
@@ -277,35 +279,72 @@ export function linkedWorkTasksByKey(
   return linked;
 }
 
-export type WorkTaskMenuId =
-  | "new-thread"
-  | "mark-waiting"
-  | "clear-waiting"
-  | "auto-handle"
-  | "archive"
-  | `open-linked:${number}`;
+/** The member a click opens and "copy branch" reads: the one touched last. */
+export function latestWorkTaskMember(item: WorkTaskItem): WorkTaskItemMember {
+  return item.members.reduce((best, member) =>
+    member.view.activityAt > best.view.activityAt ? member : best,
+  );
+}
 
-/** The task right-click menu, shared by the sidebar row and the board card. */
-export function workTaskMenuItems(input: {
-  readonly task: EnvironmentWorkTask;
-  readonly linkedProjectTitles: ReadonlyArray<string>;
-  /** False on a read-only connection: only navigation stays enabled. */
-  readonly canOperate: boolean;
-}): ReadonlyArray<ContextMenuItem<WorkTaskMenuId>> {
-  const { task, linkedProjectTitles } = input;
-  const archived = task.archivedAt !== null || !input.canOperate;
+/**
+ * The work item right-click menu, shared by the sidebar row and the board card. Waiting,
+ * auto-handle and rename apply to every member; `open-linked:<i>` to the latest member's siblings.
+ */
+export function workTaskItemMenuItems(
+  item: WorkTaskItem,
+  options: {
+    readonly linkedProjectTitles?: ReadonlyArray<string>;
+    /** False on a read-only connection: only navigation and copy stay enabled. */
+    readonly canOperate?: boolean;
+  } = {},
+): ContextMenuItem<string>[] {
+  const { linkedProjectTitles = [], canOperate = true } = options;
+  const tasks = item.members.map((member) => member.view.task);
+  const archived = tasks.every((task) => task.archivedAt !== null) || !canOperate;
+  const withPr = item.members.flatMap((member, index) =>
+    member.view.pullRequest === null
+      ? []
+      : [{ member, index, pullRequest: member.view.pullRequest }],
+  );
   return [
-    { id: "new-thread", label: "New thread", disabled: archived },
+    { id: "open-ado", label: "Open in Azure DevOps", disabled: !item.workItem?.url },
+    {
+      id: "copy-id",
+      label: "Copy work item ID",
+      disabled: item.workItem === null,
+      ...(item.workItem !== null ? { detail: String(item.workItem.id) } : {}),
+    },
+    { id: "copy-branch", label: "Copy branch name" },
+    {
+      id: "open-pr",
+      label: "Open pull request",
+      disabled: withPr.length === 0,
+      children: withPr.map(({ member, index, pullRequest }) => ({
+        id: `open-pr:${index}`,
+        label: `${member.label} #${pullRequest.number}`,
+      })),
+    },
+    {
+      id: "new-thread",
+      label: "New thread in",
+      disabled: archived,
+      children: item.members.map((member, index) => ({
+        id: `new-thread:${index}`,
+        label: member.label,
+      })),
+    },
     ...linkedProjectTitles.map((title, index) => ({
-      id: `open-linked:${index}` as const,
+      id: `open-linked:${index}`,
       label: `Open in ${title}`,
       separatorBefore: index === 0,
     })),
-    task.waitingForUserReason !== null
+    { id: "rename", label: "Rename...", disabled: archived, separatorBefore: true },
+    { id: "rename-ai", label: "Rename with AI", disabled: archived },
+    tasks.some((task) => task.waitingForUserReason !== null)
       ? {
           id: "clear-waiting",
           label: "Clear waiting for user",
-          disabled: !input.canOperate,
+          disabled: !canOperate,
           separatorBefore: true,
         }
       : {
@@ -317,12 +356,12 @@ export function workTaskMenuItems(input: {
     {
       id: "auto-handle",
       label: "Auto-handle PR feedback",
-      checked: task.autoHandleReviewFeedback,
+      checked: tasks.every((task) => task.autoHandleReviewFeedback),
       disabled: archived,
     },
     {
       id: "archive",
-      label: "Archive Work Task...",
+      label: "Archive",
       destructive: true,
       disabled: archived,
       separatorBefore: true,

@@ -18,7 +18,7 @@ import {
   threadsOutsideWorkTasks,
   workTaskboardColumnForStatus,
   workTaskKey,
-  workTaskMenuItems,
+  workTaskItemMenuItems,
   workTaskOwnsWorktreePath,
   workTaskTabState,
   workTaskThreadKeys,
@@ -26,6 +26,7 @@ import {
   type EnvironmentWorkTask,
   type WorkTaskView,
 } from "./logic";
+import type { WorkTaskItem } from "./grouping";
 import { WORK_TASK_STATUS_PRESENTATION } from "./statusPresentation";
 import { ENV, link, shell, workTask } from "./testFixtures";
 
@@ -258,51 +259,113 @@ describe("linkedWorkTasksByKey", () => {
   });
 });
 
-describe("workTaskMenuItems", () => {
-  it("offers new thread, linked repos, waiting, auto-handle and archive", () => {
-    const items = workTaskMenuItems({
-      task: workTask({ id: "t", autoHandleReviewFeedback: false }),
-      linkedProjectTitles: ["Ui"],
-      canOperate: true,
-    });
-    expect(items.map((item) => [item.id, item.label])).toEqual([
-      ["new-thread", "New thread"],
-      ["open-linked:0", "Open in Ui"],
-      ["mark-waiting", "Mark waiting for user..."],
-      ["auto-handle", "Auto-handle PR feedback"],
-      ["archive", "Archive Work Task..."],
-    ]);
-    expect(items.find((item) => item.id === "auto-handle")?.checked).toBe(false);
-  });
+function menuItem(
+  members: ReadonlyArray<{ id: string; pr?: boolean; branch?: string }>,
+  url: string | null = null,
+  taskOverrides: Partial<EnvironmentWorkTask> = {},
+): WorkTaskItem {
+  return {
+    key: "item",
+    workItem: {
+      id: 4242 as never,
+      title: "T",
+      type: "PBI",
+      state: "Active",
+      sprint: null,
+      url,
+      source: "linked",
+    },
+    title: "T",
+    section: "working",
+    status: "working",
+    unseen: false,
+    activityAt: "2026-10-01T09:00:00.000Z",
+    members: members.map((member, index) => ({
+      view: {
+        key: member.id,
+        task: workTask({ id: member.id, branch: member.branch ?? "feature/x", ...taskOverrides }),
+        tabs: [],
+        status: "working",
+        pullRequest: member.pr
+          ? ({ number: 10 + index, url: `https://pr/${index}` } as never)
+          : null,
+        latestThread: null,
+        activityAt: `2026-10-0${index + 1}T09:00:00.000Z`,
+      },
+      repo: `repo${index}`,
+      label: `repo${index}`,
+      insight: null,
+      unseen: false,
+    })),
+  };
+}
 
-  it("offers clear waiting, and disables actions once archived", () => {
-    const waiting = workTaskMenuItems({
-      task: workTask({ id: "t", waitingForUserReason: "Decide" }),
-      linkedProjectTitles: [],
-      canOperate: true,
-    });
-    expect(waiting.map((item) => item.id)).toContain("clear-waiting");
-    const archived = workTaskMenuItems({
-      task: workTask({ id: "t", archivedAt: "2026-10-01T12:00:00.000Z" }),
-      linkedProjectTitles: [],
-      canOperate: true,
-    });
-    expect(archived.filter((item) => item.disabled).map((item) => item.id)).toEqual([
+describe("workTaskItemMenuItems", () => {
+  it("lists the item actions in order", () => {
+    const items = workTaskItemMenuItems(menuItem([{ id: "a", pr: true }], "https://ado/4242"));
+    expect(items.map((item) => item.id)).toEqual([
+      "open-ado",
+      "copy-id",
+      "copy-branch",
+      "open-pr",
       "new-thread",
+      "rename",
+      "rename-ai",
       "mark-waiting",
       "auto-handle",
       "archive",
     ]);
+    expect(items.find((item) => item.id === "copy-id")?.detail).toBe("4242");
   });
 
-  it("leaves only navigation enabled on a read-only connection", () => {
-    const items = workTaskMenuItems({
-      task: workTask({ id: "t", waitingForUserReason: "Decide" }),
-      linkedProjectTitles: ["Ui"],
+  it("disables open-ado without a URL", () => {
+    const items = workTaskItemMenuItems(menuItem([{ id: "a" }]));
+    expect(items.find((item) => item.id === "open-ado")?.disabled).toBe(true);
+  });
+
+  it("offers one open-pr child per member and one new-thread child per member", () => {
+    const items = workTaskItemMenuItems(
+      menuItem([
+        { id: "a", pr: true },
+        { id: "b", pr: true },
+      ]),
+    );
+    const prs = items.find((item) => item.id === "open-pr");
+    expect(prs?.children?.map((child) => [child.id, child.label])).toEqual([
+      ["open-pr:0", "repo0 #10"],
+      ["open-pr:1", "repo1 #11"],
+    ]);
+    expect(items.find((item) => item.id === "new-thread")?.children?.map((c) => c.id)).toEqual([
+      "new-thread:0",
+      "new-thread:1",
+    ]);
+  });
+
+  it("disables open pull request when no member has one", () => {
+    const items = workTaskItemMenuItems(menuItem([{ id: "a" }]));
+    expect(items.find((item) => item.id === "open-pr")?.disabled).toBe(true);
+  });
+
+  it("offers clear waiting when a member waits, and keeps linked repos", () => {
+    const items = workTaskItemMenuItems(
+      menuItem([{ id: "a" }], null, { waitingForUserReason: "Decide" }),
+      { linkedProjectTitles: ["Ui"] },
+    );
+    expect(items.map((item) => item.id)).toContain("clear-waiting");
+    expect(items.find((item) => item.id === "open-linked:0")?.label).toBe("Open in Ui");
+  });
+
+  it("disables edits when archived or read-only", () => {
+    const readOnly = workTaskItemMenuItems(menuItem([{ id: "a", pr: true }], "u"), {
       canOperate: false,
     });
-    expect(items.filter((item) => !item.disabled).map((item) => item.id)).toEqual([
-      "open-linked:0",
+    expect(readOnly.filter((item) => item.disabled).map((item) => item.id)).toEqual([
+      "new-thread",
+      "rename",
+      "rename-ai",
+      "mark-waiting",
+      "auto-handle",
+      "archive",
     ]);
   });
 });

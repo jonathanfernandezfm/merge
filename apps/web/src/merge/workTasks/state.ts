@@ -56,7 +56,8 @@ const taskCommand = <
     | typeof MERGE_WS_METHODS.workTasksCreateThread
     | typeof MERGE_WS_METHODS.workTasksArchive
     | typeof MERGE_WS_METHODS.workTasksSetWaiting
-    | typeof MERGE_WS_METHODS.workTasksSetAutoHandle,
+    | typeof MERGE_WS_METHODS.workTasksSetAutoHandle
+    | typeof MERGE_WS_METHODS.workTasksRename,
 >(
   label: string,
   tag: TTag,
@@ -108,6 +109,7 @@ export const workTasksEnvironment = {
     "environment-data:merge:work-tasks-set-auto-handle",
     MERGE_WS_METHODS.workTasksSetAutoHandle,
   ),
+  rename: taskCommand("environment-data:merge:work-tasks-rename", MERGE_WS_METHODS.workTasksRename),
 };
 
 const EMPTY_LINKS: ReadonlyArray<WorkTaskLink> = [];

@@ -19,6 +19,7 @@ import {
 import { useProjects } from "~/state/entities";
 import { environmentPresentations } from "~/state/presentation";
 import { formatRelativeTimeLabel } from "~/timestampFormat";
+import { groupWorkTaskItems } from "./grouping";
 import { useOpenWorkTask, useWorkTaskContextMenu } from "./actions";
 import {
   groupWorkTaskboard,
@@ -57,7 +58,7 @@ export function WorkTaskboard() {
   const views = useWorkTaskViews();
   const projects = useProjects();
   const openWorkTask = useOpenWorkTask();
-  const openContextMenu = useWorkTaskContextMenu();
+  const openItemContextMenu = useWorkTaskContextMenu();
   const [archiveOpen, setArchiveOpen] = useState(false);
   const serverConfigs = useAtomValue(environmentPresentations.serverConfigsAtom);
   const providersByEnvironment = useAtomValue(environmentPresentations.providersByEnvironmentAtom);
@@ -76,6 +77,18 @@ export function WorkTaskboard() {
   );
   const columns = groupWorkTaskboard(views.values());
   const archived = columns.get("archive") ?? NO_CARDS;
+  // The board lists tasks, so its menu acts on a one-task item.
+  const openContextMenu = (view: WorkTaskView, position: { x: number; y: number }) =>
+    void openItemContextMenu(
+      groupWorkTaskItems({
+        views: [view],
+        insights: new Map(),
+        repoName: ({ task }) =>
+          projectNames.get(`${task.environmentId}:${task.projectId}`) ?? "Unknown project",
+        unseen: () => false,
+      })[0]!,
+      position,
+    );
 
   const renderCard = (view: WorkTaskView, compact = false) => (
     <li key={view.key}>
