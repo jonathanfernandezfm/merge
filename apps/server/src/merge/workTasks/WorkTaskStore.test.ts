@@ -131,6 +131,18 @@ describe("WorkTaskStore", () => {
     }).pipe(Effect.provide(layer)),
   );
 
+  it.effect("titleSource defaults to branch and round-trips through update", () =>
+    Effect.gen(function* () {
+      const store = yield* WorkTaskStore.WorkTaskStore;
+      yield* insertLegacyTask("task-1");
+      const id = WorkTaskId.make("task-1");
+      assert.strictEqual((yield* store.get(id))?.titleSource, "branch");
+      const updated = yield* store.update(id, { title: "X", titleSource: "user" });
+      assert.strictEqual(updated.titleSource, "user");
+      assert.strictEqual((yield* store.get(id))?.titleSource, "user");
+    }).pipe(Effect.provide(layer)),
+  );
+
   it.effect("links() returns the task rows of merge_thread_links", () =>
     Effect.gen(function* () {
       const store = yield* WorkTaskStore.WorkTaskStore;

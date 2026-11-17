@@ -26,6 +26,7 @@ const task = (id: string, overrides: Partial<WorkTask> = {}): WorkTask => ({
   id: WorkTaskId.make(id),
   projectId: ProjectId.make("project-1"),
   title: "Widgets",
+  titleSource: "branch",
   description: null,
   workspace: {
     path: `/wt/${id}`,

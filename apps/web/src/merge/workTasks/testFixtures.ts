@@ -26,6 +26,7 @@ export function workTask(
     id: WorkTaskId.make(id),
     projectId: PROJECT,
     title: `Task ${id}`,
+    titleSource: "branch",
     description: null,
     workspace: {
       path: `/tmp/${id}`,

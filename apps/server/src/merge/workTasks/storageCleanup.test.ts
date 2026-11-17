@@ -139,6 +139,7 @@ it.live("storage cleanup keeps a single-thread Work Task worktree that a rule wo
       id: WorkTaskId.make("task-1"),
       projectId,
       title: "Feature",
+      titleSource: "branch",
       description: null,
       workspace: {
         path: `${worktree}/`,

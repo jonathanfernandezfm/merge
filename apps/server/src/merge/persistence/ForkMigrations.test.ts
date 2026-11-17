@@ -25,6 +25,7 @@ const ALL_FORK_MIGRATIONS: Array<readonly [number, string]> = [
   [3, "ProjectionFolders"],
   [4, "ThreadLinks"],
   [5, "ThreadLinkReactorMarks"],
+  [6, "TaskTitleSource"],
 ];
 
 const memory = NodeSqliteClient.layer({ filename: ":memory:" });

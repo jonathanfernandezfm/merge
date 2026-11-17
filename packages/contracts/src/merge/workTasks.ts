@@ -105,6 +105,9 @@ export const WorkTaskLegacyPullRequest = Schema.Struct({
 });
 export type WorkTaskLegacyPullRequest = typeof WorkTaskLegacyPullRequest.Type;
 
+export const WorkTaskTitleSource = Schema.Literals(["user", "generated", "branch"]);
+export type WorkTaskTitleSource = typeof WorkTaskTitleSource.Type;
+
 /**
  * A unit of work on one existing branch. Threads join it through `merge_thread_links`.
  * Status is never stored: see `deriveWorkTaskStatus`.
@@ -113,6 +116,7 @@ export const WorkTask = Schema.Struct({
   id: WorkTaskId,
   projectId: ProjectId,
   title: TrimmedNonEmptyString,
+  titleSource: WorkTaskTitleSource,
   description: Schema.NullOr(Schema.String),
   workspace: WorkTaskWorkspace,
   legacyPullRequest: Schema.NullOr(WorkTaskLegacyPullRequest),
@@ -146,6 +150,8 @@ export type WorkTaskIdInput = typeof WorkTaskIdInput.Type;
 export const WorkTaskCreateInput = Schema.Struct({
   projectId: ProjectId,
   title: TrimmedNonEmptyString.check(Schema.isMaxLength(200)),
+  /** Defaults to `"branch"`. */
+  titleSource: Schema.optionalKey(WorkTaskTitleSource),
   description: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(20_000))),
   /** Defaults to the project's primary remote. */
   remoteName: Schema.optionalKey(TrimmedNonEmptyString),

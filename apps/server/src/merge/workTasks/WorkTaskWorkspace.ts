@@ -752,6 +752,7 @@ export const make = Effect.gen(function* () {
       id: taskId,
       projectId: project.id,
       title: input.title,
+      titleSource: input.titleSource ?? "branch",
       description: input.description ?? null,
       workspace: {
         path: adoptedPath,

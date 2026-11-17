@@ -100,6 +100,7 @@ const workTask = (overrides: Partial<WorkTask> = {}): WorkTask => ({
   id: TASK,
   projectId: ProjectId.make("project-1"),
   title: "Widgets",
+  titleSource: "branch",
   description: null,
   workspace: {
     path: "/wt",

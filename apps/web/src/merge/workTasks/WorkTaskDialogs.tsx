@@ -267,6 +267,7 @@ function NewWorkTaskDialog({
       input: {
         projectId: project.id,
         title: title.trim(),
+        titleSource: titleEdited ? "user" : "branch",
         ...(description.trim().length > 0 ? { description: description.trim() } : {}),
         ...(chosenBranch.remoteName === undefined ? {} : { remoteName: chosenBranch.remoteName }),
         branch: chosenBranch.branch,

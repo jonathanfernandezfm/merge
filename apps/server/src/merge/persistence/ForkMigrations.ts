@@ -7,6 +7,7 @@ import TaskScmEvents from "./Migrations/002_TaskScmEvents.ts";
 import ProjectionFolders from "./Migrations/003_ProjectionFolders.ts";
 import ThreadLinks from "./Migrations/004_ThreadLinks.ts";
 import ThreadLinkReactorMarks from "./Migrations/005_ThreadLinkReactorMarks.ts";
+import TaskTitleSource from "./Migrations/006_TaskTitleSource.ts";
 
 /** Fork history lives apart so upstream's `effect_sql_migrations` ids never collide with ours. */
 export const FORK_MIGRATION_TABLE = "merge_fork_migrations";
@@ -61,6 +62,7 @@ export const runForkMigrations = Effect.fn("runForkMigrations")(function* () {
       "3_ProjectionFolders": ProjectionFolders,
       "4_ThreadLinks": ThreadLinks,
       "5_ThreadLinkReactorMarks": ThreadLinkReactorMarks,
+      "6_TaskTitleSource": TaskTitleSource,
     }),
   });
   if (executed.length > 0) {

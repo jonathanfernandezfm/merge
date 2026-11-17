@@ -39,6 +39,7 @@ export type WorkTaskPatch = Partial<
   Pick<
     WorkTask,
     | "title"
+    | "titleSource"
     | "description"
     | "autoHandleReviewFeedback"
     | "waitingForUserReason"
@@ -156,6 +157,7 @@ export const make = Effect.gen(function* () {
         task_id AS "id",
         project_id AS "projectId",
         title,
+        title_source AS "titleSource",
         description,
         workspace_json AS "workspace",
         pull_request_json AS "legacyPullRequest",
@@ -188,12 +190,12 @@ export const make = Effect.gen(function* () {
       Effect.flatMap(
         (row) => sql`
           INSERT INTO projection_tasks (
-            task_id, project_id, title, description, workspace_json, pull_request_json,
+            task_id, project_id, title, title_source, description, workspace_json, pull_request_json,
             auto_handle_review_feedback, waiting_for_user_reason,
             created_at, updated_at, merged_at, archived_at, deleted_at
           )
           VALUES (
-            ${row.id}, ${row.projectId}, ${row.title}, ${row.description}, ${row.workspace},
+            ${row.id}, ${row.projectId}, ${row.title}, ${row.titleSource}, ${row.description}, ${row.workspace},
             ${row.legacyPullRequest}, ${row.autoHandleReviewFeedback}, ${row.waitingForUserReason},
             ${row.createdAt}, ${row.updatedAt}, ${row.mergedAt}, ${row.archivedAt}, ${row.deletedAt}
           )
@@ -223,6 +225,7 @@ export const make = Effect.gen(function* () {
   ) {
     const columns = {
       ...(patch.title === undefined ? {} : { title: patch.title }),
+      ...(patch.titleSource === undefined ? {} : { title_source: patch.titleSource }),
       ...(patch.description === undefined ? {} : { description: patch.description }),
       ...(patch.workspace === undefined
         ? {}
