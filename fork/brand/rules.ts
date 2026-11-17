@@ -553,6 +553,17 @@ export const identity: Array<{ file: string; from: string; to: string }> = [
     from: 't3SystemAppend("claude-sonnet-5-5"), "## T3 Code devices"',
     to: 't3SystemAppend("claude-sonnet-5-5"), "## Merge devices"',
   },
+  // Universal links: app.config.test.ts checks these list the app's own identifiers.
+  {
+    file: "apps/web/public/.well-known/apple-app-site-association.json",
+    from: '"ARK85ZXQ4Z.com.t3tools.t3code',
+    to: `"ARK85ZXQ4Z.${APP_ID}`,
+  },
+  {
+    file: "apps/web/public/.well-known/assetlinks.json",
+    from: '"package_name": "com.t3tools.t3code',
+    to: `"package_name": "${APP_ID}`,
+  },
   // The mock agent's page text, which AcpAdapterV2.test.ts expects after copy.
   { file: "apps/server/scripts/acp-mock-agent.ts", from: '"T3 Code page"', to: '"Merge page"' },
 ];
