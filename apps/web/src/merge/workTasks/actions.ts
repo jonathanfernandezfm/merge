@@ -181,7 +181,7 @@ export function useWorkTaskContextMenu(onNavigate?: () => void) {
           return;
         }
         const confirmed = await api.dialogs.confirm(
-          `Archive ${item.title}? This archives its ${refs.length} Work Tasks, stops their agents and removes their worktrees, except any with uncommitted changes.`,
+          `Archive all ${refs.length} Work Tasks of ${item.title}? Tasks with uncommitted changes, unpushed commits, an open pull request or a running agent are skipped and reported.`,
           { variant: "destructive" },
         );
         if (!confirmed) return;
