@@ -483,6 +483,65 @@ export const identity: Array<{ file: string; from: string; to: string }> = [
     from: '"t3code://threads/',
     to: '"merge://threads/',
   },
+  // Pairing links: desktop opens them and mobile scans them, on the fork's schemes.
+  {
+    file: "packages/shared/src/remote.ts",
+    from: "const APP_LINK_PROTOCOL = /^t3code(?:-[a-z]+)?:$/;",
+    to: "const APP_LINK_PROTOCOL = /^merge(?:-[a-z]+)?:$/;",
+  },
+  { file: "packages/shared/src/remote.ts", from: "`t3code://pair?${", to: "`merge://pair?${" },
+  {
+    file: "packages/shared/src/remote.ts",
+    from: "`t3code://pair` link",
+    to: "`merge://pair` link",
+  },
+  { file: "packages/shared/src/remote.test.ts", from: '"t3code://pair?"', to: '"merge://pair?"' },
+  {
+    file: "packages/shared/src/remote.test.ts",
+    from: 'appLink.replace("t3code:", "t3code-dev:")',
+    to: 'appLink.replace("merge:", "merge-dev:")',
+  },
+  {
+    file: "packages/shared/src/remote.test.ts",
+    from: 'readPairingAppLink("t3code://pair")',
+    to: 'readPairingAppLink("merge://pair")',
+  },
+  {
+    file: "packages/shared/src/remote.test.ts",
+    from: "`t3code://threads?pairingUrl=",
+    to: "`merge://threads?pairingUrl=",
+  },
+  {
+    file: "apps/mobile/src/widgets/AgentActivityWidget.tsx",
+    from: "`t3code://${linkRow",
+    to: "`merge://${linkRow",
+  },
+  // MCP app handoffs name the connector after the app.
+  {
+    file: "apps/web/src/components/mcp/mcpApps.ts",
+    from: "name=T3%20Code&",
+    to: "name=Merge&",
+  },
+  {
+    file: "apps/web/src/components/mcp/mcpApps.ts",
+    from: "connectorName=T3%20Code&",
+    to: "connectorName=Merge&",
+  },
+  {
+    file: "apps/desktop/src/window/DesktopWindow.test.ts",
+    from: '["t3code-dev://app/threads?id=1#latest", false],\n          ["t3code-dev://other/", true],\n          ["t3code://app/", true],',
+    to: '["merge-dev://app/threads?id=1#latest", false],\n          ["merge-dev://other/", true],\n          ["merge://app/", true],',
+  },
+  {
+    file: "apps/desktop/src/app/DesktopLifecycle.test.ts",
+    from: '"T3CODE://pair?token=spent",\n          "t3code://new?prompt=hello",',
+    to: '"MERGE://pair?token=spent",\n          "merge://new?prompt=hello",',
+  },
+  {
+    file: "apps/server/src/cli/theme.test.ts",
+    from: 'NodePath.join(home, ".t3",',
+    to: 'NodePath.join(home, ".merge",',
+  },
   // The mock agent's page text, which AcpAdapterV2.test.ts expects after copy.
   { file: "apps/server/scripts/acp-mock-agent.ts", from: '"T3 Code page"', to: '"Merge page"' },
 ];
