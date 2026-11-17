@@ -249,9 +249,13 @@ export function useWorkTaskItems(): ReadonlyArray<WorkTaskItem> {
     projects.map((project) => [`${project.environmentId}:${project.id}`, project.title]),
   );
   return groupWorkTaskItems({
-    views: [...views.values()].filter(({ task }) => task.archivedAt === null),
+    // Tasks of a removed project and archived tasks stay out, as before.
+    views: [...views.values()].filter(
+      ({ task }) =>
+        task.archivedAt === null && titles.has(`${task.environmentId}:${task.projectId}`),
+    ),
     insights,
-    repoName: ({ task }) => titles.get(`${task.environmentId}:${task.projectId}`) ?? task.projectId,
+    repoName: ({ task }) => titles.get(`${task.environmentId}:${task.projectId}`) ?? "",
     // Live work and waiting outrank a new response, which only replaces calmer statuses.
     unseen: ({ status, tabs }) =>
       status !== "working" &&

@@ -17,16 +17,22 @@ vi.mock("./state", async () => {
     fixtures.workTask({ id: "broken", title: "Broken setup", setup: "failed" }),
     fixtures.workTask({ id: "api", title: "Permissions", branch: "feature/api" }),
     fixtures.workTask({ id: "ui", title: "Permissions UI", branch: "feature/ui" }),
+    fixtures.workTask({ id: "bad", title: "Mixed", branch: "feature/bad", setup: "failed" }),
+    fixtures.workTask({ id: "good", title: "Mixed", branch: "feature/good" }),
     fixtures.workTask({ id: "old", title: "Shipped thing", mergedAt: "2026-10-02T09:00:00.000Z" }),
   ];
   const views = logic.buildWorkTaskViews({
     tasks,
     linksByEnvironment: new Map([
-      [fixtures.ENV, [fixtures.link("t1", "api"), fixtures.link("t2", "ui")]],
+      [
+        fixtures.ENV,
+        [fixtures.link("t1", "api"), fixtures.link("t2", "ui"), fixtures.link("t3", "good")],
+      ],
     ]),
     shells: [
       fixtures.shell({ id: "t1", running: true }),
       fixtures.shell({ id: "t2", running: true }),
+      fixtures.shell({ id: "t3", running: true, updatedAt: "2026-10-05T09:00:00.000Z" }),
     ],
   });
   const workItem = { id: 7, title: "Permissions", type: "PBI", state: "Active" };
@@ -36,9 +42,15 @@ vi.mock("./state", async () => {
       { workItem, pullRequest: null } as unknown as WorkTaskInsight,
     ]),
   );
+  const mixed = new Map(
+    ["bad", "good"].map((id) => [
+      logic.workTaskKey(fixtures.ENV, tasks.find((task) => task.id === id)!.id),
+      { workItem: { ...workItem, id: 9 }, pullRequest: null } as unknown as WorkTaskInsight,
+    ]),
+  );
   const items = groupWorkTaskItems({
     views: [...views.values()],
-    insights,
+    insights: new Map([...insights, ...mixed]),
     repoName: ({ task }) => (task.id === "ui" ? "web" : "Acme"),
     unseen: () => false,
   });
@@ -73,6 +85,13 @@ vi.mock("~/state/entities", async (importOriginal) => {
   };
 });
 
+// Lint forbids lifecycle hooks, so the persisted shelves are cleared by disposal.
+const freshShelves = () => {
+  const clear = () => localStorage.removeItem("merge:work-task-shelves:v1");
+  clear();
+  return { [Symbol.dispose]: clear };
+};
+
 const renderSidebar = () =>
   render(
     <SidebarProvider>
@@ -93,7 +112,7 @@ describe("Work Task items sidebar", () => {
   });
 
   it("toggles Done and remembers it across a remount", async () => {
-    localStorage.removeItem("merge:work-task-shelves:v1");
+    using _shelves = freshShelves();
     {
       await using _screen = await renderSidebar();
       await expect.element(page.getByText("Shipped thing")).not.toBeInTheDocument();
@@ -109,5 +128,13 @@ describe("Work Task items sidebar", () => {
     const row = page.getByRole("button", { name: /^Permissions,/ });
     await expect.element(row.getByText("Acme")).toBeVisible();
     await expect.element(row.getByText("web")).toBeVisible();
+  });
+
+  it("describes the same member whose status the row shows", async () => {
+    await using _screen = await renderSidebar();
+    // The setup-failed member leads, though the running one was touched last.
+    await expect
+      .element(page.getByRole("button", { name: /^Mixed, Setup failed · feature\/bad/ }))
+      .toBeVisible();
   });
 });

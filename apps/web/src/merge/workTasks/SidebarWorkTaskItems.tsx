@@ -96,11 +96,17 @@ const SidebarWorkTaskItemRow = memo(function SidebarWorkTaskItemRow({
 }) {
   const projects = useProjects();
   const linkedByKey = useLinkedWorkTasks();
+  // The member that decides the glyph and status; the label describes the same one.
+  const lead =
+    item.members.find(
+      (member) => member.view.status === item.status && member.unseen === item.unseen,
+    ) ?? item.members[0]!;
   // The task a click opens: the one touched last.
   const latest = item.members.reduce((best, member) =>
     member.view.activityAt > best.view.activityAt ? member : best,
   ).view;
-  const { task, tabs } = latest;
+  const shown = lead.view;
+  const { task, tabs } = shown;
   // A process running in any of the task's thread terminals, e.g. a Run script.
   const terminalSessions = useKnownTerminalSessions({
     environmentId: task.environmentId,
@@ -113,7 +119,7 @@ const SidebarWorkTaskItemRow = memo(function SidebarWorkTaskItemRow({
     ),
   );
   const linkedProjects = linkedByKey
-    .get(latest.key)
+    .get(shown.key)
     ?.map(
       (sibling) =>
         projects.find(
@@ -122,13 +128,13 @@ const SidebarWorkTaskItemRow = memo(function SidebarWorkTaskItemRow({
         )?.title ?? sibling.title,
     )
     .join(", ");
-  const status = WORK_TASK_STATUS_PRESENTATION[latest.status];
+  const status = WORK_TASK_STATUS_PRESENTATION[shown.status];
   const detail = [
     item.unseen ? UNSEEN_RESPONSE_PRESENTATION.label : null,
     status.label,
     terminalStatus?.label ?? null,
     task.workspace.branch,
-    latest.pullRequest !== null ? `#${latest.pullRequest.number}` : null,
+    shown.pullRequest !== null ? `#${shown.pullRequest.number}` : null,
     linkedProjects !== undefined ? `Also in ${linkedProjects}` : null,
   ]
     .filter(Boolean)

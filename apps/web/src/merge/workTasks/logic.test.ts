@@ -1,6 +1,5 @@
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
 import {
-  ProjectId,
   WORK_TASK_STATUSES,
   WorkTaskId,
   type ThreadPullRequestLink,
@@ -12,7 +11,6 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   buildWorkTaskViews,
-  groupSidebarWorkTasks,
   groupWorkTaskboard,
   linkedWorkTasksByKey,
   loadedWorkTasks,
@@ -29,7 +27,7 @@ import {
   type WorkTaskView,
 } from "./logic";
 import { WORK_TASK_STATUS_PRESENTATION } from "./statusPresentation";
-import { ENV, link, PROJECT, shell, workTask } from "./testFixtures";
+import { ENV, link, shell, workTask } from "./testFixtures";
 
 function views(
   tasks: ReadonlyArray<EnvironmentWorkTask>,
@@ -257,70 +255,6 @@ describe("linkedWorkTasksByKey", () => {
     expect(linked.get(workTaskKey(ENV, ui.id))).toEqual([api]);
     expect(linked.has(workTaskKey(ENV, solo.id))).toBe(false);
     expect(linked.has(workTaskKey(ENV, old.id))).toBe(false);
-  });
-});
-
-describe("groupSidebarWorkTasks", () => {
-  const OTHER = ProjectId.make("project-2");
-  const projects = [
-    { environmentId: ENV, id: PROJECT, title: "Api" },
-    { environmentId: ENV, id: OTHER, title: "Ui" },
-  ];
-  const all = views(
-    [
-      workTask({
-        id: "old",
-        title: "Permissions",
-        branch: "feature/perm",
-        createdAt: "2026-10-01T08:00:00.000Z",
-        updatedAt: "2026-10-01T12:00:00.000Z",
-      }),
-      workTask({
-        id: "new",
-        title: "Login page",
-        branch: "feature/login",
-        createdAt: "2026-10-01T10:00:00.000Z",
-        waitingForUserReason: "Decide",
-      }),
-      workTask({ id: "archived", archivedAt: "2026-10-01T12:00:00.000Z" }),
-      workTask({ id: "ui", projectId: OTHER, title: "Theme", branch: "feature/theme" }),
-    ],
-    [],
-    [],
-  );
-  const group = (
-    overrides: Partial<Parameters<typeof groupSidebarWorkTasks>[0]> = {},
-  ): ReadonlyArray<{ title: string; ids: ReadonlyArray<string> }> =>
-    groupSidebarWorkTasks({
-      views: all.values(),
-      projects,
-      hiddenProjectKeys: new Set(),
-      query: "",
-      sort: "newest",
-      ...overrides,
-    }).map((entry) => ({ title: entry.title, ids: entry.views.map((v) => v.task.id) }));
-
-  it("groups active tasks by project, newest first, without archived ones", () => {
-    expect(group()).toEqual([
-      { title: "Api", ids: ["new", "old"] },
-      { title: "Ui", ids: ["ui"] },
-    ]);
-  });
-
-  it("sorts by recent activity or by status", () => {
-    expect(group({ sort: "activity" })[0]?.ids).toEqual(["old", "new"]);
-    // waiting-for-user precedes idle in the lifecycle order.
-    expect(group({ sort: "status" })[0]?.ids).toEqual(["new", "old"]);
-  });
-
-  it("hides projects, but search reaches hidden projects by title or branch", () => {
-    const hidden = new Set([`${ENV}:${OTHER}`]);
-    expect(group({ hiddenProjectKeys: hidden }).map((entry) => entry.title)).toEqual(["Api"]);
-    expect(group({ hiddenProjectKeys: hidden, query: " THEME " })).toEqual([
-      { title: "Ui", ids: ["ui"] },
-    ]);
-    expect(group({ query: "feature/perm" })).toEqual([{ title: "Api", ids: ["old"] }]);
-    expect(group({ query: "nothing" })).toEqual([]);
   });
 });
 

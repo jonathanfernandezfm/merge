@@ -1,7 +1,6 @@
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
 import {
   deriveWorkTaskStatus,
-  WORK_TASK_STATUSES,
   workTaskPullRequestFromSnapshot,
   workTaskStatusInputs,
   workTaskThreadState,
@@ -276,83 +275,6 @@ export function linkedWorkTasksByKey(
     }
   }
   return linked;
-}
-
-const WORK_TASK_SORTS = [
-  { value: "newest", label: "Newest" },
-  { value: "activity", label: "Recent activity" },
-  { value: "status", label: "Status" },
-] as const;
-export type WorkTaskSort = (typeof WORK_TASK_SORTS)[number]["value"];
-
-/** Status follows the task lifecycle; activity breaks ties so the task touched last leads. */
-function sortWorkTasks(
-  views: ReadonlyArray<WorkTaskView>,
-  sort: WorkTaskSort,
-): ReadonlyArray<WorkTaskView> {
-  if (sort === "newest") {
-    return views.toSorted((left, right) => right.task.createdAt.localeCompare(left.task.createdAt));
-  }
-  const rank = (view: WorkTaskView) =>
-    sort === "status" ? WORK_TASK_STATUSES.indexOf(view.status) : 0;
-  return views.toSorted((left, right) => rank(left) - rank(right) || byActivity(left, right));
-}
-
-function workTaskMatchesQuery(task: EnvironmentWorkTask, query: string): boolean {
-  return (
-    task.title.toLowerCase().includes(query) || task.workspace.branch.toLowerCase().includes(query)
-  );
-}
-
-export interface WorkTaskProjectGroup {
-  readonly key: string;
-  readonly environmentId: EnvironmentId;
-  readonly projectId: EnvironmentWorkTask["projectId"];
-  readonly title: string;
-  readonly views: ReadonlyArray<WorkTaskView>;
-}
-
-/**
- * The sidebar's project groups: every visible project with its active tasks in the chosen
- * order. Searching narrows to projects with a task whose title or branch matches, hidden
- * projects included, so a match never disappears. Archived tasks never show.
- */
-export function groupSidebarWorkTasks(input: {
-  readonly views: Iterable<WorkTaskView>;
-  readonly projects: ReadonlyArray<{
-    readonly environmentId: EnvironmentId;
-    readonly id: EnvironmentWorkTask["projectId"];
-    readonly title: string;
-  }>;
-  readonly hiddenProjectKeys: ReadonlySet<string>;
-  readonly query: string;
-  readonly sort: WorkTaskSort;
-}): ReadonlyArray<WorkTaskProjectGroup> {
-  const query = input.query.trim().toLowerCase();
-  const searching = query.length > 0;
-  const byProject = new Map<string, WorkTaskView[]>();
-  for (const view of input.views) {
-    if (view.task.archivedAt !== null) continue;
-    if (searching && !workTaskMatchesQuery(view.task, query)) continue;
-    const key = `${view.task.environmentId}:${view.task.projectId}`;
-    const list = byProject.get(key);
-    if (list === undefined) byProject.set(key, [view]);
-    else list.push(view);
-  }
-  return input.projects.flatMap((project) => {
-    const key = `${project.environmentId}:${project.id}`;
-    const views = byProject.get(key) ?? [];
-    if (searching ? views.length === 0 : input.hiddenProjectKeys.has(key)) return [];
-    return [
-      {
-        key,
-        environmentId: project.environmentId,
-        projectId: project.id,
-        title: project.title,
-        views: sortWorkTasks(views, input.sort),
-      },
-    ];
-  });
 }
 
 export type WorkTaskMenuId =
