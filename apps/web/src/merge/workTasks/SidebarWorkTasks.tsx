@@ -250,6 +250,8 @@ export const SidebarWorkTasks = memo(function SidebarWorkTasks({
                   <button
                     type="button"
                     aria-expanded={projectOpen}
+                    // Distinct from the project's own folder button in the Threads list.
+                    aria-label={`Work Tasks in ${group.title}`}
                     disabled={searching}
                     onClick={() =>
                       setProjectExpanded((value) => ({ ...value, [group.key]: !projectOpen }))
