@@ -75,8 +75,6 @@ export class WorkTaskInsights extends Context.Service<
   {
     /** The latest snapshot first, then each new one. */
     readonly stream: Stream.Stream<WorkTaskInsightsSnapshot>;
-    /** Re-reads the task's work item now; PR facts still keep their 2-minute cache. */
-    readonly refresh: (taskId: WorkTaskId) => Effect.Effect<void>;
     readonly workItem: (taskId: WorkTaskId) => Effect.Effect<{
       readonly item: WorkItem;
       readonly details: WorkItemDetails | null;
@@ -98,11 +96,15 @@ export const make = Effect.fn("WorkTaskInsights.make")(function* (
   const projections = yield* ProjectionStore.ProjectionStoreV2;
   const pullRequests = yield* PullRequestService;
   const snapshot = yield* SubscriptionRef.make<WorkTaskInsightsSnapshot>({ insights: [] });
-  // The change stream, the tick and `refresh` must not run passes at once.
+  // The change stream and the tick must not run passes at once.
   const lock = yield* Semaphore.make(1);
   const workItems = new Map<string, Cached<WorkItemEntry | null>>();
   const facts = new Map<string, Cached<WorkTaskPullRequestFacts | null>>();
   const logged = new Map<string, number>();
+  // `syncedAt` moves on every PR re-read; only a real change is worth sending to every client.
+  const comparable = (insights: WorkTaskInsightsSnapshot["insights"]) =>
+    JSON.stringify(insights, (key, value) => (key === "syncedAt" ? undefined : value));
+  let published = comparable([]);
 
   const cached = Effect.fn("WorkTaskInsights.cached")(function* <A>(
     cache: Map<string, Cached<A>>,
@@ -148,7 +150,13 @@ export const make = Effect.fn("WorkTaskInsights.make")(function* (
         Effect.map(({ root, rootDetails, source }) =>
           root === null || source === null ? null : { item: root, details: rootDetails, source },
         ),
-        Effect.catchCause(orNull(task.id, "work item")),
+        // A blip keeps the last good item rather than ungrouping the task for 10 minutes.
+        Effect.catchCause((cause) =>
+          orNull(
+            task.id,
+            "work item",
+          )(cause).pipe(Effect.map(() => workItems.get(task.id)?.value ?? null)),
+        ),
       ),
     );
   };
@@ -239,6 +247,9 @@ export const make = Effect.fn("WorkTaskInsights.make")(function* (
             }).pipe(Effect.map((parts) => ({ taskId: task.id, ...parts }))),
           { concurrency: 4 },
         );
+        const next = comparable(insights);
+        if (next === published) return;
+        published = next;
         yield* SubscriptionRef.set(snapshot, { insights });
       }),
     )
@@ -255,11 +266,6 @@ export const make = Effect.fn("WorkTaskInsights.make")(function* (
     yield* forkParked(Effect.forever(Effect.sleep("1 minute").pipe(Effect.andThen(pass))));
   });
 
-  const refresh = Effect.fn("WorkTaskInsights.refresh")(function* (taskId: WorkTaskId) {
-    workItems.delete(taskId);
-    yield* pass;
-  });
-
   const workItem = Effect.fn("WorkTaskInsights.workItem")(function* (taskId: WorkTaskId) {
     const task = yield* store.get(taskId).pipe(Effect.catchCause(orNull(taskId, "work task")));
     if (task === null || task.archivedAt !== null) return null;
@@ -269,7 +275,6 @@ export const make = Effect.fn("WorkTaskInsights.make")(function* (
 
   return WorkTaskInsights.of({
     stream: SubscriptionRef.changes(snapshot),
-    refresh,
     workItem,
     start,
   });
