@@ -339,5 +339,15 @@
     "id": "worktree-path",
     "file": "apps/server/src/vcs/GitVcsDriverCore.ts",
     "purpose": "Worktree folder names replace every URL-significant character (like #), not only '/', so dev servers can load files from them"
+  },
+  {
+    "id": "settle-skip-work-tasks",
+    "file": "apps/server/src/orchestration-v2/ThreadSettlementService.ts",
+    "purpose": "Work Task threads never auto-settle"
+  },
+  {
+    "id": "shell-keep-work-task-threads",
+    "file": "apps/server/src/orchestration-v2/ShellStream.ts",
+    "purpose": "Shell snapshot always includes Work Task threads, even older settled ones"
   }
 ]

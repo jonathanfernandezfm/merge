@@ -16,6 +16,7 @@ import * as SqlClient from "effect/sql/SqlClient";
 import * as ServerConfig from "../../config.ts";
 import { runMigrations } from "../../persistence/Migrations.ts";
 import * as SqlitePersistence from "../../persistence/Sqlite.ts";
+import { mergeWorkTaskThreadIds } from "./linkedThreadIds.ts";
 import * as WorkTaskStore from "./WorkTaskStore.ts";
 
 const REAL_SNAPSHOT = "/tmp/merge-resync/state.sqlite";
@@ -174,6 +175,31 @@ describe("WorkTaskStore", () => {
         SELECT folder_id FROM merge_thread_links WHERE thread_id = 'thread-b'
       `;
       assert.strictEqual(folder?.folder_id, "folder-1");
+    }).pipe(Effect.provide(layer)),
+  );
+
+  it.effect("keeps mergeWorkTaskThreadIds in step with links of non-deleted tasks", () =>
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* insertLegacyTask("task-live");
+      yield* insertLegacyTask("task-archived", { archivedAt: "2026-10-20T00:00:00.000Z" });
+      yield* insertLegacyTask("task-deleted", { deletedAt: "2026-10-20T00:00:00.000Z" });
+      yield* sql`
+        INSERT INTO merge_thread_links (thread_id, task_id, origin, updated_at) VALUES
+          ('thread-live', 'task-live', 'user', '2026-01-01T00:00:00.000Z'),
+          ('thread-archived', 'task-archived', 'user', '2026-01-01T00:00:00.000Z'),
+          ('thread-deleted', 'task-deleted', 'user', '2026-01-01T00:00:00.000Z')
+      `;
+      // Startup reads the links already on disk.
+      const store = yield* WorkTaskStore.make;
+      assert.isTrue(mergeWorkTaskThreadIds.has("thread-live"));
+      assert.isTrue(mergeWorkTaskThreadIds.has("thread-archived"));
+      assert.isFalse(mergeWorkTaskThreadIds.has("thread-deleted"));
+
+      yield* store.link(ThreadId.make("thread-new"), WorkTaskId.make("task-live"), "user");
+      assert.isTrue(mergeWorkTaskThreadIds.has("thread-new"));
+      yield* store.unlink(ThreadId.make("thread-live"));
+      assert.isFalse(mergeWorkTaskThreadIds.has("thread-live"));
     }).pipe(Effect.provide(layer)),
   );
 

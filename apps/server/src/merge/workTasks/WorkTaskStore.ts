@@ -20,6 +20,8 @@ import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import * as SqlClient from "effect/sql/SqlClient";
 
+import { setMergeWorkTaskThreadIds } from "./linkedThreadIds.ts";
+
 /** `projection_tasks` as v0.0.10 wrote it; `auto_handle_ci_failures` is unused. */
 const WorkTaskDbRow = Schema.Struct({
   ...WorkTask.fields,
@@ -282,6 +284,19 @@ export const make = Effect.gen(function* () {
       }),
     );
 
+  // Archived tasks count, so their threads keep their history; deleted ones do not.
+  const refreshLinkedThreadIds = sql<{ readonly threadId: string }>`
+    SELECT l.thread_id AS "threadId" FROM merge_thread_links l
+    JOIN projection_tasks t ON t.task_id = l.task_id AND t.deleted_at IS NULL
+  `.pipe(
+    Effect.map((rows) => setMergeWorkTaskThreadIds(rows.map((row) => row.threadId))),
+    Effect.mapError(failed("Could not read Work Task links.")),
+  );
+  // A failed read at startup leaves the set empty rather than stopping the server.
+  yield* refreshLinkedThreadIds.pipe(
+    Effect.catch((cause) => Effect.logWarning("Could not read Work Task thread links.", cause)),
+  );
+
   const links = () =>
     selectLinks(undefined).pipe(Effect.mapError(failed("Could not read Work Task links.")));
 
@@ -300,6 +315,7 @@ export const make = Effect.gen(function* () {
         review_watch = CASE WHEN task_id IS excluded.task_id THEN review_watch END,
         task_id = excluded.task_id, origin = excluded.origin, updated_at = excluded.updated_at
     `.pipe(Effect.mapError(failed("Could not link the thread.")));
+    yield* refreshLinkedThreadIds;
     yield* notify;
   });
 
@@ -309,6 +325,7 @@ export const make = Effect.gen(function* () {
       UPDATE merge_thread_links SET task_id = NULL, updated_at = ${now}
       WHERE thread_id = ${threadId}
     `.pipe(Effect.mapError(failed("Could not unlink the thread.")));
+    yield* refreshLinkedThreadIds;
     yield* notify;
   });
 

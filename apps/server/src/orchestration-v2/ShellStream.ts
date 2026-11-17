@@ -32,6 +32,7 @@ import type * as SqlClient from "effect/sql/SqlClient";
 import * as Stream from "effect/Stream";
 
 import { bufferLatestLiveStream } from "./LiveStreamBudget.ts";
+import { mergeWorkTaskThreadIds } from "../merge/workTasks/linkedThreadIds.ts"; // merge-seam: shell-keep-work-task-threads
 import type { ActiveShellIndexEntry } from "./ProjectionStore.ts";
 
 type ShellDelta = Extract<OrchestrationV2ShellStreamItem, { readonly sequence: number }>;
@@ -177,6 +178,7 @@ function omitOlderSettledShellsWith(
     (thread) =>
       !isOlderSettledThreadShell(thread, beforeMs) ||
       thread.pinnedAt != null ||
+      mergeWorkTaskThreadIds.has(thread.id) || // merge-seam: shell-keep-work-task-threads
       (thread.snoozedUntil != null && DateTime.toEpochMillis(thread.snoozedUntil) > nowMs) ||
       isLiveSubagentShell(thread) ||
       ancestorIds.has(thread.id) ||
@@ -292,6 +294,7 @@ function shellSubscriberThreadIds(
           beforeMs === undefined ||
           !isOlderSettledThreadShell(entry, beforeMs) ||
           entry.pinnedAt != null ||
+          mergeWorkTaskThreadIds.has(entry.id) || // merge-seam: shell-keep-work-task-threads
           entry.snoozedUntil != null ||
           entry.mayBeLive ||
           entry.hasRemoteTasks ||
