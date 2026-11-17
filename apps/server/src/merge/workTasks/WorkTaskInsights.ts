@@ -143,11 +143,19 @@ export const make = Effect.fn("WorkTaskInsights.make")(function* (
       facts,
       `${link.host}/${link.repository}#${link.number}`,
       PULL_REQUEST_TTL_MS,
-      Effect.all([pullRequests.detail(ref), pullRequests.activity(ref), DateTime.now], {
-        concurrency: "unbounded",
-      }).pipe(
-        Effect.map(([detail, activity, now]) =>
-          pullRequestFacts(detail, activity, DateTime.formatIso(now)),
+      Effect.all(
+        [
+          pullRequests.detail(ref),
+          // Only the summary carries the review decision. allowStale: false skips the held
+          // summary, which would keep an old vote; the 2-minute cache bounds these reads.
+          pullRequests.summary({ ...ref, allowStale: false }),
+          pullRequests.activity(ref),
+          DateTime.now,
+        ],
+        { concurrency: "unbounded" },
+      ).pipe(
+        Effect.map(([detail, summary, activity, now]) =>
+          pullRequestFacts(detail, summary, activity, DateTime.formatIso(now)),
         ),
         Effect.catchCause(orNull(task.id, "pull request facts")),
       ),

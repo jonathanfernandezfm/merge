@@ -2,6 +2,7 @@ import type {
   PullRequestActivity,
   PullRequestCheck,
   PullRequestDetail,
+  PullRequestSummary,
   WorkTaskPullRequestFacts,
 } from "@t3tools/contracts";
 
@@ -24,14 +25,16 @@ export const countUnresolvedThreads = (activity: Threads): number =>
   [...activity.reviewThreads, ...(activity.overviewThreads ?? [])].filter((t) => !t.isResolved)
     .length;
 
+/** Detail carries no review decision; the summary does (on Azure DevOps via the fork's provider). */
 export const pullRequestFacts = (
   detail: PullRequestDetail,
+  summary: Pick<PullRequestSummary, "reviewDecision">,
   activity: Threads,
   syncedAt: string,
 ): WorkTaskPullRequestFacts => ({
   number: detail.number,
   review:
-    detail.reviewDecision === "review-required" ? "pending" : (detail.reviewDecision ?? "none"),
+    summary.reviewDecision === "review-required" ? "pending" : (summary.reviewDecision ?? "none"),
   checks: rollupChecks(detail.checks),
   mergeConflicts: detail.mergeability === "conflicting",
   unresolvedComments: countUnresolvedThreads(activity),

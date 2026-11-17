@@ -99,6 +99,7 @@ const harness = (options: {
   readonly tasks: ReadonlyArray<WorkTask>;
   readonly prState?: "open" | "merged";
   readonly workItemsFail?: boolean;
+  readonly reviewDecision?: "approved" | "changes-requested";
 }) => {
   const calls = { detail: 0, workItems: 0 };
   const shells = new Map(
@@ -138,11 +139,11 @@ const harness = (options: {
         calls.detail++;
         return {
           number: 7,
-          reviewDecision: "approved",
           mergeability: "mergeable",
           checks: [],
         } as unknown as PullRequestDetail;
       }),
+    summary: () => Effect.succeed({ reviewDecision: options.reviewDecision ?? "approved" }),
     activity: () => Effect.succeed({ reviewThreads: [], overviewThreads: [] }),
   } as never);
   const service = Layer.effect(
@@ -192,6 +193,18 @@ it.effect("an open PR yields facts and a refresh within 2 minutes reuses them", 
     });
   }).pipe(Effect.provide(service));
 });
+
+it.effect("the summary's review decision reaches the facts", () =>
+  Effect.forEach(["approved", "changes-requested"] as const, (reviewDecision) => {
+    const { service } = harness({ tasks: [task("a")], prState: "open", reviewDecision });
+    return Effect.gen(function* () {
+      const insights = yield* WorkTaskInsights.WorkTaskInsights;
+      yield* insights.refresh(WorkTaskId.make("a"));
+      const snapshot = yield* latest;
+      assert.equal(snapshot!.insights[0]?.pullRequest?.review, reviewDecision);
+    }).pipe(Effect.provide(service));
+  }),
+);
 
 it.effect("a work item failure gives workItem null and keeps the PR facts", () => {
   const { service } = harness({ tasks: [task("a")], prState: "open", workItemsFail: true });

@@ -56,7 +56,8 @@ describe("pullRequestFacts", () => {
     }) as unknown as PullRequestDetail;
   it("maps review-required to pending", () => {
     const f = pullRequestFacts(
-      detail({ reviewDecision: "review-required" }),
+      detail({}),
+      { reviewDecision: "review-required" },
       { reviewThreads: [], overviewThreads: [] },
       "2026-11-17T00:00:00.000Z",
     );
@@ -71,8 +72,30 @@ describe("pullRequestFacts", () => {
   });
   it("missing decision is none", () => {
     assert.equal(
-      pullRequestFacts(detail({}), { reviewThreads: [] }, "2026-11-17T00:00:00.000Z").review,
+      pullRequestFacts(detail({}), {}, { reviewThreads: [] }, "2026-11-17T00:00:00.000Z").review,
       "none",
     );
+    assert.equal(
+      pullRequestFacts(
+        detail({}),
+        { reviewDecision: null },
+        { reviewThreads: [] },
+        "2026-11-17T00:00:00.000Z",
+      ).review,
+      "none",
+    );
+  });
+  it("approved and changes-requested pass through", () => {
+    for (const decision of ["approved", "changes-requested"] as const) {
+      assert.equal(
+        pullRequestFacts(
+          detail({}),
+          { reviewDecision: decision },
+          { reviewThreads: [] },
+          "2026-11-17T00:00:00.000Z",
+        ).review,
+        decision,
+      );
+    }
   });
 });
