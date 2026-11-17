@@ -1,4 +1,9 @@
-import { WorkTaskOperationError, type WorkTask, type WorkTaskId } from "@t3tools/contracts";
+import {
+  stripWorkItemPrefixes,
+  WorkTaskOperationError,
+  type WorkTask,
+  type WorkTaskId,
+} from "@t3tools/contracts";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -11,15 +16,6 @@ import { WorkTaskStore } from "./WorkTaskStore.ts";
 
 const INSTRUCTIONS =
   "Name this work item for a sidebar in plain words: at most 6 words, sentence case, no ticket numbers, customer codes or prefixes.";
-
-/** "#607374 MXC00463 - Foo" gives "Foo". A title that would end up empty stays as it is. */
-export const stripWorkItemPrefixes = (title: string): string => {
-  const stripped = title
-    .replace(/^\s*#?\d+\s*(?:[A-Z]{2,}\d+\s*)?[-:]?\s*/, "")
-    .replace(/^\s*[A-Z]{2,}\d+\s*[-:]\s*/, "")
-    .trim();
-  return stripped === "" ? title : stripped;
-};
 
 const htmlToText = (html: string): string =>
   html

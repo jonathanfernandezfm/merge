@@ -47,10 +47,25 @@ export function SidebarWorkTaskItems({
   onContextMenu: (item: WorkTaskItem, position: { x: number; y: number }) => void;
 }) {
   const [shelves, setShelves] = useLocalStorage(SHELVES_KEY, DEFAULT_SHELVES, ShelvesSchema);
+  // Read once here, not per row, so a project or link change does not wake every row.
+  const projects = useProjects();
+  const linkedByKey = useLinkedWorkTasks();
+  const linkedProjectsOf = (key: string) =>
+    linkedByKey
+      .get(key)
+      ?.map(
+        (sibling) =>
+          projects.find(
+            (project) =>
+              project.environmentId === sibling.environmentId && project.id === sibling.projectId,
+          )?.title ?? sibling.title,
+      )
+      .join(", ");
   const row = (item: WorkTaskItem) => (
     <SidebarWorkTaskItemRow
       key={item.key}
       item={item}
+      linkedProjects={linkedProjectsOf(leadMember(item).view.key)}
       active={item.members.some((member) => member.view.key === activeKey)}
       onOpen={onOpen}
       onContextMenu={onContextMenu}
@@ -84,24 +99,27 @@ export function SidebarWorkTaskItems({
   );
 }
 
+/** The member that decides the glyph and status; the label describes the same one. */
+const leadMember = (item: WorkTaskItem) =>
+  item.members.find(
+    (member) => member.view.status === item.status && member.unseen === item.unseen,
+  ) ?? item.members[0]!;
+
 const SidebarWorkTaskItemRow = memo(function SidebarWorkTaskItemRow({
   item,
+  linkedProjects,
   active,
   onOpen,
   onContextMenu,
 }: {
   item: WorkTaskItem;
+  /** Titles of the projects the shown task is also in. */
+  linkedProjects: string | undefined;
   active: boolean;
   onOpen: (view: WorkTaskView) => void;
   onContextMenu: (item: WorkTaskItem, position: { x: number; y: number }) => void;
 }) {
-  const projects = useProjects();
-  const linkedByKey = useLinkedWorkTasks();
-  // The member that decides the glyph and status; the label describes the same one.
-  const lead =
-    item.members.find(
-      (member) => member.view.status === item.status && member.unseen === item.unseen,
-    ) ?? item.members[0]!;
+  const lead = leadMember(item);
   // The task a click opens: the one touched last.
   const latest = latestWorkTaskMember(item).view;
   const shown = lead.view;
@@ -117,16 +135,6 @@ const SidebarWorkTaskItemRow = memo(function SidebarWorkTaskItemRow({
       (terminalSessions ?? []).filter((session) => threadIds.has(session.target.threadId)),
     ),
   );
-  const linkedProjects = linkedByKey
-    .get(shown.key)
-    ?.map(
-      (sibling) =>
-        projects.find(
-          (project) =>
-            project.environmentId === sibling.environmentId && project.id === sibling.projectId,
-        )?.title ?? sibling.title,
-    )
-    .join(", ");
   const status = WORK_TASK_STATUS_PRESENTATION[shown.status];
   const detail = [
     item.unseen ? UNSEEN_RESPONSE_PRESENTATION.label : null,

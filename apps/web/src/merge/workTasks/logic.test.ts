@@ -16,6 +16,7 @@ import {
   loadedWorkTasks,
   remoteBranchOf,
   threadsOutsideWorkTasks,
+  keepInsightIdentities,
   workTaskboardColumnForStatus,
   workTaskKey,
   workTaskItemMenuItems,
@@ -363,6 +364,12 @@ describe("workTaskItemMenuItems", () => {
     expect(items.find((item) => item.id === "open-linked:0")?.label).toBe("Open in Ui");
   });
 
+  it("disables rename with AI without a work item to name from", () => {
+    const items = workTaskItemMenuItems({ ...menuItem([{ id: "a" }]), workItem: null });
+    expect(items.find((item) => item.id === "rename-ai")?.disabled).toBe(true);
+    expect(items.find((item) => item.id === "rename")?.disabled).toBe(false);
+  });
+
   it("disables edits when archived or read-only", () => {
     const readOnly = workTaskItemMenuItems(menuItem([{ id: "a", pr: true }], "u"), {
       canOperate: false,
@@ -459,5 +466,45 @@ describe("threadsOutsideWorkTasks", () => {
     const keys = workTaskThreadKeys(new Map([[ENV, [link("task-thread", "t1")]]]));
     expect(threadsOutsideWorkTasks(threads, keys).map((thread) => thread.id)).toEqual(["free"]);
     expect(threadsOutsideWorkTasks(threads, workTaskThreadKeys(new Map()))).toBe(threads);
+  });
+});
+
+describe("keepInsightIdentities", () => {
+  const insight = (id: string, review: "approved" | "pending") => ({
+    taskId: WorkTaskId.make(id),
+    workItem: null,
+    pullRequest: {
+      number: 7 as never,
+      review,
+      checks: "passing" as const,
+      mergeConflicts: false,
+      unresolvedComments: 0 as never,
+      syncedAt: "2026-10-01T10:00:00.000Z" as never,
+    },
+  });
+
+  it("keeps the previous map when a fresh message carries equal values", () => {
+    const previous = new Map([["a", insight("a", "pending")]]);
+    expect(keepInsightIdentities(previous, new Map([["a", insight("a", "pending")]]))).toBe(
+      previous,
+    );
+  });
+
+  it("keeps unchanged entries and takes changed ones", () => {
+    const previous = new Map([
+      ["a", insight("a", "pending")],
+      ["b", insight("b", "pending")],
+    ]);
+    const changed = insight("b", "approved");
+    const next = keepInsightIdentities(
+      previous,
+      new Map([
+        ["a", insight("a", "pending")],
+        ["b", changed],
+      ]),
+    );
+    expect(next).not.toBe(previous);
+    expect(next.get("a")).toBe(previous.get("a"));
+    expect(next.get("b")).toBe(changed);
   });
 });

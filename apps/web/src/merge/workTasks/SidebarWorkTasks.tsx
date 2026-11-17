@@ -16,10 +16,11 @@ import {
 } from "~/components/ui/menu";
 import { SidebarGroup, useSidebar } from "~/components/ui/sidebar";
 import { useLocalStorage } from "~/hooks/useLocalStorage";
+import { useStableCallback } from "~/hooks/useStableCallback";
 import { cn } from "~/lib/utils";
 import { useProjects } from "~/state/entities";
 import { useOpenWorkTask, useWorkTaskContextMenu } from "./actions";
-import { workTaskKey } from "./logic";
+import { workTaskKey, type WorkTaskView } from "./logic";
 import { SidebarWorkTaskItems } from "./SidebarWorkTaskItems";
 import { useThreadWorkTask, useWorkTaskItems } from "./state";
 import { openNewWorkTaskDialog } from "./WorkTaskDialogs";
@@ -100,7 +101,12 @@ export const SidebarWorkTasks = memo(function SidebarWorkTasks({
     if (isMobile) setOpenMobile(false);
   };
   const openWorkTask = useOpenWorkTask();
-  const openContextMenu = useWorkTaskContextMenu(closeMobileSidebar);
+  // Stable, so the memoized rows skip re-rendering when only the list around them changes.
+  const openContextMenu = useStableCallback(useWorkTaskContextMenu(closeMobileSidebar));
+  const onOpen = useStableCallback((target: WorkTaskView) => {
+    closeMobileSidebar();
+    openWorkTask(target);
+  });
 
   // Keep the header while projects are hidden; it holds the way back.
   if (items.length === 0 && (searching || hiddenCount === 0)) return null;
@@ -179,10 +185,7 @@ export const SidebarWorkTasks = memo(function SidebarWorkTasks({
           items={items}
           activeKey={activeKey}
           forceExpanded={searching}
-          onOpen={(target) => {
-            closeMobileSidebar();
-            openWorkTask(target);
-          }}
+          onOpen={onOpen}
           onContextMenu={openContextMenu}
         />
       ) : null}

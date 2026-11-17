@@ -1,4 +1,5 @@
 import {
+  stripWorkItemPrefixes,
   WORK_TASK_STATUS_URGENCY,
   workTaskSection,
   type WorkTaskInsight,
@@ -34,6 +35,13 @@ const WORK_TASK_SECTIONS: ReadonlyArray<WorkTaskSection> = [
   "review",
   "done",
 ];
+
+/** Branch-made titles of older tasks carry the ADO number, which rows never show. */
+const displayTitle = ({ title, titleSource }: WorkTaskView["task"]): string => {
+  if (titleSource === "user") return title;
+  const stripped = stripWorkItemPrefixes(title);
+  return /^#?\d+$/.test(stripped) ? title : stripped;
+};
 
 const sectionRank = (section: WorkTaskSection) => WORK_TASK_SECTIONS.indexOf(section);
 
@@ -96,7 +104,7 @@ export function groupWorkTaskItems(input: {
     return {
       key,
       workItem: members.find((member) => member.insight?.workItem)?.insight?.workItem ?? null,
-      title: titled.view.task.title,
+      title: displayTitle(titled.view.task),
       section: workTaskSection(lead.view.status, lead.unseen),
       status: lead.view.status,
       unseen: lead.unseen,

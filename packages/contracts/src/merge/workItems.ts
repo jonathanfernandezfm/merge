@@ -101,3 +101,12 @@ export const WorkItemsError = Schema.Union([
   SourceControlRepositoryError,
   EnvironmentAuthorizationError,
 ]);
+
+/** "#607374 MXC00463 - Foo" gives "Foo". A title that would end up empty stays as it is. */
+export const stripWorkItemPrefixes = (title: string): string => {
+  const stripped = title
+    .replace(/^\s*#?\d+\s*(?:[A-Z]{2,}\d+\s*)?[-:]?\s*/, "")
+    .replace(/^\s*[A-Z]{2,}\d+\s*[-:]\s*/, "")
+    .trim();
+  return stripped === "" ? title : stripped;
+};

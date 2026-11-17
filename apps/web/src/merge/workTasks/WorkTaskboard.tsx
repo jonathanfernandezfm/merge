@@ -28,7 +28,7 @@ import {
   type WorkTaskView,
 } from "./logic";
 import { ToneDot, WorkTaskStatusLabel } from "./presentation";
-import { useWorkTaskViews } from "./state";
+import { useWorkTaskInsights, useWorkTaskViews } from "./state";
 import { WORK_TASK_STATUS_PRESENTATION } from "./statusPresentation";
 import { openNewWorkTaskDialog } from "./WorkTaskDialogs";
 
@@ -56,6 +56,7 @@ const PULL_REQUEST_STATE: Readonly<
 /** Every Work Task across projects and environments, one card each, by what it needs next. */
 export function WorkTaskboard() {
   const views = useWorkTaskViews();
+  const insights = useWorkTaskInsights();
   const projects = useProjects();
   const openWorkTask = useOpenWorkTask();
   const openItemContextMenu = useWorkTaskContextMenu();
@@ -82,7 +83,7 @@ export function WorkTaskboard() {
     void openItemContextMenu(
       groupWorkTaskItems({
         views: [view],
-        insights: new Map(),
+        insights,
         repoName: ({ task }) =>
           projectNames.get(`${task.environmentId}:${task.projectId}`) ?? "Unknown project",
         unseen: () => false,

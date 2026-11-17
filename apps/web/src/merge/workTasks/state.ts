@@ -28,6 +28,7 @@ import { useProjects } from "~/state/entities";
 import { environmentThreadShells } from "~/state/threads";
 import {
   buildWorkTaskViews,
+  keepInsightIdentities,
   linkedWorkTasksByKey,
   workTaskIdOfThread,
   loadedWorkTasks,
@@ -181,12 +182,8 @@ const workTaskInsightsAtom = Atom.make((get) => {
       next.set(workTaskKey(environmentId, insight.taskId), insight);
     }
   }
-  const unchanged =
-    previousInsights.size === next.size &&
-    [...next].every(([key, value]) => previousInsights.get(key) === value);
-  if (unchanged) return previousInsights;
-  previousInsights = next;
-  return next;
+  previousInsights = keepInsightIdentities(previousInsights, next);
+  return previousInsights;
 }).pipe(Atom.withLabel("merge-work-task-insights"));
 
 let previousViews: ReadonlyMap<string, WorkTaskView> = new Map();
@@ -238,6 +235,10 @@ const linkedWorkTasksAtom = Atom.make((get) => {
 
 export function useWorkTaskViews(): ReadonlyMap<string, WorkTaskView> {
   return useAtomValue(workTaskViewsAtom);
+}
+
+export function useWorkTaskInsights(): ReadonlyMap<string, WorkTaskInsight> {
+  return useAtomValue(workTaskInsightsAtom);
 }
 
 /**

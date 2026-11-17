@@ -279,6 +279,25 @@ export function linkedWorkTasksByKey(
   return linked;
 }
 
+/**
+ * `next` with each insight equal by value to the previous one kept as that object, and the
+ * previous map itself when nothing changed: every WS message decodes to new objects.
+ */
+export function keepInsightIdentities(
+  previous: ReadonlyMap<string, WorkTaskInsight>,
+  next: ReadonlyMap<string, WorkTaskInsight>,
+): ReadonlyMap<string, WorkTaskInsight> {
+  let changed = previous.size !== next.size;
+  const kept = new Map<string, WorkTaskInsight>();
+  for (const [key, value] of next) {
+    const before = previous.get(key);
+    const same = before !== undefined && JSON.stringify(before) === JSON.stringify(value);
+    if (!same) changed = true;
+    kept.set(key, same ? before : value);
+  }
+  return changed ? kept : previous;
+}
+
 /** The member a click opens and "copy branch" reads: the one touched last. */
 export function latestWorkTaskMember(item: WorkTaskItem): WorkTaskItemMember {
   return item.members.reduce((best, member) =>
@@ -349,7 +368,8 @@ export function workTaskItemMenuItems(
       separatorBefore: index === 0,
     })),
     { id: "rename", label: "Rename...", disabled: archived, separatorBefore: true },
-    { id: "rename-ai", label: "Rename with AI", disabled: archived },
+    // Naming reads the ADO item, so without one there is nothing to name from.
+    { id: "rename-ai", label: "Rename with AI", disabled: archived || item.workItem === null },
     tasks.some((task) => task.waitingForUserReason !== null)
       ? {
           id: "clear-waiting",

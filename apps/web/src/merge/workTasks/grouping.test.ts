@@ -98,6 +98,15 @@ describe("groupWorkTaskItems", () => {
     expect(group([view("a", "idle")], { a: null })[0]!.workItem).toBeNull();
   });
 
+  it("hides the ADO number in a title the user did not type", () => {
+    const [branch] = group([view("a", "working", { title: "#607374: Copy link" })], {});
+    expect(branch!.title).toBe("Copy link");
+    const [digits] = group([view("b", "working", { title: "#607374: 12" })], {});
+    expect(digits!.title).toBe("#607374: 12");
+    const [user] = group([view("c", "working", { title: "#1 keep", titleSource: "user" })], {});
+    expect(user!.title).toBe("#1 keep");
+  });
+
   it("prefers a user title over a newer generated one", () => {
     const [item] = group(
       [
