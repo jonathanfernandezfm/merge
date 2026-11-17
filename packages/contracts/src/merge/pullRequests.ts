@@ -2,6 +2,7 @@ import * as Schema from "effect/Schema";
 
 import { EnvironmentAuthorizationError } from "../auth.ts";
 import { NonNegativeInt, PositiveInt, TrimmedNonEmptyString } from "../baseSchemas.ts";
+import type { PullRequestReviewDecision } from "../pullRequest.ts";
 import { SourceControlRepositoryError } from "../sourceControl.ts";
 
 /**
@@ -60,4 +61,40 @@ export function decodeExpiredPolicyEvaluationIds(raw: string): ReadonlyArray<str
     if (id && evaluation.value.context?.isExpired === true) ids.push(id);
   }
   return ids;
+}
+
+const decodeReviewers = Schema.decodeUnknownExit(
+  Schema.fromJsonString(
+    Schema.Struct({
+      reviewers: Schema.optional(
+        Schema.NullOr(
+          Schema.Array(
+            Schema.Struct({
+              vote: Schema.optional(Schema.NullOr(Schema.Number)),
+              isRequired: Schema.optional(Schema.NullOr(Schema.Boolean)),
+            }),
+          ),
+        ),
+      ),
+    }),
+  ),
+);
+
+/**
+ * Votes on `az repos pr show` as Azure's completion gate reads them (10/5 approve, -5/-10 hold).
+ * Null with no reviewers, undefined when unreadable. Shared by the ADO package and Work Task insights.
+ */
+export function decodeAzureDevOpsReviewDecision(
+  raw: string,
+): PullRequestReviewDecision | null | undefined {
+  const decoded = decodeReviewers(raw);
+  if (decoded._tag === "Failure") return undefined;
+  const reviewers = decoded.value.reviewers ?? [];
+  if (reviewers.length === 0) return null;
+  const voteOf = (reviewer: (typeof reviewers)[number]) => reviewer.vote ?? 0;
+  if (reviewers.some((reviewer) => voteOf(reviewer) < 0)) return "changes-requested";
+  if (reviewers.some((reviewer) => reviewer.isRequired === true && voteOf(reviewer) < 5)) {
+    return "review-required";
+  }
+  return reviewers.some((reviewer) => voteOf(reviewer) >= 5) ? "approved" : "review-required";
 }

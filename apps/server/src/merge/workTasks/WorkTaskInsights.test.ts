@@ -100,8 +100,9 @@ const harness = (options: {
   readonly prState?: "open" | "merged";
   readonly workItemsFail?: boolean;
   readonly reviewDecision?: "approved" | "changes-requested";
+  readonly provider?: string;
 }) => {
-  const calls = { detail: 0, workItems: 0 };
+  const calls = { detail: 0, workItems: 0, votes: 0 };
   const shells = new Map(
     options.tasks.map((entry) => [
       `thread-${entry.id}`,
@@ -138,12 +139,15 @@ const harness = (options: {
       Effect.sync(() => {
         calls.detail++;
         return {
+          provider: options.provider ?? "azure-devops",
+          workspaceRoot: "/wt",
           number: 7,
           mergeability: "mergeable",
           checks: [],
         } as unknown as PullRequestDetail;
       }),
-    summary: () => Effect.succeed({ reviewDecision: options.reviewDecision ?? "approved" }),
+    // The held summary: only non-ADO hosts read their decision from it.
+    summary: () => Effect.succeed({ reviewDecision: "changes-requested" }),
     activity: () => Effect.succeed({ reviewThreads: [], overviewThreads: [] }),
   } as never);
   const service = Layer.effect(
@@ -162,6 +166,11 @@ const harness = (options: {
               )
             : Effect.succeed(workItems);
         }),
+      readReviewDecision: () =>
+        Effect.sync(() => {
+          calls.votes++;
+          return options.reviewDecision ?? "approved";
+        }),
     }),
   ).pipe(Layer.provide(Layer.mergeAll(store, projections, pullRequests)));
   return { calls, service };
@@ -179,6 +188,7 @@ it.effect("an open PR yields facts and a refresh within 2 minutes reuses them", 
     yield* insights.refresh(WorkTaskId.make("a"));
     const snapshot = yield* latest;
     assert.equal(calls.detail, 1);
+    assert.equal(calls.votes, 1);
     const [entry] = snapshot!.insights;
     assert.equal(entry?.pullRequest?.number, 7);
     assert.equal(entry?.pullRequest?.review, "approved");
@@ -205,6 +215,17 @@ it.effect("the summary's review decision reaches the facts", () =>
     }).pipe(Effect.provide(service));
   }),
 );
+
+it.effect("a non-ADO PR takes the decision from the held summary, without az", () => {
+  const { calls, service } = harness({ tasks: [task("a")], prState: "open", provider: "github" });
+  return Effect.gen(function* () {
+    const insights = yield* WorkTaskInsights.WorkTaskInsights;
+    yield* insights.refresh(WorkTaskId.make("a"));
+    const snapshot = yield* latest;
+    assert.equal(snapshot!.insights[0]?.pullRequest?.review, "changes-requested");
+    assert.equal(calls.votes, 0);
+  }).pipe(Effect.provide(service));
+});
 
 it.effect("a work item failure gives workItem null and keeps the PR facts", () => {
   const { service } = harness({ tasks: [task("a")], prState: "open", workItemsFail: true });
@@ -242,5 +263,6 @@ it.effect("a merged PR yields pullRequest null", () => {
     const snapshot = yield* latest;
     assert.equal(snapshot!.insights[0]?.pullRequest, null);
     assert.equal(calls.detail, 0);
+    assert.equal(calls.votes, 0);
   }).pipe(Effect.provide(service));
 });

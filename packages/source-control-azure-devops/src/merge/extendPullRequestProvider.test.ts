@@ -189,14 +189,6 @@ describe("Azure DevOps pull request extensions", () => {
     }),
   );
 
-  it.effect("reads the reviewers' votes as an open summary's review decision", () =>
-    Effect.gen(function* () {
-      const provider = yield* make.pipe(Effect.provide(provide().layer));
-      const summary = yield* provider.getChangeRequestSummary!(REF);
-      expect(summary.reviewDecision).toBe("changes-requested");
-    }),
-  );
-
   it.effect("re-queues expired builds after auto-complete is turned on, and only then", () =>
     Effect.gen(function* () {
       const { calls, actions, layer } = provide({ policies: EXPIRED_POLICIES });

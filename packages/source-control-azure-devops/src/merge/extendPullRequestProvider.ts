@@ -37,7 +37,6 @@ export const extendAzureDevOpsPullRequestProvider = Effect.fn(
   const azure = azureOption.value;
   const cli = cliOption.value;
   const getChangeRequest = provider.getChangeRequest;
-  const getChangeRequestSummary = provider.getChangeRequestSummary;
   const getChangeRequestActivity = provider.getChangeRequestActivity;
   const runAction = provider.runAction;
 
@@ -71,27 +70,6 @@ export const extendAzureDevOpsPullRequestProvider = Effect.fn(
     requeueExpiredAzureDevOpsChecks(azure, cwd, number);
 
   Object.assign(provider, {
-    // Work Task PR facts read the vote decision through PullRequestService.summary. Only an open PR
-    // pays the extra `pr show`; a closed one has no review to wait on.
-    ...(getChangeRequestSummary && {
-      getChangeRequestSummary: (input: Parameters<typeof getChangeRequestSummary>[0]) =>
-        getChangeRequestSummary(input).pipe(
-          Effect.filterOrElse(
-            (summary) => summary.reviewDecision != null || summary.state !== "open",
-            (summary) =>
-              readPullRequest(input.cwd, input.number).pipe(
-                Effect.map((shown) => {
-                  const decision = Option.isSome(shown)
-                    ? decodeReviewDecisionJson(shown.value)
-                    : Result.succeed(null);
-                  return Result.isSuccess(decision) && decision.success !== null
-                    ? { ...summary, reviewDecision: decision.success }
-                    : summary;
-                }),
-              ),
-          ),
-        ),
-    }),
     getChangeRequest: (input) =>
       Effect.all(
         [

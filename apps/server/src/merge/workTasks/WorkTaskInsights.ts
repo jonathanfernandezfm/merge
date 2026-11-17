@@ -1,5 +1,7 @@
 import {
+  decodeAzureDevOpsReviewDecision,
   workTaskPullRequestLink,
+  type PullRequestReviewDecision,
   type OrchestrationV2ThreadShell,
   type WorkItem,
   type WorkItemDetails,
@@ -24,7 +26,7 @@ import * as SubscriptionRef from "effect/SubscriptionRef";
 import * as ProjectionStore from "../../orchestration-v2/ProjectionStore.ts";
 import { PullRequestService } from "../../pullRequest/PullRequestService.ts";
 import { forkParked } from "../../serverActivation.ts";
-import { branchWorkItems } from "../workItems/workItems.ts";
+import { azJson, branchWorkItems } from "../workItems/workItems.ts";
 import { pullRequestFacts } from "./pullRequestFacts.ts";
 import { WorkTaskStore } from "./WorkTaskStore.ts";
 
@@ -37,6 +39,27 @@ interface WorkItemEntry {
   readonly details: WorkItemDetails | null;
   readonly source: WorkTaskWorkItem["source"];
 }
+
+/**
+ * The reviewers' votes from one `az repos pr show`. PullRequestService.detail drops the decision
+ * the fork's provider computes, and ADO summaries never carry one, so only this path reads it.
+ */
+const readAzureDevOpsReviewDecision = (
+  cwd: string,
+  number: number,
+): Effect.Effect<PullRequestReviewDecision | null> =>
+  azJson("readReviewDecision", cwd, [
+    "repos",
+    "pr",
+    "show",
+    "--detect",
+    "true",
+    "--id",
+    String(number),
+  ]).pipe(
+    Effect.map((raw) => decodeAzureDevOpsReviewDecision(raw) ?? null),
+    Effect.orElseSucceed(() => null),
+  );
 
 interface Cached<A> {
   readonly at: number;
@@ -64,9 +87,13 @@ export class WorkTaskInsights extends Context.Service<
 >()("t3/merge/workTasks/WorkTaskInsights") {}
 
 export const make = Effect.fn("WorkTaskInsights.make")(function* (
-  deps: { readonly branchWorkItems?: typeof branchWorkItems } = {},
+  deps: {
+    readonly branchWorkItems?: typeof branchWorkItems;
+    readonly readReviewDecision?: typeof readAzureDevOpsReviewDecision;
+  } = {},
 ) {
   const readWorkItems = deps.branchWorkItems ?? branchWorkItems;
+  const readReviewDecision = deps.readReviewDecision ?? readAzureDevOpsReviewDecision;
   const store = yield* WorkTaskStore;
   const projections = yield* ProjectionStore.ProjectionStoreV2;
   const pullRequests = yield* PullRequestService;
@@ -143,19 +170,21 @@ export const make = Effect.fn("WorkTaskInsights.make")(function* (
       facts,
       `${link.host}/${link.repository}#${link.number}`,
       PULL_REQUEST_TTL_MS,
-      Effect.all(
-        [
-          pullRequests.detail(ref),
-          // Only the summary carries the review decision. allowStale: false skips the held
-          // summary, which would keep an old vote; the 2-minute cache bounds these reads.
-          pullRequests.summary({ ...ref, allowStale: false }),
-          pullRequests.activity(ref),
-          DateTime.now,
-        ],
-        { concurrency: "unbounded" },
-      ).pipe(
-        Effect.map(([detail, summary, activity, now]) =>
-          pullRequestFacts(detail, summary, activity, DateTime.formatIso(now)),
+      Effect.all([pullRequests.detail(ref), pullRequests.activity(ref), DateTime.now], {
+        concurrency: "unbounded",
+      }).pipe(
+        Effect.flatMap(([detail, activity, now]) =>
+          // Other hosts keep the decision on the summary the sync already holds; no extra read.
+          (detail.provider === "azure-devops"
+            ? readReviewDecision(detail.workspaceRoot, detail.number)
+            : pullRequests
+                .summary(ref)
+                .pipe(Effect.map((summary) => summary.reviewDecision ?? null))
+          ).pipe(
+            Effect.map((reviewDecision) =>
+              pullRequestFacts(detail, { reviewDecision }, activity, DateTime.formatIso(now)),
+            ),
+          ),
         ),
         Effect.catchCause(orNull(task.id, "pull request facts")),
       ),

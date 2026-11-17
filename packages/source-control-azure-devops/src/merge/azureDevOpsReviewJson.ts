@@ -7,7 +7,10 @@ import type {
   PullRequestReviewDecision,
   PullRequestReviewThread,
 } from "@t3tools/contracts";
-import { AZURE_DEVOPS_EXPIRED_CHECK_DESCRIPTION } from "@t3tools/contracts";
+import {
+  AZURE_DEVOPS_EXPIRED_CHECK_DESCRIPTION,
+  decodeAzureDevOpsReviewDecision,
+} from "@t3tools/contracts";
 import { decodeJsonResult } from "@t3tools/shared/schemaJson";
 
 const trimmed = (value: string | null | undefined) => {
@@ -155,46 +158,12 @@ export function decodePolicyEvaluationsJson(
   return Result.succeed(checks);
 }
 
-/**
- * Azure's vote is 10 approved, 5 approved with suggestions, 0 no vote, -5 waiting for the author
- * and -10 rejected.
- */
-const decodeReviewers = decodeJsonResult(
-  Schema.Struct({
-    reviewers: Schema.optional(
-      Schema.NullOr(
-        Schema.Array(
-          Schema.Struct({
-            vote: Schema.optional(Schema.NullOr(Schema.Number)),
-            isRequired: Schema.optional(Schema.NullOr(Schema.Boolean)),
-          }),
-        ),
-      ),
-    ),
-  }),
-);
-
-/**
- * The reviewers' votes on `az repos pr show` read as one decision, the way Azure's completion gate
- * reads them: any rejection or wait for the author holds the change, a required reviewer who has
- * not approved still owes a review, and otherwise one approval is enough.
- */
+/** The contracts rule as a Result, for the detail read. */
 export function decodeReviewDecisionJson(
   raw: string,
 ): Result.Result<PullRequestReviewDecision | null, unknown> {
-  const decoded = decodeReviewers(raw);
-  if (!Result.isSuccess(decoded)) return Result.fail(decoded.failure);
-  const reviewers = decoded.success.reviewers ?? [];
-  if (reviewers.length === 0) return Result.succeed(null);
-  const voteOf = (reviewer: (typeof reviewers)[number]) => reviewer.vote ?? 0;
-  if (reviewers.some((reviewer) => voteOf(reviewer) < 0))
-    return Result.succeed("changes-requested");
-  if (reviewers.some((reviewer) => reviewer.isRequired === true && voteOf(reviewer) < 5)) {
-    return Result.succeed("review-required");
-  }
-  return Result.succeed(
-    reviewers.some((reviewer) => voteOf(reviewer) >= 5) ? "approved" : "review-required",
-  );
+  const decision = decodeAzureDevOpsReviewDecision(raw);
+  return decision === undefined ? Result.fail("Unreadable reviewers.") : Result.succeed(decision);
 }
 
 const RawFilePositionSchema = Schema.optional(
