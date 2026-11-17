@@ -70,38 +70,43 @@ const harness = (options: {
   readonly seed?: Partial<WorkTask>;
 }) => {
   const messages: Array<Record<string, unknown>> = [];
-  const layer = Layer.effect(
-    WorkTaskNaming.WorkTaskNaming,
-    Effect.gen(function* () {
-      const store = yield* WorkTaskStore.WorkTaskStore;
-      yield* store.insert(task(options.seed));
-      return yield* WorkTaskNaming.make;
-    }),
-  ).pipe(
-    Layer.provideMerge(
-      Layer.effect(
-        TextGeneration,
-        Effect.map(WorkTaskStore.WorkTaskStore, (store) => ({
-          generateThreadTitle: (input: Record<string, unknown>) => {
-            messages.push(input);
-            return options.generate(store);
-          },
-        })),
-      ).pipe(Layer.provide(layerDatabase)) as never,
-    ),
-    Layer.provide(
-      Layer.succeed(WorkTaskInsights, {
-        workItem: () =>
-          Effect.succeed(
-            options.workItem === false
-              ? null
-              : { item, details: { descriptionHtml: "<p>Copy &amp; paste</p>" } },
+  const layer: Layer.Layer<WorkTaskNaming.WorkTaskNaming | WorkTaskStore.WorkTaskStore> =
+    Layer.effect(
+      WorkTaskNaming.WorkTaskNaming,
+      Effect.gen(function* () {
+        const store = yield* WorkTaskStore.WorkTaskStore;
+        yield* store.insert(task(options.seed));
+        return yield* WorkTaskNaming.make;
+      }),
+    ).pipe(
+      Layer.provideMerge(
+        Layer.effect(
+          TextGeneration,
+          Effect.map(
+            WorkTaskStore.WorkTaskStore,
+            (store) =>
+              ({
+                generateThreadTitle: (input: Record<string, unknown>) => {
+                  messages.push(input);
+                  return options.generate(store);
+                },
+              }) as never,
           ),
-      } as never),
-    ),
-    Layer.provide(ServerSettings.ServerSettingsService.layerTest({})),
-    Layer.provideMerge(layerDatabase),
-  );
+        ).pipe(Layer.provide(layerDatabase)),
+      ),
+      Layer.provide(
+        Layer.succeed(WorkTaskInsights, {
+          workItem: () =>
+            Effect.succeed(
+              options.workItem === false
+                ? null
+                : { item, details: { descriptionHtml: "<p>Copy &amp; paste</p>" } },
+            ),
+        } as never),
+      ),
+      Layer.provide(ServerSettings.ServerSettingsService.layerTest({})),
+      Layer.provideMerge(layerDatabase),
+    ) as never;
   return { messages, layer };
 };
 
