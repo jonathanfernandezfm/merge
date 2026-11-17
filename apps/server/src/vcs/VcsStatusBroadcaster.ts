@@ -804,7 +804,7 @@ export const make = Effect.gen(function* () {
       ),
   );
 
-  // A checkout outside T3 Code, such as `git switch` in the terminal, calls no refresh RPC.
+  // A checkout outside Merge, such as `git switch` in the terminal, calls no refresh RPC.
   // Rereading remote too, without a fetch, sends the new branch with its own PR and counts.
   const refreshCheckedOutRef = Effect.fn("VcsStatusBroadcaster.refreshCheckedOutRef")(function* (
     cwd: string,

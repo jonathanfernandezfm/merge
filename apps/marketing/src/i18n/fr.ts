@@ -2,13 +2,13 @@ import type { Messages } from "./en";
 
 export const fr: Messages = {
   layout: {
-    defaultTitle: "T3 Code",
-    defaultDescription: "T3 Code. Le poste de pilotage open source pour agents de codage.",
+    defaultTitle: "Merge",
+    defaultDescription: "Merge. Le poste de pilotage open source pour agents de codage.",
     socialImageAlt:
-      "T3 Code : le poste de pilotage open source pour agents de codage, avec Claude Code, Codex, Cursor, OpenCode, Grok et Antigravity.",
-    homeLabel: "Accueil T3 Code",
+      "Merge : le poste de pilotage open source pour agents de codage, avec Claude Code, Codex, Cursor, OpenCode, Grok et Antigravity.",
+    homeLabel: "Accueil Merge",
     download: "Télécharger",
-    starsLabel: "Mettre une étoile à T3 Code sur GitHub, {stars} étoiles",
+    starsLabel: "Mettre une étoile à Merge sur GitHub, {stars} étoiles",
     githubStars: "{stars} étoiles sur GitHub",
     language: "Langue",
     mitLicensed: "Licence MIT",
@@ -19,8 +19,8 @@ export const fr: Messages = {
     security: "Sécurité",
   },
   home: {
-    title: "T3 Code | Le poste de pilotage open source pour agents de codage",
-    description: "T3 Code. Le poste de pilotage open source pour agents de codage.",
+    title: "Merge | Le poste de pilotage open source pour agents de codage",
+    description: "Merge. Le poste de pilotage open source pour agents de codage.",
     heroTitle: ["Le poste de pilotage", "open source", "pour agents de codage."],
     heroSub:
       "Orchestrez Claude Code, Codex, Antigravity, OpenCode, Cursor et Grok depuis une seule interface. Utilisez votre propre abonnement. Forkez tout le projet.",
@@ -29,15 +29,14 @@ export const fr: Messages = {
     downloadForLinux: "Télécharger pour Linux",
     sourceLink: "Volez notre code (légalement)",
     alsoOnPhone: "Aussi sur votre téléphone :",
-    screenshotAlt:
-      "T3 Code exécutant des sous-agents Claude, Codex, Muse et Gemini dans un même fil",
+    screenshotAlt: "Merge exécutant des sous-agents Claude, Codex, Muse et Gemini dans un même fil",
     endorsementsTitle: "Toléré par plus de {users} devs",
     endorsementsSub: "Certains en ont même parlé sur X.",
     endorsementsLabel: "Avis de développeurs",
     readPost: "Lire le post de {handle} sur X",
     harnessTitle: "Apportez votre abonnement",
     harnessBody:
-      "T3 Code ne revend pas de tokens. Branchez Claude Code, Codex, Antigravity, OpenCode, Cursor ou Grok avec les identifiants que vous avez déjà. Nous les orchestrons, vous gardez votre abonnement.",
+      "Merge ne revend pas de tokens. Branchez Claude Code, Codex, Antigravity, OpenCode, Cursor ou Grok avec les identifiants que vous avez déjà. Nous les orchestrons, vous gardez votre abonnement.",
     googleSignIn: "Connexion Google",
     harnessPoints: [
       "Aucune clé revendue. Aucun quota imposé.",
@@ -45,7 +44,7 @@ export const fr: Messages = {
       "De nouveaux agents chaque semaine.",
     ],
     gitVisualLabel:
-      "Illustration du flux Git de T3 Code : relire un diff, commiter et pousser les modifications, puis ouvrir une pull request.",
+      "Illustration du flux Git de Merge : relire un diff, commiter et pousser les modifications, puis ouvrir une pull request.",
     prReady: "Prête",
     prCommits: "3 commits",
     viewDiff: "Voir le diff",
@@ -74,15 +73,15 @@ export const fr: Messages = {
     browseSource: "Parcourir le code",
     ctaTitle: "Vos agents méritent mieux qu'un terminal.",
     ctaSub:
-      "T3 Code est gratuit, open source et rapide. Installez-le, branchez l'outil auquel vous êtes déjà abonné et laissez vos agents se mettre au travail.",
+      "Merge est gratuit, open source et rapide. Installez-le, branchez l'outil auquel vous êtes déjà abonné et laissez vos agents se mettre au travail.",
     otherPlatforms: "Autres plateformes",
   },
   download: {
-    title: "Télécharger T3 Code pour macOS, Windows et Linux | T3 Code",
+    title: "Télécharger Merge pour macOS, Windows et Linux | Merge",
     description:
-      "Téléchargez l'app de bureau officielle T3 Code pour macOS, Windows ou Linux, ou les apps iOS et Android. t3.codes est le seul site de téléchargement officiel.",
+      "Téléchargez l'app de bureau officielle Merge pour macOS, Windows ou Linux, ou les apps iOS et Android. t3.codes est le seul site de téléchargement officiel.",
     breadcrumb: "Télécharger",
-    heading: "Télécharger T3 Code",
+    heading: "Télécharger Merge",
     channelLabel: "Canal de publication",
     stable: "Stable",
     nightly: "Nightly",

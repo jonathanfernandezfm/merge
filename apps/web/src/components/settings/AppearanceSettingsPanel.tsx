@@ -119,7 +119,7 @@ export function AppearanceSettingsPanel() {
       ? "Only built-in themes show artwork, so this theme shows the version pill."
       : "Only built-in themes show artwork."
     : environmentStageVariant
-      ? "Choose how Dev and Nightly environments are identified."
+      ? "Choose how the sidebar header identifies this build."
       : "Show Dev or Nightly artwork in the sidebar header.";
   const glassOpacityRatio =
     (settings.glassOpacity - MIN_GLASS_OPACITY) / (MAX_GLASS_OPACITY - MIN_GLASS_OPACITY);

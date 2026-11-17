@@ -2,14 +2,14 @@ import type { Messages } from "./en";
 
 export const ja: Messages = {
   layout: {
-    defaultTitle: "T3 Code",
+    defaultTitle: "Merge",
     defaultDescription:
-      "T3 Code。コーディングエージェントのためのオープンソースのコントロールプレーン。",
+      "Merge。コーディングエージェントのためのオープンソースのコントロールプレーン。",
     socialImageAlt:
-      "T3 Code：コーディングエージェントのためのオープンソースのコントロールプレーン。Claude Code、Codex、Cursor、OpenCode、Grok、Antigravity に対応。",
-    homeLabel: "T3 Code ホーム",
+      "Merge：コーディングエージェントのためのオープンソースのコントロールプレーン。Claude Code、Codex、Cursor、OpenCode、Grok、Antigravity に対応。",
+    homeLabel: "Merge ホーム",
     download: "ダウンロード",
-    starsLabel: "GitHub で T3 Code にスターを付ける（{stars} スター）",
+    starsLabel: "GitHub で Merge にスターを付ける（{stars} スター）",
     githubStars: "GitHub スター {stars}",
     language: "言語",
     mitLicensed: "MIT ライセンス",
@@ -20,8 +20,8 @@ export const ja: Messages = {
     security: "セキュリティ",
   },
   home: {
-    title: "T3 Code | コーディングエージェントのためのオープンソースのコントロールプレーン",
-    description: "T3 Code。コーディングエージェントのためのオープンソースのコントロールプレーン。",
+    title: "Merge | コーディングエージェントのためのオープンソースのコントロールプレーン",
+    description: "Merge。コーディングエージェントのためのオープンソースのコントロールプレーン。",
     heroTitle: ["コーディングエージェントの", "オープンソース", "コントロールプレーン。"],
     heroSub:
       "Claude Code、Codex、Antigravity、OpenCode、Cursor、Grok をひとつの画面からオーケストレーション。サブスクリプションは手持ちのものをそのまま。まるごとフォークも自由です。",
@@ -31,14 +31,14 @@ export const ja: Messages = {
     sourceLink: "コードを盗もう（合法的に）",
     alsoOnPhone: "スマホでも使えます：",
     screenshotAlt:
-      "ひとつのスレッドで Claude、Codex、Muse、Gemini のサブエージェントを動かす T3 Code",
+      "ひとつのスレッドで Claude、Codex、Muse、Gemini のサブエージェントを動かす Merge",
     endorsementsTitle: "{users} 人以上の開発者が我慢して使っています",
     endorsementsSub: "ツイートまでしてくれた人もいます。",
     endorsementsLabel: "開発者の声",
     readPost: "X で {handle} の投稿を読む",
     harnessTitle: "サブスクは持ち込みで",
     harnessBody:
-      "T3 Code はトークンを転売しません。Claude Code、Codex、Antigravity、OpenCode、Cursor、Grok を、すでに持っている認証情報でつなぐだけ。オーケストレーションは私たちに任せて、プランは今のままで。",
+      "Merge はトークンを転売しません。Claude Code、Codex、Antigravity、OpenCode、Cursor、Grok を、すでに持っている認証情報でつなぐだけ。オーケストレーションは私たちに任せて、プランは今のままで。",
     googleSignIn: "Google でサインイン",
     harnessPoints: [
       "キーの転売なし。使用量の上限なし。",
@@ -46,7 +46,7 @@ export const ja: Messages = {
       "対応エージェントは毎週追加。",
     ],
     gitVisualLabel:
-      "T3 Code の Git ワークフローの図：diff を確認し、変更をコミットしてプッシュし、プルリクエストを作成する。",
+      "Merge の Git ワークフローの図：diff を確認し、変更をコミットしてプッシュし、プルリクエストを作成する。",
     prReady: "準備完了",
     prCommits: "3 コミット",
     viewDiff: "diff を表示",
@@ -75,15 +75,15 @@ export const ja: Messages = {
     browseSource: "ソースを見る",
     ctaTitle: "あなたのエージェントに、ターミナルだけではもったいない。",
     ctaSub:
-      "T3 Code は無料、オープンソース、そして高速。インストールして、契約中のツールをつなぐだけ。あとはエージェントにおまかせ。",
+      "Merge は無料、オープンソース、そして高速。インストールして、契約中のツールをつなぐだけ。あとはエージェントにおまかせ。",
     otherPlatforms: "ほかのプラットフォーム",
   },
   download: {
-    title: "T3 Code をダウンロード（macOS、Windows、Linux）| T3 Code",
+    title: "Merge をダウンロード（macOS、Windows、Linux）| Merge",
     description:
-      "公式の T3 Code デスクトップアプリ（macOS、Windows、Linux）や、iOS・Android アプリをダウンロードできます。公式のダウンロードサイトは t3.codes だけです。",
+      "公式の Merge デスクトップアプリ（macOS、Windows、Linux）や、iOS・Android アプリをダウンロードできます。公式のダウンロードサイトは t3.codes だけです。",
     breadcrumb: "ダウンロード",
-    heading: "T3 Code をダウンロード",
+    heading: "Merge をダウンロード",
     channelLabel: "リリースチャンネル",
     stable: "安定版",
     nightly: "Nightly",

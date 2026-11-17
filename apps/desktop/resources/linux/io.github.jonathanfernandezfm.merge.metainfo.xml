@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.jonathanfernandezfm.merge</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>Merge</name>
+  <summary>Desktop GUI for coding agents</summary>
+  <developer id="io.github.jonathanfernandezfm">
+    <name>Jonathan Fernandez Mertanen</name>
+  </developer>
+  <description>
+    <p>
+      Merge is an open-source desktop app for coding agents, built on T3 Code.
+      Work with your existing agent subscriptions, review code changes, and run
+      commands in your projects.
+    </p>
+  </description>
+  <launchable type="desktop-id">merge.desktop</launchable>
+  <icon type="stock">merge</icon>
+  <provides>
+    <binary>merge</binary>
+  </provides>
+  <categories>
+    <category>Development</category>
+  </categories>
+  <url type="homepage">https://github.com/jonathanfernandezfm/merge</url>
+  <url type="bugtracker">https://github.com/jonathanfernandezfm/merge/issues</url>
+  <url type="vcs-browser">https://github.com/jonathanfernandezfm/merge</url>
+</component>
