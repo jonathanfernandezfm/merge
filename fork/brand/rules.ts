@@ -564,6 +564,11 @@ export const identity: Array<{ file: string; from: string; to: string }> = [
     from: '"package_name": "com.t3tools.t3code',
     to: `"package_name": "${APP_ID}`,
   },
+  {
+    file: "packages/ssh/src/tunnel.test.ts",
+    from: '"https://github.com/pingdotgg/t3code/releases/download"',
+    to: `"${REPO_URL}/releases/download"`,
+  },
   // The mock agent's page text, which AcpAdapterV2.test.ts expects after copy.
   { file: "apps/server/scripts/acp-mock-agent.ts", from: '"T3 Code page"', to: '"Merge page"' },
 ];
