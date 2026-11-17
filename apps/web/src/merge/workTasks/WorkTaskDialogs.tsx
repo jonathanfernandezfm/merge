@@ -613,7 +613,7 @@ function WaitingReasonDialog({
         environmentId: taskRef.environmentId,
         input: { taskId: taskRef.taskId, reason: trimmed },
       });
-      if (result._tag !== "Success") failed ??= result;
+      if (result._tag !== "Success" && failed === null) failed = result;
     }
     setPending(false);
     if (failed === null) {
@@ -686,7 +686,7 @@ function RenameWorkTaskDialog({ target, onClose }: { target: RenameTarget; onClo
         environmentId: ref.environmentId,
         input: { taskId: ref.taskId, title: trimmed },
       });
-      if (result._tag !== "Success") failed ??= result;
+      if (result._tag !== "Success" && failed === null) failed = result;
     }
     setPending(false);
     if (failed === null) {
