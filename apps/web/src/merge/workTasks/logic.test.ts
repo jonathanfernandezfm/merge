@@ -342,6 +342,18 @@ describe("workTaskItemMenuItems", () => {
     ]);
   });
 
+  it("offers one open-task child per member first, and none for a single member", () => {
+    const items = workTaskItemMenuItems(menuItem([{ id: "a" }, { id: "b" }]));
+    expect(items[0]?.id).toBe("open-task");
+    expect(items[0]?.children?.map((child) => [child.id, child.label])).toEqual([
+      ["open-task:0", "repo0"],
+      ["open-task:1", "repo1"],
+    ]);
+    expect(
+      workTaskItemMenuItems(menuItem([{ id: "a" }])).some((i) => i.id.startsWith("open-task")),
+    ).toBe(false);
+  });
+
   it("flattens open-pr and new-thread for a single member", () => {
     const items = workTaskItemMenuItems(menuItem([{ id: "a", pr: true }]));
     expect(items.filter((i) => i.id === "open-pr:0" || i.id === "new-thread:0")).toEqual([

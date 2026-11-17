@@ -2,16 +2,19 @@ import type { ReactElement } from "react";
 
 import { PreviewCard, PreviewCardPopup, PreviewCardTrigger } from "~/components/ui/preview-card";
 import type { WorkTaskItem } from "./grouping";
-import { latestWorkTaskMember } from "./logic";
+import { latestWorkTaskMember, type WorkTaskView } from "./logic";
 import { WorkTaskStatusIcon } from "./presentation";
 import { WORK_TASK_STATUS_PRESENTATION } from "./statusPresentation";
 
 /** The details a row leaves out: the ADO number, state and sprint, each repo and the branch. */
 export function WorkTaskHoverCard({
   item,
+  onOpen,
   children,
 }: {
   item: WorkTaskItem;
+  /** Opens one member's task from its repo line; the row itself opens only the latest. */
+  onOpen: (view: WorkTaskView) => void;
   /** The row's own element; it becomes the trigger, so click and keyboard stay with it. */
   children: ReactElement;
 }) {
@@ -31,15 +34,22 @@ export function WorkTaskHoverCard({
           ) : null}
           <ul className="flex flex-col gap-1">
             {item.members.map((member) => (
-              <li key={member.view.key} className="flex min-w-0 items-center gap-2 text-xs">
-                <WorkTaskStatusIcon status={member.view.status} />
-                <span className="min-w-0 flex-1 truncate">{member.label}</span>
-                {member.view.pullRequest !== null ? (
-                  <span className="text-muted-foreground">#{member.view.pullRequest.number}</span>
-                ) : null}
-                <span className="text-muted-foreground">
-                  {WORK_TASK_STATUS_PRESENTATION[member.view.status].label}
-                </span>
+              <li key={member.view.key}>
+                <button
+                  type="button"
+                  aria-label={`Open ${member.label}`}
+                  className="-mx-1 flex w-[calc(100%+0.5rem)] min-w-0 items-center gap-2 rounded px-1 py-0.5 text-left text-xs hover:bg-accent"
+                  onClick={() => onOpen(member.view)}
+                >
+                  <WorkTaskStatusIcon status={member.view.status} />
+                  <span className="min-w-0 flex-1 truncate">{member.label}</span>
+                  {member.view.pullRequest !== null ? (
+                    <span className="text-muted-foreground">#{member.view.pullRequest.number}</span>
+                  ) : null}
+                  <span className="text-muted-foreground">
+                    {WORK_TASK_STATUS_PRESENTATION[member.view.status].label}
+                  </span>
+                </button>
               </li>
             ))}
           </ul>

@@ -149,7 +149,7 @@ const SidebarWorkTaskItemRow = memo(function SidebarWorkTaskItemRow({
   const single = item.members.length === 1 ? item.members[0]! : null;
   return (
     <li>
-      <WorkTaskHoverCard item={item}>
+      <WorkTaskHoverCard item={item} onOpen={onOpen}>
         <button
           type="button"
           aria-current={active ? "page" : undefined}

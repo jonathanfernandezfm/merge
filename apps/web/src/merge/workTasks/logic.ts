@@ -327,7 +327,25 @@ export function workTaskItemMenuItems(
       : [{ member, index, pullRequest: member.view.pullRequest }],
   );
   return [
-    { id: "open-ado", label: "Open in Azure DevOps", disabled: !item.workItem?.url },
+    // A click opens the latest member; this reaches the others. One member needs no entry.
+    ...(single
+      ? []
+      : [
+          {
+            id: "open-task",
+            label: "Open task in",
+            children: item.members.map((member, index) => ({
+              id: `open-task:${index}`,
+              label: member.label,
+            })),
+          },
+        ]),
+    {
+      id: "open-ado",
+      label: "Open in Azure DevOps",
+      disabled: !item.workItem?.url,
+      separatorBefore: !single,
+    },
     {
       id: "copy-id",
       label: "Copy work item ID",

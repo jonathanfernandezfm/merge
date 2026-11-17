@@ -123,6 +123,13 @@ export function useWorkTaskContextMenu(onNavigate?: () => void) {
       openWorkTask(siblingView);
       return;
     }
+    if (id.startsWith("open-task:")) {
+      const member = memberAt("open-task:");
+      if (member === undefined) return;
+      onNavigate?.();
+      openWorkTask(member);
+      return;
+    }
     if (id.startsWith("open-pr:")) {
       const url = memberAt("open-pr:")?.pullRequest?.url;
       if (url !== undefined) await openLink(url);
