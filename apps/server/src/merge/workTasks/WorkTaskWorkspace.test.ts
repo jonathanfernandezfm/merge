@@ -34,6 +34,7 @@ import * as ProjectService from "../../project/ProjectService.ts";
 import * as ServerSettings from "../../serverSettings.ts";
 import * as TerminalManager from "../../terminal/Manager.ts";
 import * as GitVcsDriver from "../../vcs/GitVcsDriver.ts";
+import { WorkTaskNaming } from "./WorkTaskNaming.ts";
 import * as WorkTaskStore from "./WorkTaskStore.ts";
 import * as WorkTaskWorkspace from "./WorkTaskWorkspace.ts";
 
@@ -159,6 +160,7 @@ const layer = WorkTaskWorkspace.layer.pipe(
     ),
   ),
   Layer.provide(layerGitWorkflow),
+  Layer.provide(Layer.mock(WorkTaskNaming)({ name: () => Effect.void })),
   Layer.provide(
     Layer.mock(ProjectService.ProjectService)({
       getById: (id) => Effect.succeed(id === PROJECT_ID ? Option.some(project()) : Option.none()),

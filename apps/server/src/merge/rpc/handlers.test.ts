@@ -360,6 +360,7 @@ it.effect(
         MERGE_WS_METHODS.workTasksArchive,
         MERGE_WS_METHODS.workTasksSetWaiting,
         MERGE_WS_METHODS.workTasksSetAutoHandle,
+        MERGE_WS_METHODS.workTasksRename,
       ]) {
         const denied = yield* call(tag, { taskId, reason: null }, [AuthOrchestrationReadScope]);
         assert.include(

@@ -191,6 +191,13 @@ export const WorkTaskSetWaitingInput = Schema.Struct({
 });
 export type WorkTaskSetWaitingInput = typeof WorkTaskSetWaitingInput.Type;
 
+export const WorkTaskRenameInput = Schema.Struct({
+  taskId: WorkTaskId,
+  /** Omitted: name it with the text model. */
+  title: Schema.optionalKey(TrimmedNonEmptyString.check(Schema.isMaxLength(200))),
+});
+export type WorkTaskRenameInput = typeof WorkTaskRenameInput.Type;
+
 export const WorkTaskSetAutoHandleInput = Schema.Struct({
   taskId: WorkTaskId,
   enabled: Schema.Boolean,

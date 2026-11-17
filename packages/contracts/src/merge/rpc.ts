@@ -43,7 +43,9 @@ import {
   WorkTaskCreateThreadResult,
   WorkTaskIdInput,
   WorkTaskListBranchesInput,
+  WorkTaskRenameInput,
   WorkTaskSetAutoHandleInput,
+  WorkTask,
   WorkTaskSetWaitingInput,
   WorkTasksError,
   WorkTasksSnapshot,
@@ -76,6 +78,7 @@ export const MERGE_WS_METHODS = {
   workTasksArchive: "merge.workTasks.archive",
   workTasksSetWaiting: "merge.workTasks.setWaiting",
   workTasksSetAutoHandle: "merge.workTasks.setAutoHandle",
+  workTasksRename: "merge.workTasks.rename",
   workTasksListBranches: "merge.workTasks.listBranches",
   foldersSubscribe: "merge.folders.subscribe",
   foldersCreate: "merge.folders.create",
@@ -187,6 +190,12 @@ const MergeWorkTasksSetAutoHandleRpc = Rpc.make(MERGE_WS_METHODS.workTasksSetAut
   error: WorkTasksError,
 });
 
+const MergeWorkTasksRenameRpc = Rpc.make(MERGE_WS_METHODS.workTasksRename, {
+  payload: WorkTaskRenameInput,
+  success: WorkTask,
+  error: WorkTasksError,
+});
+
 const MergeWorkTasksListBranchesRpc = Rpc.make(MERGE_WS_METHODS.workTasksListBranches, {
   payload: WorkTaskListBranchesInput,
   success: VcsListRefsResult,
@@ -242,6 +251,7 @@ export const MergeRpcGroup = RpcGroup.make(
   MergeWorkTasksArchiveRpc,
   MergeWorkTasksSetWaitingRpc,
   MergeWorkTasksSetAutoHandleRpc,
+  MergeWorkTasksRenameRpc,
   MergeWorkTasksListBranchesRpc,
   MergeFoldersSubscribeRpc,
   MergeFoldersCreateRpc,

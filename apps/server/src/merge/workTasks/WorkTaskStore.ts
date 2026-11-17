@@ -85,10 +85,14 @@ export class WorkTaskStore extends Context.Service<
     readonly list: () => Effect.Effect<ReadonlyArray<WorkTask>, WorkTaskOperationError>;
     readonly get: (id: WorkTaskId) => Effect.Effect<WorkTask | null, WorkTaskOperationError>;
     readonly insert: (task: WorkTask) => Effect.Effect<void, WorkTaskOperationError>;
-    /** Stamps `updatedAt`. Fails with `not-found` for an unknown id. */
+    /**
+     * Stamps `updatedAt`. Fails with `not-found` for an unknown id. With `unlessUserTitled` the
+     * write is skipped, in the same statement, when the title is one the user typed.
+     */
     readonly update: (
       id: WorkTaskId,
       patch: WorkTaskPatch,
+      options?: { readonly unlessUserTitled?: boolean },
     ) => Effect.Effect<WorkTask, WorkTaskOperationError>;
     /** Read-modify-write of `workspace_json`, serialized so concurrent writers never drop each other's change. */
     readonly updateWorkspace: (
@@ -222,6 +226,7 @@ export const make = Effect.gen(function* () {
   const update = Effect.fn("WorkTaskStore.update")(function* (
     id: WorkTaskId,
     patch: WorkTaskPatch & { readonly workspace?: WorkTaskWorkspace },
+    options?: { readonly unlessUserTitled?: boolean },
   ) {
     const columns = {
       ...(patch.title === undefined ? {} : { title: patch.title }),
@@ -247,6 +252,7 @@ export const make = Effect.gen(function* () {
     yield* sql`
       UPDATE projection_tasks SET ${sql.update(columns)}
       WHERE task_id = ${id} AND deleted_at IS NULL
+        ${options?.unlessUserTitled ? sql`AND title_source <> 'user'` : sql``}
     `.pipe(Effect.mapError(failed("Could not save the Work Task.")));
     const next = yield* get(id);
     if (next === null) {

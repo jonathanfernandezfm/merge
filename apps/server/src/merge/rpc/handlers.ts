@@ -22,6 +22,7 @@ import {
 } from "../workItems/workItems.ts";
 import { lookup } from "../workspaceGuard.ts";
 import { WorkTaskInsights } from "../workTasks/WorkTaskInsights.ts";
+import { WorkTaskNaming } from "../workTasks/WorkTaskNaming.ts";
 import { WorkTaskStore } from "../workTasks/WorkTaskStore.ts";
 import { WorkTaskWorkspace } from "../workTasks/WorkTaskWorkspace.ts";
 
@@ -88,6 +89,8 @@ export const mergeRpcHandlers = MergeRpcGroup.of({
   [MERGE_WS_METHODS.workTasksSetAutoHandle]: workTasks((actions, input) =>
     actions.setAutoHandle(input),
   ),
+  [MERGE_WS_METHODS.workTasksRename]: (input) =>
+    lookup(WorkTaskNaming).pipe(Effect.flatMap((naming) => naming.rename(input))),
   [MERGE_WS_METHODS.workTasksListBranches]: workTasks((actions, input) =>
     actions.listBranches(input),
   ),
@@ -129,6 +132,7 @@ export const MERGE_RPC_REQUIRED_SCOPES = {
   [MERGE_WS_METHODS.workTasksArchive]: AuthOrchestrationOperateScope,
   [MERGE_WS_METHODS.workTasksSetWaiting]: AuthOrchestrationOperateScope,
   [MERGE_WS_METHODS.workTasksSetAutoHandle]: AuthOrchestrationOperateScope,
+  [MERGE_WS_METHODS.workTasksRename]: AuthOrchestrationOperateScope,
   // Same scope as upstream's vcs.listRefs; the fetch only updates remote-tracking refs.
   [MERGE_WS_METHODS.workTasksListBranches]: AuthOrchestrationReadScope,
   // Same split as Work Tasks: v0.0.10 folders were orchestration commands (operate scope).
@@ -158,6 +162,7 @@ export const MERGE_RPC_AGGREGATES = {
   [MERGE_WS_METHODS.workTasksArchive]: "merge",
   [MERGE_WS_METHODS.workTasksSetWaiting]: "merge",
   [MERGE_WS_METHODS.workTasksSetAutoHandle]: "merge",
+  [MERGE_WS_METHODS.workTasksRename]: "merge",
   [MERGE_WS_METHODS.workTasksListBranches]: "merge",
   [MERGE_WS_METHODS.foldersSubscribe]: "merge",
   [MERGE_WS_METHODS.foldersCreate]: "merge",

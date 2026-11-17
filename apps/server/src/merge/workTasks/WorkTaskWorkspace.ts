@@ -57,6 +57,7 @@ import {
   type WorkTaskCopyRule,
   type WorkTaskStepOutcome,
 } from "./copyRules.ts";
+import { WorkTaskNaming } from "./WorkTaskNaming.ts";
 import { WorkTaskStore } from "./WorkTaskStore.ts";
 
 /** Who starts the threads a call launches. The UI default is the user on the web client. */
@@ -170,6 +171,7 @@ const withStep = (
 /** @public */
 export const make = Effect.gen(function* () {
   const store = yield* WorkTaskStore;
+  const naming = yield* WorkTaskNaming;
   const projections = yield* ProjectionStore.ProjectionStoreV2;
   const git = yield* GitVcsDriver.GitVcsDriver;
   const gitWorkflow = yield* GitWorkflow.GitWorkflowService;
@@ -771,6 +773,10 @@ export const make = Effect.gen(function* () {
       archivedAt: null,
       deletedAt: null,
     });
+    if ((input.titleSource ?? "branch") !== "user") {
+      // Never delays or fails the create; `name` logs its own failures.
+      yield* Effect.forkDetach(naming.name(taskId));
+    }
     return yield* exclusive(
       taskId,
       Effect.gen(function* () {
