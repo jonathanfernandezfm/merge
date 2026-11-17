@@ -99,7 +99,7 @@ function StatusGlyph({ glyph, className }: { glyph: StatusGlyphSpec; className?:
   );
 }
 
-const TONE_CLASS: Readonly<Record<WorkTaskStatusTone, string>> = {
+export const TONE_CLASS: Readonly<Record<WorkTaskStatusTone, string>> = {
   neutral: "text-muted-foreground",
   info: "text-info-foreground",
   success: "text-success-foreground",

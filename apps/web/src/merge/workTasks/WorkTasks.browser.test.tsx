@@ -34,9 +34,17 @@ vi.mock("./state", async () => {
     ],
   });
   const linked = logic.linkedWorkTasksByKey(tasks);
+  const { groupWorkTaskItems } = await import("./grouping");
+  const items = groupWorkTaskItems({
+    views: [...views.values()],
+    insights: new Map(),
+    repoName: () => "Acme",
+    unseen: () => false,
+  });
   const command = { label: "stub" };
   return {
     useWorkTaskViews: () => views,
+    useWorkTaskItems: () => items,
     useLinkedWorkTasks: () => linked,
     useThreadWorkTask: () => null,
     useWorkTaskView: () => null,
@@ -66,14 +74,13 @@ vi.mock("~/state/entities", async (importOriginal) => {
 });
 
 describe("Work Tasks UI", () => {
-  it("lists active Work Tasks by project with status and the linked-branch count", async () => {
+  it("lists active Work Tasks with status, repo and the linked-branch hint", async () => {
     await using _screen = await render(
       <SidebarProvider>
         <SidebarWorkTasks />
       </SidebarProvider>,
     );
     await expect.element(page.getByText("Work Tasks", { exact: true })).toBeVisible();
-    await expect.element(page.getByText("Acme")).toBeVisible();
     await expect
       .element(page.getByRole("button", { name: /^Permissions API, Working · feature\/perm/ }))
       .toBeVisible();

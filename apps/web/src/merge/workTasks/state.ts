@@ -239,8 +239,7 @@ export function useWorkTaskViews(): ReadonlyMap<string, WorkTaskView> {
 }
 
 /**
- * Work Tasks grouped by ADO item (each task alone when insights are unavailable).
- * @public Rendered by the sidebar in the next change.
+ * Active Work Tasks grouped by ADO item (each task alone when insights are unavailable).
  */
 export function useWorkTaskItems(): ReadonlyArray<WorkTaskItem> {
   const views = useWorkTaskViews();
@@ -250,7 +249,7 @@ export function useWorkTaskItems(): ReadonlyArray<WorkTaskItem> {
     projects.map((project) => [`${project.environmentId}:${project.id}`, project.title]),
   );
   return groupWorkTaskItems({
-    views: [...views.values()],
+    views: [...views.values()].filter(({ task }) => task.archivedAt === null),
     insights,
     repoName: ({ task }) => titles.get(`${task.environmentId}:${task.projectId}`) ?? task.projectId,
     // Live work and waiting outrank a new response, which only replaces calmer statuses.

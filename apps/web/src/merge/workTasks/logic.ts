@@ -278,7 +278,7 @@ export function linkedWorkTasksByKey(
   return linked;
 }
 
-export const WORK_TASK_SORTS = [
+const WORK_TASK_SORTS = [
   { value: "newest", label: "Newest" },
   { value: "activity", label: "Recent activity" },
   { value: "status", label: "Status" },
