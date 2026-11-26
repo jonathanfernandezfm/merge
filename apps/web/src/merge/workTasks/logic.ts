@@ -210,7 +210,6 @@ export function workTaskboardColumnForStatus(status: WorkTaskStatus): WorkTaskbo
   switch (status) {
     case "setting-up":
     case "working":
-    case "monitoring":
     case "idle":
     case "addressing-comments":
       return "working";
@@ -221,6 +220,7 @@ export function workTaskboardColumnForStatus(status: WorkTaskStatus): WorkTaskbo
     case "unresolved-comments":
     case "approved-checks-failing":
       return "needs-you";
+    case "monitoring":
     case "waiting-for-review":
       return "in-review";
     case "approved":

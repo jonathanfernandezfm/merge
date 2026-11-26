@@ -59,6 +59,7 @@ export * from "./pullRequests.ts";
 export * from "./workTasks.ts";
 export * from "./workTaskInsights.ts";
 export * from "./workTaskStatus.ts";
+export * from "./workItemTerminals.ts";
 
 export const MERGE_WS_METHODS = {
   ping: "merge.ping",

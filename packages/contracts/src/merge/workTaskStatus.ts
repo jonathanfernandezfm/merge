@@ -43,9 +43,9 @@ export const WORK_TASK_STATUS_URGENCY: ReadonlyArray<WorkTaskStatus> = [
   "unresolved-comments",
   "approved-checks-failing",
   "working",
-  "monitoring",
   "approved",
   "waiting-for-review",
+  "monitoring",
   "idle",
 ];
 
@@ -57,8 +57,12 @@ export function workTaskSection(status: WorkTaskStatus, unseen: boolean): WorkTa
     case "setting-up":
     case "working":
     case "addressing-comments":
-    case "monitoring":
       return "working";
+    // A finished run asks for a look once; after that, like the board, it sits with the working.
+    case "idle":
+      return unseen ? "attention" : "working";
+    // Background watches wait on someone else, like reviewers; no agent is working.
+    case "monitoring":
     case "waiting-for-review":
     case "approved":
       return unseen ? "attention" : "review";
@@ -273,7 +277,7 @@ export function deriveWorkTaskStatus(input: {
     return "addressing-comments";
   }
   if (task.mergedAt !== null || pullRequest?.state === "merged") {
-    return running || monitoring ? "monitoring" : "merged";
+    return running ? "working" : "merged";
   }
 
   // A closed pull request no longer gates anything; the task is back to no PR.
@@ -288,8 +292,8 @@ export function deriveWorkTaskStatus(input: {
     if (open.review === "approved" && open.checks === "failing") return "approved-checks-failing";
   }
   if (running) return "working";
-  if (monitoring) return "monitoring";
-
+  // A watch loop never hides where the pull request stands.
   if (open?.state === "open") return open.review === "approved" ? "approved" : "waiting-for-review";
+  if (monitoring) return "monitoring";
   return "idle";
 }

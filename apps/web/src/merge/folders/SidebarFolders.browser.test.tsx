@@ -29,13 +29,16 @@ vi.mock("./state", async () => {
       [fixtures.ENV, [{ threadId: ThreadId.make("t1"), folderId: FolderId.make("parked") }]],
     ]),
   );
-  const shells = [fixtures.shell({ id: "t1" }), fixtures.shell({ id: "t2" })].map((shell) => ({
-    ...shell,
-    projectId: fixtures.PROJECT,
-    branch: null,
-    worktreePath: null,
-    linkedPullRequest: null,
-  }));
+  const { makeThreadFixture } = await import("../../test-fixtures");
+  // Full shells: Folders draw them with the upstream thread row.
+  const shells = ["t1", "t2"].map((id) =>
+    makeThreadFixture({
+      environmentId: fixtures.ENV,
+      id: ThreadId.make(id),
+      projectId: fixtures.PROJECT,
+      title: `Thread ${id}`,
+    }),
+  );
   const command = { label: "stub" };
   return {
     useFolderViews: (scopedProjectKeys: ReadonlySet<string> | null) =>

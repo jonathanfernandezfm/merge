@@ -6,6 +6,7 @@ import { page } from "vite-plus/test/browser";
 
 import { SidebarProvider } from "~/components/ui/sidebar";
 import { render } from "../../../test/render";
+import { SidebarNeedsYou } from "../needsYou/SidebarNeedsYou";
 import { SidebarWorkTasks } from "./SidebarWorkTasks";
 
 // Needs you (setup failed), two repos on ADO item 7 (running), and one merged task.
@@ -57,8 +58,10 @@ vi.mock("./state", async () => {
   const command = { label: "stub" };
   return {
     useWorkTaskItems: () => items,
+    useWorkTaskProjects: () => [],
     useLinkedWorkTasks: () => new Map(),
     useThreadWorkTask: () => null,
+    useThreadsOutsideWorkTasks: <T,>(threads: ReadonlyArray<T>) => threads,
     useWorkTaskView: () => null,
     readLinkedWorkTasks: () => [],
     readWorkTaskView: () => null,
@@ -92,19 +95,25 @@ const freshShelves = () => {
   return { [Symbol.dispose]: clear };
 };
 
+// The Needs you lane holds the attention items, so the sidebar renders it above the section.
 const renderSidebar = () =>
   render(
     <SidebarProvider>
-      <SidebarWorkTasks />
+      <div>
+        <SidebarNeedsYou searchQuery="" scopedProjectKeys={null} />
+        <SidebarWorkTasks />
+      </div>
     </SidebarProvider>,
   );
 
 describe("Work Task items sidebar", () => {
-  it("puts attention items above the Working shelf", async () => {
+  it("moves attention items into the Needs you lane, above the Working shelf", async () => {
     await using _screen = await renderSidebar();
-    const attention = page.getByRole("button", { name: /^Broken setup/ });
+    const lane = page.getByRole("region", { name: /^Needs you/ });
+    const attention = lane.getByRole("button", { name: /^Broken setup/ });
     await expect.element(attention).toBeVisible();
-    const working = page.getByRole("button", { name: /Working \d/ });
+    expect(page.getByRole("button", { name: /^Broken setup/ }).elements()).toHaveLength(1);
+    const working = page.getByRole("button", { name: /^Working \d/ });
     await expect.element(working).toBeVisible();
     const top = (element: ReturnType<typeof page.getByRole>) =>
       element.element().getBoundingClientRect().top;
@@ -123,11 +132,11 @@ describe("Work Task items sidebar", () => {
     await expect.element(page.getByText("Shipped thing")).toBeVisible();
   });
 
-  it("shows every repo of a multi-member item on its second line", async () => {
+  it("gives every repo of a multi-member item its own row", async () => {
     await using _screen = await renderSidebar();
-    const row = page.getByRole("button", { name: /^Permissions,/ });
-    await expect.element(row.getByText("Acme")).toBeVisible();
-    await expect.element(row.getByText("web")).toBeVisible();
+    const repos = page.getByRole("list", { name: "Permissions repositories" });
+    await expect.element(repos.getByRole("button", { name: /^Acme,/ })).toBeVisible();
+    await expect.element(repos.getByRole("button", { name: /^web,/ })).toBeVisible();
   });
 
   it("describes the same member whose status the row shows", async () => {

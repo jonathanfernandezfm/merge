@@ -1,17 +1,18 @@
-import { selectRunningSubprocessTerminalIds } from "@t3tools/client-runtime/state/terminal";
+import { workItemIdFromBranch, workItemTerminalThreadId } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
-import { TerminalIcon } from "lucide-react";
 import { memo, type MouseEvent } from "react";
 
 import { SidebarSectionHeader } from "~/components/sidebar/SidebarListMarkers";
-import { terminalStatusFromRunningIds } from "~/components/ThreadStatusIndicators";
+import { ProjectMonogram } from "~/components/ProjectMonogram";
 import { useLocalStorage } from "~/hooks/useLocalStorage";
 import { cn } from "~/lib/utils";
+import { deriveProjectIdentity } from "~/projectIdentity";
 import { useProjects } from "~/state/entities";
 import { useKnownTerminalSessions } from "~/state/terminalSessions";
-import type { WorkTaskItem } from "./grouping";
+import type { WorkTaskItem, WorkTaskItemMember } from "./grouping";
 import { latestWorkTaskMember, type WorkTaskView } from "./logic";
 import { TONE_CLASS, UNSEEN_RESPONSE_PRESENTATION, WorkTaskStatusIcon } from "./presentation";
+import { runningItemMemberCommands } from "./workItemDrawer";
 import { WorkTaskHoverCard } from "./WorkTaskHoverCard";
 import { useLinkedWorkTasks } from "./state";
 import { WORK_TASK_STATUS_PRESENTATION } from "./statusPresentation";
@@ -31,7 +32,10 @@ const SHELVES = [
   { section: "done", label: "Done", marker: "settled-header" },
 ] as const;
 
-/** Items needing you first with no header, then the Working, In review and Done shelves. */
+/**
+ * Items needing you first with no header, then the Working, In review and Done shelves. Outside
+ * search the Needs you lane holds the first group, so it arrives here empty.
+ */
 export function SidebarWorkTaskItems({
   items,
   activeKey,
@@ -47,32 +51,9 @@ export function SidebarWorkTaskItems({
   onContextMenu: (item: WorkTaskItem, position: { x: number; y: number }) => void;
 }) {
   const [shelves, setShelves] = useLocalStorage(SHELVES_KEY, DEFAULT_SHELVES, ShelvesSchema);
-  // Read once here, not per row, so a project or link change does not wake every row.
-  const projects = useProjects();
-  const linkedByKey = useLinkedWorkTasks();
-  const linkedProjectsOf = (key: string) =>
-    linkedByKey
-      .get(key)
-      ?.map(
-        (sibling) =>
-          projects.find(
-            (project) =>
-              project.environmentId === sibling.environmentId && project.id === sibling.projectId,
-          )?.title ?? sibling.title,
-      )
-      .join(", ");
-  const row = (item: WorkTaskItem) => (
-    <SidebarWorkTaskItemRow
-      key={item.key}
-      item={item}
-      linkedProjects={linkedProjectsOf(leadMember(item).view.key)}
-      active={item.members.some((member) => member.view.key === activeKey)}
-      onOpen={onOpen}
-      onContextMenu={onContextMenu}
-    />
-  );
+  const row = useWorkTaskRowRenderer({ activeKey, onOpen, onContextMenu });
   return (
-    <ul className="flex flex-col gap-px pb-2">
+    <ul className="flex flex-col gap-1.5 pb-2">
       {items.filter((item) => item.section === "attention").map(row)}
       {SHELVES.map(({ section, label, marker }) => {
         const shelf = items.filter((item) => item.section === section);
@@ -80,7 +61,7 @@ export function SidebarWorkTaskItems({
         const expanded = forceExpanded || shelves[section];
         return (
           <li key={section} className="list-none">
-            <ul className="flex flex-col gap-px">
+            <ul className="flex flex-col gap-1.5">
               <SidebarSectionHeader
                 marker={marker}
                 label={label}
@@ -99,6 +80,43 @@ export function SidebarWorkTaskItems({
   );
 }
 
+/** Draws one item's card; the Work tasks section and the Needs you lane share it. */
+export function useWorkTaskRowRenderer({
+  activeKey,
+  onOpen,
+  onContextMenu,
+}: {
+  activeKey: string | null;
+  onOpen: (view: WorkTaskView) => void;
+  onContextMenu: (item: WorkTaskItem, position: { x: number; y: number }) => void;
+}) {
+  // Read once per list, not per row, so a project or link change does not wake every row.
+  const projects = useProjects();
+  const linkedByKey = useLinkedWorkTasks();
+  const linkedProjectsOf = (key: string) =>
+    linkedByKey
+      .get(key)
+      ?.map(
+        (sibling) =>
+          projects.find(
+            (project) =>
+              project.environmentId === sibling.environmentId && project.id === sibling.projectId,
+          )?.title ?? sibling.title,
+      )
+      .join(", ");
+  return (item: WorkTaskItem) => (
+    <SidebarWorkTaskItemRow
+      key={item.key}
+      item={item}
+      linkedProjects={linkedProjectsOf(leadMember(item).view.key)}
+      // Null unless this item holds the active task, so other rows skip re-rendering.
+      activeKey={item.members.some((member) => member.view.key === activeKey) ? activeKey : null}
+      onOpen={onOpen}
+      onContextMenu={onContextMenu}
+    />
+  );
+}
+
 /** The member that decides the glyph and status; the label describes the same one. */
 const leadMember = (item: WorkTaskItem) =>
   item.members.find(
@@ -108,14 +126,14 @@ const leadMember = (item: WorkTaskItem) =>
 const SidebarWorkTaskItemRow = memo(function SidebarWorkTaskItemRow({
   item,
   linkedProjects,
-  active,
+  activeKey,
   onOpen,
   onContextMenu,
 }: {
   item: WorkTaskItem;
   /** Titles of the projects the shown task is also in. */
   linkedProjects: string | undefined;
-  active: boolean;
+  activeKey: string | null;
   onOpen: (view: WorkTaskView) => void;
   onContextMenu: (item: WorkTaskItem, position: { x: number; y: number }) => void;
 }) {
@@ -123,23 +141,27 @@ const SidebarWorkTaskItemRow = memo(function SidebarWorkTaskItemRow({
   // The task a click opens: the one touched last.
   const latest = latestWorkTaskMember(item).view;
   const shown = lead.view;
-  const { task, tabs } = shown;
+  const { task } = shown;
   // A process running in any of the task's thread terminals, e.g. a Run script.
   const terminalSessions = useKnownTerminalSessions({
     environmentId: task.environmentId,
     threadId: null,
   });
-  const threadIds = new Set<string>(tabs.map(({ shell }) => shell.id));
-  const terminalStatus = terminalStatusFromRunningIds(
-    selectRunningSubprocessTerminalIds(
-      (terminalSessions ?? []).filter((session) => threadIds.has(session.target.threadId)),
-    ),
+  const itemId = workItemIdFromBranch(task.workspace.branch);
+  const runningCommands = runningItemMemberCommands(
+    terminalSessions ?? [],
+    itemId === null ? null : workItemTerminalThreadId(itemId),
+    item.members.map(({ view }) => ({
+      key: view.key,
+      path: view.task.workspace.path,
+      threadIds: view.tabs.map(({ shell }) => shell.id),
+    })),
   );
   const status = WORK_TASK_STATUS_PRESENTATION[shown.status];
   const detail = [
     item.unseen ? UNSEEN_RESPONSE_PRESENTATION.label : null,
     status.label,
-    terminalStatus?.label ?? null,
+    ...[...runningCommands.values()].map((command) => `Running ${command}`),
     task.workspace.branch,
     shown.pullRequest !== null ? `#${shown.pullRequest.number}` : null,
     linkedProjects !== undefined ? `Also in ${linkedProjects}` : null,
@@ -147,27 +169,36 @@ const SidebarWorkTaskItemRow = memo(function SidebarWorkTaskItemRow({
     .filter(Boolean)
     .join(" · ");
   const single = item.members.length === 1 ? item.members[0]! : null;
+  const active = activeKey !== null;
+  const openMenu = (event: MouseEvent) => {
+    event.preventDefault();
+    onContextMenu(item, { x: event.clientX, y: event.clientY });
+  };
   return (
-    <li>
+    // A card per task, so tasks and their repo rows read as one unit.
+    <li
+      className={cn(
+        "overflow-hidden rounded-lg border transition-colors",
+        active
+          ? "border-sidebar-foreground/15 bg-sidebar-row-active/60"
+          : "border-sidebar-border bg-sidebar-row-hover/25 hover:border-sidebar-foreground/12",
+      )}
+    >
       <WorkTaskHoverCard item={item} onOpen={onOpen}>
         <button
           type="button"
-          aria-current={active ? "page" : undefined}
+          aria-current={active && single !== null ? "page" : undefined}
           aria-label={`${item.title}, ${detail}`}
           onClick={() => onOpen(latest)}
-          onContextMenu={(event: MouseEvent) => {
-            event.preventDefault();
-            onContextMenu(item, { x: event.clientX, y: event.clientY });
-          }}
+          onContextMenu={openMenu}
           className={cn(
-            "flex w-full min-w-0 cursor-pointer flex-col gap-0.5 rounded-md py-1 ps-8 pe-2 text-left",
-            active
-              ? "bg-primary/8 text-sidebar-foreground"
-              : "text-sidebar-foreground/80 hover:bg-sidebar-row-hover hover:text-sidebar-foreground",
+            ROW_CLASS,
+            "flex-col gap-1 py-2",
+            single !== null && active ? ACTIVE_CLASS : IDLE_CLASS,
             item.unseen && "text-sidebar-foreground",
           )}
         >
-          <span className="flex min-w-0 items-center gap-2.5">
+          <span className="flex w-full min-w-0 items-center gap-2.5">
             {item.unseen ? (
               <UNSEEN_RESPONSE_PRESENTATION.Icon
                 className={UNSEEN_RESPONSE_PRESENTATION.className}
@@ -178,37 +209,127 @@ const SidebarWorkTaskItemRow = memo(function SidebarWorkTaskItemRow({
             <span className={cn("min-w-0 flex-1 truncate text-sm", item.unseen && "font-semibold")}>
               {item.title}
             </span>
-            {terminalStatus ? (
-              <TerminalIcon
-                aria-hidden
-                className={cn("size-3.5 shrink-0", terminalStatus.colorClass)}
-              />
-            ) : null}
           </span>
-          <span className="block truncate ps-6 text-xs text-sidebar-muted-foreground">
-            {single !== null ? (
-              <>
-                {single.repo}
-                {" · "}
-                <span
-                  className={
-                    item.unseen ? UNSEEN_RESPONSE_PRESENTATION.className : TONE_CLASS[status.tone]
-                  }
-                >
-                  {item.unseen ? UNSEEN_RESPONSE_PRESENTATION.label : status.label}
-                </span>
-              </>
-            ) : (
-              item.members.map((member) => (
-                <span key={member.view.key} className="me-2 inline-flex items-center gap-1">
-                  <WorkTaskStatusIcon status={member.view.status} />
-                  {member.label}
-                </span>
-              ))
-            )}
-          </span>
+          {single !== null ? (
+            <RepoLine
+              member={single}
+              command={runningCommands.get(single.view.key) ?? null}
+              className="ps-6"
+            />
+          ) : null}
         </button>
       </WorkTaskHoverCard>
+      {single === null ? (
+        <ul
+          aria-label={`${item.title} repositories`}
+          className="flex flex-col gap-px border-t border-sidebar-border/70 py-1"
+        >
+          {item.members.map((member) => (
+            <WorkTaskMemberRow
+              key={member.view.key}
+              member={member}
+              active={member.view.key === activeKey}
+              command={runningCommands.get(member.view.key) ?? null}
+              onOpen={onOpen}
+              onContextMenu={openMenu}
+            />
+          ))}
+        </ul>
+      ) : null}
     </li>
   );
 });
+
+const ROW_CLASS =
+  "flex w-full min-w-0 cursor-pointer px-(--sidebar-row-content-inset) text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring";
+const ACTIVE_CLASS = "text-sidebar-foreground";
+const IDLE_CLASS =
+  "text-sidebar-foreground/80 hover:bg-sidebar-row-hover hover:text-sidebar-foreground";
+
+/** `[badge] repo · Status`, then the command running in that repo, if any. */
+function RepoLine({
+  member,
+  command,
+  className,
+}: {
+  member: WorkTaskItemMember;
+  command: string | null;
+  className?: string;
+}) {
+  const { view, unseen } = member;
+  const status = WORK_TASK_STATUS_PRESENTATION[view.status];
+  const identity = deriveProjectIdentity(member.repo);
+  return (
+    <span className={cn("flex w-full min-w-0 items-center gap-1.5 text-xs", className)}>
+      <ProjectMonogram text={identity.monogram} color={identity.color} className="size-3.5" />
+      <span
+        className={cn("min-w-0 truncate text-sidebar-foreground/80", unseen && "font-semibold")}
+      >
+        {member.label}
+      </span>
+      <span aria-hidden className="text-sidebar-muted-foreground/60">
+        ·
+      </span>
+      <span
+        className={cn(
+          "shrink-0",
+          unseen ? UNSEEN_RESPONSE_PRESENTATION.className : TONE_CLASS[status.tone],
+        )}
+      >
+        {unseen ? UNSEEN_RESPONSE_PRESENTATION.label : status.label}
+      </span>
+      {command !== null ? <RunningCommandChip command={command} /> : null}
+    </span>
+  );
+}
+
+/** A live process in the task's environment, named by its command (e.g. `bun dev`). */
+function RunningCommandChip({ command }: { command: string }) {
+  return (
+    <span className="ms-auto flex min-w-0 max-w-[55%] items-center gap-1 rounded-md bg-info/10 px-1.5 py-px font-mono text-2xs text-info-foreground">
+      <span aria-hidden className="relative flex size-1.5 shrink-0">
+        <span className="absolute inline-flex size-full animate-ping rounded-full bg-current opacity-60 motion-reduce:hidden" />
+        <span className="relative inline-flex size-1.5 rounded-full bg-current" />
+      </span>
+      <span className="min-w-0 truncate">{command}</span>
+    </span>
+  );
+}
+
+/** One repo of a multi-repo item, so each task is one click away. */
+function WorkTaskMemberRow({
+  member,
+  active,
+  command,
+  onOpen,
+  onContextMenu,
+}: {
+  member: WorkTaskItemMember;
+  active: boolean;
+  /** The command running in this repo, if any. */
+  command: string | null;
+  onOpen: (view: WorkTaskView) => void;
+  onContextMenu: (event: MouseEvent) => void;
+}) {
+  const { view, unseen } = member;
+  const status = WORK_TASK_STATUS_PRESENTATION[view.status];
+  const label = unseen ? UNSEEN_RESPONSE_PRESENTATION.label : status.label;
+  return (
+    <li>
+      <button
+        type="button"
+        aria-current={active ? "page" : undefined}
+        aria-label={`${member.label}, ${label}${command !== null ? `, running ${command}` : ""}`}
+        onClick={() => onOpen(view)}
+        onContextMenu={onContextMenu}
+        className={cn(
+          ROW_CLASS,
+          "h-7 items-center ps-8.5",
+          active ? "bg-sidebar-row-active text-sidebar-foreground" : IDLE_CLASS,
+        )}
+      >
+        <RepoLine member={member} command={command} />
+      </button>
+    </li>
+  );
+}

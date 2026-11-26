@@ -6,6 +6,8 @@ import {
   ProviderInstanceId,
   WorkTaskId,
   WorkTaskOperationError,
+  workItemIdFromBranch,
+  workItemTerminalThreadId,
   workTaskStatusInputs,
   workTaskThreadState,
   type OrchestrationV2Actor,
@@ -57,6 +59,7 @@ import {
   type WorkTaskCopyRule,
   type WorkTaskStepOutcome,
 } from "./copyRules.ts";
+import { listTerminalSummaries, terminalsToCloseOnArchive } from "./terminalSweep.ts";
 import { WorkTaskNaming } from "./WorkTaskNaming.ts";
 import { WorkTaskStore } from "./WorkTaskStore.ts";
 
@@ -867,6 +870,44 @@ export const make = Effect.gen(function* () {
           });
           yield* terminals
             .close({ threadId: shell.id, deleteHistory: false })
+            .pipe(Effect.ignoreCause({ log: true }));
+        }
+        // Item terminals live under `work-item:<id>`, not a thread: close those in this worktree,
+        // and all of them once no other task of the item remains.
+        const itemId = workItemIdFromBranch(task.workspace.branch);
+        // A failed lookup must not fail the archive: assume siblings remain, which closes less.
+        const siblingsRemain =
+          itemId !== null &&
+          (yield* store.list().pipe(
+            Effect.map((tasks) =>
+              tasks.some(
+                (other) =>
+                  other.archivedAt === null &&
+                  other.id !== task.id &&
+                  workItemIdFromBranch(other.workspace.branch) === itemId,
+              ),
+            ),
+            Effect.catchCause((cause) =>
+              Effect.logWarning("Work Task archive could not list sibling tasks", { cause }).pipe(
+                Effect.as(true),
+              ),
+            ),
+          ));
+        const summaries = yield* listTerminalSummaries(terminals).pipe(
+          Effect.catchCause((cause) =>
+            Effect.logWarning("Work Task archive could not list terminals", { cause }).pipe(
+              Effect.as([]),
+            ),
+          ),
+        );
+        for (const { threadId, terminalId } of terminalsToCloseOnArchive({
+          summaries,
+          worktreePath: task.workspace.path,
+          itemThreadId: itemId === null ? null : workItemTerminalThreadId(itemId),
+          siblingsRemain,
+        })) {
+          yield* terminals
+            .close({ threadId, terminalId, deleteHistory: false })
             .pipe(Effect.ignoreCause({ log: true }));
         }
         // Stopping is asynchronous: give runs a few seconds to end before files go away.

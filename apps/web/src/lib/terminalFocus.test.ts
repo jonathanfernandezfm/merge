@@ -208,6 +208,37 @@ describe("focusTerminal", () => {
     unregisterPanel();
   });
 
+  it("entering a thread focuses its work item drawer unless the thread has a navigation request", () => {
+    const ref = threadRef("task-thread");
+    const itemRef = threadRef("work-item:607374");
+    useTerminalUiStateStore
+      .getState()
+      .ensureTerminal(itemRef, "drawer", { open: true, active: true });
+    const drawer = vi.fn(() => true);
+    const unregisterDrawer = registerTerminalFocusTarget({
+      threadRef: itemRef,
+      terminalId: "drawer",
+      focus: drawer,
+    });
+    const panel = vi.fn(() => true);
+    const unregisterPanel = registerTerminalFocusTarget({
+      threadRef: ref,
+      terminalId: "panel",
+      focus: panel,
+    });
+
+    focusTerminalOnNavigation(ref, "panel");
+    focusTerminalOnThreadEnter(ref, itemRef)();
+    expect(panel).toHaveBeenCalledTimes(1);
+    expect(drawer).not.toHaveBeenCalled();
+
+    const leave = focusTerminalOnThreadEnter(ref, itemRef);
+    expect(drawer).toHaveBeenCalledTimes(1);
+    leave();
+    unregisterDrawer();
+    unregisterPanel();
+  });
+
   it("re-entering a thread after in-thread terminal actions focuses the drawer", () => {
     const ref = threadRef("re-entered");
     useTerminalUiStateStore.getState().ensureTerminal(ref, "drawer", { open: true, active: true });

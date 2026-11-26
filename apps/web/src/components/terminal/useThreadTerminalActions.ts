@@ -25,13 +25,16 @@ export interface TerminalLaunchLocation {
 }
 
 /** Allocate terminal ids and launch locations centrally so all surfaces share one view of sessions. */
-export function useThreadTerminalActions(threadRef: ScopedThreadRef | null) {
+export function useThreadTerminalActions(
+  threadRef: ScopedThreadRef | null,
+  sourceThreadRef: ScopedThreadRef | null = threadRef, // merge-seam: work-item-drawer-launcher
+) {
   const openTerminalCommand = useAtomCommand(terminalEnvironment.open, "terminal open");
   const writeTerminal = useAtomCommand(terminalEnvironment.write, "terminal write");
   const closeTerminalCommand = useAtomCommand(terminalEnvironment.close, "terminal close");
-  const serverThread = useQuietThreadShell(threadRef);
-  const draftThread = useComposerDraftStore((store) =>
-    threadRef ? store.getDraftThreadByRef(threadRef) : null,
+  const serverThread = useQuietThreadShell(sourceThreadRef); // merge-seam: work-item-drawer-launcher
+  const draftThread = useComposerDraftStore(
+    (store) => (sourceThreadRef ? store.getDraftThreadByRef(sourceThreadRef) : null), // merge-seam: work-item-drawer-launcher
   );
   const projectRef = serverThread
     ? scopeProjectRef(serverThread.environmentId, serverThread.projectId)

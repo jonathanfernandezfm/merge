@@ -16,6 +16,7 @@ import {
   type OrchestrationV2ServerCommand,
   type OrchestrationV2ThreadShell,
   type Project,
+  type TerminalSummary,
   type WorkTask,
 } from "@t3tools/contracts";
 import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
@@ -123,6 +124,9 @@ const pushedClone = () => {
 };
 
 const shells = new Map<string, OrchestrationV2ThreadShell>();
+let terminalSnapshot: ReadonlyArray<TerminalSummary> = [];
+const closedTerminals: Array<Parameters<TerminalManager.TerminalManager["Service"]["close"]>[0]> =
+  [];
 const launches: Array<ThreadLaunch.ThreadLaunchInput> = [];
 const receipts = new Map<string, ThreadId>();
 const commands: Array<OrchestrationV2ServerCommand> = [];
@@ -216,7 +220,13 @@ const layer = WorkTaskWorkspace.layer.pipe(
         }),
     }),
   ),
-  Layer.provide(Layer.mock(TerminalManager.TerminalManager)({ close: () => Effect.void })),
+  Layer.provide(
+    Layer.mock(TerminalManager.TerminalManager)({
+      close: (input) => Effect.sync(() => void closedTerminals.push(input)),
+      subscribeMetadata: (listener) =>
+        listener({ type: "snapshot", terminals: terminalSnapshot }).pipe(Effect.as(() => {})),
+    }),
+  ),
   Layer.provide(ServerSettings.ServerSettingsService.layerTest({})),
   Layer.provide(
     Layer.mock(ProjectionStore.ProjectionStoreV2)({
@@ -254,6 +264,8 @@ const projectRepo = () => {
 };
 
 const reset = () => {
+  terminalSnapshot = [];
+  closedTerminals.length = 0;
   shells.clear();
   receipts.clear();
   launches.length = 0;
@@ -610,6 +622,81 @@ it.effect("createThread with a fixed commandId replays the launch and still writ
       [{ threadId: first.threadId, taskId, origin: "review-feedback" }],
     );
     NodeFS.rmSync(repo.root, { recursive: true, force: true });
+  }).pipe(Effect.provide(layer)),
+);
+
+it.effect("archive closes item terminals running in the task's worktree", () =>
+  Effect.gen(function* () {
+    reset();
+    const store = yield* WorkTaskStore.WorkTaskStore;
+    const workspace = yield* WorkTaskWorkspace.WorkTaskWorkspace;
+    const repo = projectRepo();
+    const { taskId } = yield* workspace.create(createInput());
+    const path = (yield* store.get(taskId))!.workspace.path!;
+    const tab = (terminalId: string, cwd: string): TerminalSummary => ({
+      threadId: "work-item:607374",
+      terminalId,
+      cwd,
+      worktreePath: null,
+      status: "running",
+      pid: null,
+      exitCode: null,
+      exitSignal: null,
+      hasRunningSubprocess: false,
+      label: "",
+      updatedAt: NOW,
+    });
+    terminalSnapshot = [tab("inside", NodePath.join(path, "app")), tab("outside", "/elsewhere")];
+    yield* workspace.archive({ taskId, force: true });
+    assert.deepStrictEqual(
+      closedTerminals.filter((input) => input.threadId === "work-item:607374"),
+      [{ threadId: "work-item:607374", terminalId: "inside", deleteHistory: false }],
+    );
+    NodeFS.rmSync(repo.root, { recursive: true, force: true });
+  }).pipe(Effect.provide(layer)),
+);
+
+const itemTerminal = (cwd: string): TerminalSummary => ({
+  threadId: "work-item:607374",
+  terminalId: "item-tab",
+  cwd,
+  worktreePath: null,
+  status: "running",
+  pid: null,
+  exitCode: null,
+  exitSignal: null,
+  hasRunningSubprocess: false,
+  label: "",
+  updatedAt: NOW,
+});
+
+const itemArchiveCloses = (siblingBranch: string | null) =>
+  Effect.gen(function* () {
+    reset();
+    const store = yield* WorkTaskStore.WorkTaskStore;
+    const workspace = yield* WorkTaskWorkspace.WorkTaskWorkspace;
+    const base = workTask("/unused");
+    const withBranch = (id: string, branch: string) =>
+      workTask("/unused", {
+        id: WorkTaskId.make(id),
+        workspace: { ...base.workspace, path: null, branch },
+      });
+    yield* store.insert(withBranch("task-a", "feature/#607374-x"));
+    if (siblingBranch !== null) yield* store.insert(withBranch("task-b", siblingBranch));
+    terminalSnapshot = [itemTerminal("/elsewhere")];
+    yield* workspace.archive({ taskId: WorkTaskId.make("task-a"), force: true });
+    return closedTerminals.map((input) => input.terminalId);
+  });
+
+it.effect("archive closes the item's terminals when the last task of the item goes", () =>
+  Effect.gen(function* () {
+    assert.deepStrictEqual(yield* itemArchiveCloses(null), ["item-tab"]);
+  }).pipe(Effect.provide(layer)),
+);
+
+it.effect("archive keeps the item's terminals while a sibling task remains", () =>
+  Effect.gen(function* () {
+    assert.deepStrictEqual(yield* itemArchiveCloses("bugfix/ESP-607374"), []);
   }).pipe(Effect.provide(layer)),
 );
 

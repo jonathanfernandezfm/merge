@@ -90,12 +90,12 @@ describe("deriveWorkTaskStatus", () => {
     expect(status(task(), [reviewRunning], pr)).toBe("addressing-comments");
   });
 
-  it("6. is merged once merged, or monitoring while a thread still runs", () => {
+  it("6. is merged once merged, or working while a thread still runs", () => {
     const failingMerged = pullRequest({ state: "merged", checks: "failing" });
     expect(status(task({ mergedAt: NOW }), [idle])).toBe("merged");
     expect(status(task(), [idle], failingMerged)).toBe("merged");
-    expect(status(task(), [running], pullRequest({ state: "merged" }))).toBe("monitoring");
-    expect(status(task({ mergedAt: NOW }), [monitoring])).toBe("monitoring");
+    expect(status(task(), [running], pullRequest({ state: "merged" }))).toBe("working");
+    expect(status(task({ mergedAt: NOW }), [monitoring])).toBe("merged");
   });
 
   it("7. ranks merge conflicts above a running thread", () => {
@@ -137,6 +137,8 @@ describe("deriveWorkTaskStatus", () => {
 
   it("12. monitors while only watch loops run", () => {
     expect(status(task(), [idle, monitoring])).toBe("monitoring");
+    expect(status(task(), [monitoring], pullRequest())).toBe("waiting-for-review");
+    expect(status(task(), [monitoring], pullRequest({ review: "approved" }))).toBe("approved");
   });
 
   it("13-14. derives approval and review of an open pull request", () => {
@@ -169,14 +171,13 @@ describe("workTaskSection", () => {
     attention: [
       "setup-failed",
       "waiting-for-user",
-      "idle",
       "merge-conflicts",
       "changes-requested",
       "unresolved-comments",
       "approved-checks-failing",
     ],
-    working: ["setting-up", "working", "addressing-comments", "monitoring"],
-    review: ["waiting-for-review", "approved"],
+    working: ["setting-up", "working", "addressing-comments", "idle"],
+    review: ["waiting-for-review", "approved", "monitoring"],
     done: ["merged", "archived"],
   };
 
@@ -190,7 +191,8 @@ describe("workTaskSection", () => {
 
   it("raises an unseen task to attention unless it is working", () => {
     for (const s of WORK_TASK_STATUSES) {
-      expect(workTaskSection(s, true)).toBe(SECTIONS.working.includes(s) ? "working" : "attention");
+      const stays = SECTIONS.working.includes(s) && s !== "idle";
+      expect(workTaskSection(s, true)).toBe(stays ? "working" : "attention");
     }
   });
 });

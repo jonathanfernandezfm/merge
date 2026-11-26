@@ -1,6 +1,7 @@
 // @effect-diagnostics nodeBuiltinImport:off -- Reads recorded az fixtures synchronously.
 import * as NodeFS from "node:fs";
 
+import { workItemIdFromBranch } from "@t3tools/contracts";
 import * as Result from "effect/Result";
 import { describe, expect, it } from "vite-plus/test";
 
@@ -9,7 +10,6 @@ import {
   decodeWorkItemStatesJson,
   resolveBranchWorkItemId,
   workItemFamilyWiql,
-  workItemIdFromBranch,
   workItemWebUrl,
 } from "./azureBoards.ts";
 

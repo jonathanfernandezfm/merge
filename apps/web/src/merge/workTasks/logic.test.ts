@@ -197,7 +197,7 @@ describe("workTaskboardColumnForStatus", () => {
       "setting-up": "working",
       "setup-failed": "needs-you",
       working: "working",
-      monitoring: "working",
+      monitoring: "in-review",
       "waiting-for-user": "needs-you",
       idle: "working",
       "merge-conflicts": "needs-you",

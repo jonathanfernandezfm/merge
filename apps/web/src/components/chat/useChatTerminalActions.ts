@@ -11,6 +11,7 @@ import { getTerminalLabel } from "@t3tools/shared/terminalLabels";
 import {
   AuthTerminalReadScope,
   AuthTerminalOperateScope,
+  isWorkItemTerminalThreadId, // merge-seam: work-item-drawer-actions
   type EnvironmentId,
   type ProjectScript,
   type ScopedThreadRef,
@@ -51,6 +52,7 @@ import { previewEnvironment } from "../../state/preview";
 import { readEnvironmentScope } from "../../state/session";
 import { useAtomCommand } from "../../state/use-atom-command";
 import type { ChatShortcutCommands } from "./useChatShortcuts";
+import type { ItemDrawerTerminals } from "~/merge/workTasks/workItemDrawer"; // merge-seam: work-item-drawer-actions
 const SCRIPT_TERMINAL_COLS = 120;
 const SCRIPT_TERMINAL_ROWS = 30;
 
@@ -67,6 +69,8 @@ interface ChatTerminalActionsInput {
   readonly activeThread: EnvironmentThreadShell | undefined;
   readonly activeThreadId: ThreadId | null;
   readonly activeThreadRef: ScopedThreadRef | null;
+  readonly drawerThreadRef?: ScopedThreadRef | null; // merge-seam: work-item-drawer-actions
+  readonly itemDrawerTerminals?: ItemDrawerTerminals | null; // merge-seam: work-item-drawer-actions
   readonly activeProject: EnvironmentProject | null;
   readonly activeRightPanelSurface: RightPanelSurface | null;
   readonly runningTerminalIds: ReadonlyArray<string>;
@@ -118,6 +122,8 @@ export function useChatTerminalActions(input: ChatTerminalActionsInput) {
   const storeNewTerminal = useTerminalUiStateStore((s) => s.newTerminal);
   const storeCloseTerminal = useTerminalUiStateStore((s) => s.closeTerminal);
   const terminalActions = useThreadTerminalActions(activeThreadRef);
+  const drawerRef = activeThreadRef === null ? null : (input.drawerThreadRef ?? activeThreadRef); // merge-seam: work-item-drawer-actions
+  const drawerTerminalActions = useThreadTerminalActions(drawerRef, activeThreadRef); // merge-seam: work-item-drawer-actions
 
   const activeTerminalGroup =
     terminalUiState.terminalGroups.find(
@@ -135,13 +141,13 @@ export function useChatTerminalActions(input: ChatTerminalActionsInput) {
   };
   const addTerminalContextToDraftStable = useStableCallback(addTerminalContextToDraft);
   const setTerminalOpen = (open: boolean) => {
-    if (!activeThreadRef) return;
-    storeSetTerminalOpen(activeThreadRef, open);
-    focusActiveDrawerTerminal(activeThreadRef);
+    if (!drawerRef) return; // merge-seam: work-item-drawer-actions
+    storeSetTerminalOpen(drawerRef, open); // merge-seam: work-item-drawer-actions
+    focusActiveDrawerTerminal(drawerRef); // merge-seam: work-item-drawer-actions
   };
   const setTerminalOpenStable = useStableCallback(setTerminalOpen);
   const toggleTerminalVisibility = () => {
-    if (!activeThreadRef) return;
+    if (!drawerRef) return; // merge-seam: work-item-drawer-actions
     const nextOpen = !terminalUiState.terminalOpen;
     if (
       nextOpen &&
@@ -152,51 +158,57 @@ export function useChatTerminalActions(input: ChatTerminalActionsInput) {
     if (nextOpen && hasTerminalWriteAccess() && terminalUiState.terminalIds.length === 0) {
       // Server-created setup terminals exist before this client's drawer mounts.
       // Reuse them before allocating a shell from the still-empty UI state.
-      const existingTerminalId =
-        runningTerminalIds.find((id) => !panelTerminalIds.has(id)) ??
-        activeServerOrderedTerminalIds.find((id) => !panelTerminalIds.has(id));
+      // merge-seam: work-item-drawer-actions (item drawer ids share no key space with the panel)
+      const item = input.itemDrawerTerminals;
+      const existingTerminalId = item
+        ? (item.runningTerminalIds[0] ?? item.orderedTerminalIds[0])
+        : (runningTerminalIds.find((id) => !panelTerminalIds.has(id)) ??
+          activeServerOrderedTerminalIds.find((id) => !panelTerminalIds.has(id)));
       if (existingTerminalId !== undefined) {
-        storeEnsureTerminal(activeThreadRef, existingTerminalId, { open: true, active: true });
-        focusActiveDrawerTerminal(activeThreadRef);
+        storeEnsureTerminal(drawerRef, existingTerminalId, { open: true, active: true }); // merge-seam: work-item-drawer-actions
+        focusActiveDrawerTerminal(drawerRef); // merge-seam: work-item-drawer-actions
         return;
       }
-      void terminalActions.launchTerminal({
-        place: (terminalId) => storeEnsureTerminal(activeThreadRef, terminalId, { open: true }),
+      // merge-seam: work-item-drawer-actions
+      void drawerTerminalActions.launchTerminal({
+        place: (terminalId) => storeEnsureTerminal(drawerRef, terminalId, { open: true }), // merge-seam: work-item-drawer-actions
       })?.result;
-      focusActiveDrawerTerminal(activeThreadRef);
+      focusActiveDrawerTerminal(drawerRef); // merge-seam: work-item-drawer-actions
       return;
     }
     setTerminalOpen(nextOpen);
   };
   const toggleTerminalVisibilityStable = useStableCallback(toggleTerminalVisibility);
   const splitTerminal = (direction: "horizontal" | "vertical" = "horizontal") => {
-    if (!activeThreadRef || hasReachedSplitLimit) return;
-    const launched = terminalActions.launchTerminal({
+    if (!drawerRef || hasReachedSplitLimit) return; // merge-seam: work-item-drawer-actions
+    // merge-seam: work-item-drawer-actions
+    const launched = drawerTerminalActions.launchTerminal({
       place: (terminalId) =>
         direction === "vertical"
-          ? storeSplitTerminalVertical(activeThreadRef, terminalId)
-          : storeSplitTerminal(activeThreadRef, terminalId),
+          ? storeSplitTerminalVertical(drawerRef, terminalId) // merge-seam: work-item-drawer-actions
+          : storeSplitTerminal(drawerRef, terminalId), // merge-seam: work-item-drawer-actions
     });
     if (!launched) return;
-    focusTerminal(activeThreadRef, launched.terminalId);
+    focusTerminal(drawerRef, launched.terminalId); // merge-seam: work-item-drawer-actions
     void launched.result;
   };
   const splitTerminalStable = useStableCallback(splitTerminal);
   const createNewTerminal = () => {
-    if (!activeThreadRef) return;
-    const launched = terminalActions.launchTerminal({
-      place: (terminalId) => storeNewTerminal(activeThreadRef, terminalId),
+    if (!drawerRef) return; // merge-seam: work-item-drawer-actions
+    // merge-seam: work-item-drawer-actions
+    const launched = drawerTerminalActions.launchTerminal({
+      place: (terminalId) => storeNewTerminal(drawerRef, terminalId), // merge-seam: work-item-drawer-actions
     });
     if (!launched) return;
-    focusTerminal(activeThreadRef, launched.terminalId);
+    focusTerminal(drawerRef, launched.terminalId); // merge-seam: work-item-drawer-actions
     void launched.result;
   };
   const createNewTerminalStable = useStableCallback(createNewTerminal);
   const closeTerminal = (terminalId: string) => {
-    if (!hasTerminalWriteAccess() || !activeThreadRef) return;
-    terminalActions.closeTerminalSession(terminalId, activeThreadRef);
-    storeCloseTerminal(activeThreadRef, terminalId);
-    focusActiveDrawerTerminal(activeThreadRef);
+    if (!hasTerminalWriteAccess() || !drawerRef) return; // merge-seam: work-item-drawer-actions
+    drawerTerminalActions.closeTerminalSession(terminalId, drawerRef); // merge-seam: work-item-drawer-actions
+    storeCloseTerminal(drawerRef, terminalId); // merge-seam: work-item-drawer-actions
+    focusActiveDrawerTerminal(drawerRef); // merge-seam: work-item-drawer-actions
   };
   const runProjectScript = async (
     script: ProjectScript,
@@ -220,6 +232,7 @@ export function useChatTerminalActions(input: ChatTerminalActionsInput) {
     const reusableTerminalId =
       script.stopOnSettle ||
       options?.preferNewTerminal ||
+      isWorkItemTerminalThreadId(drawerRef?.threadId ?? "") || // merge-seam: work-item-drawer-actions
       !canReuseTerminal ||
       !readEnvironmentScope(environmentId, AuthTerminalReadScope)
         ? null
@@ -240,17 +253,19 @@ export function useChatTerminalActions(input: ChatTerminalActionsInput) {
       cwd: targetCwd,
       worktreePath: targetWorktreePath,
     });
-    if (!activeThreadRef) {
+    // merge-seam: work-item-drawer-actions
+    if (!activeThreadRef || !drawerRef) {
       return;
     }
 
-    const launched = terminalActions.launchTerminal({
+    // merge-seam: work-item-drawer-actions
+    const launched = drawerTerminalActions.launchTerminal({
       // The drawer opens with the target already placed: opening it empty would claim
       // DEFAULT_THREAD_TERMINAL_ID, which a right-panel terminal may already own.
       place: (terminalId) =>
         reusableTerminalId === null
-          ? storeNewTerminal(activeThreadRef, terminalId)
-          : storeEnsureTerminal(activeThreadRef, terminalId, { open: true }),
+          ? storeNewTerminal(drawerRef, terminalId) // merge-seam: work-item-drawer-actions
+          : storeEnsureTerminal(drawerRef, terminalId, { open: true }), // merge-seam: work-item-drawer-actions
       ...(reusableTerminalId === null
         ? { size: { cols: SCRIPT_TERMINAL_COLS, rows: SCRIPT_TERMINAL_ROWS } }
         : { terminalId: reusableTerminalId }),
@@ -260,7 +275,7 @@ export function useChatTerminalActions(input: ChatTerminalActionsInput) {
     });
     if (!launched) return;
     const targetTerminalId = launched.terminalId;
-    focusTerminal(activeThreadRef, targetTerminalId);
+    focusTerminal(drawerRef, targetTerminalId); // merge-seam: work-item-drawer-actions
     const openResult = await launched.result;
     if (openResult._tag === "Failure") {
       if (!isAtomCommandInterrupted(openResult)) {
@@ -273,7 +288,8 @@ export function useChatTerminalActions(input: ChatTerminalActionsInput) {
       return;
     }
 
-    const writeResult = await terminalActions.writeToTerminal(
+    // merge-seam: work-item-drawer-actions
+    const writeResult = await drawerTerminalActions.writeToTerminal(
       targetTerminalId,
       options?.shellHistory === "preserve"
         ? `${script.command}\r`
@@ -385,7 +401,8 @@ export function useChatTerminalActions(input: ChatTerminalActionsInput) {
   const closePanelTerminalStable = useStableCallback(closePanelTerminal);
   const requestCloseTerminal = (terminalId: string) => {
     if (!hasTerminalWriteAccess()) return;
-    const label = activeTerminalLabelsById.get(terminalId) ?? getTerminalLabel(terminalId);
+    const drawerLabelsById = input.itemDrawerTerminals?.labelsById ?? activeTerminalLabelsById; // merge-seam: work-item-drawer-actions
+    const label = drawerLabelsById.get(terminalId) ?? getTerminalLabel(terminalId); // merge-seam: work-item-drawer-actions
     void confirmTerminalClose([label]).then((confirmed) => {
       if (confirmed && readEnvironmentScope(environmentId, AuthTerminalOperateScope)) {
         closeTerminal(terminalId);

@@ -130,8 +130,8 @@ describe("groupWorkTaskItems", () => {
     const items = group(
       [
         view("a", "merged", { activityAt: "2026-10-05T00:00:00.000Z" }),
-        view("b", "idle", { activityAt: "2026-10-01T00:00:00.000Z" }),
-        view("c", "idle", { activityAt: "2026-10-02T00:00:00.000Z" }),
+        view("b", "waiting-for-user", { activityAt: "2026-10-01T00:00:00.000Z" }),
+        view("c", "waiting-for-user", { activityAt: "2026-10-02T00:00:00.000Z" }),
       ],
       {},
     );

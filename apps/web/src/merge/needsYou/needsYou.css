@@ -1,0 +1,50 @@
+/*
+ * The Needs you lane wears the theme accent (the Merge logo's lime): a diagonal wash, and an edge
+ * that is brightest on the top-left corner and fades to the sidebar border. Cards stay opaque, so
+ * the colour only shows around them. Styled by data attribute (lint allows only Tailwind
+ * classes), and fork-owned, so upstream's index.css stays untouched.
+ */
+[data-needs-you="lane"] {
+  --lane-accent: var(--app-theme-accent, var(--primary));
+  --lane-card: color-mix(in srgb, var(--contrast-sidebar-foreground) 3%, var(--sidebar));
+  border: 1px solid transparent;
+  background:
+    linear-gradient(
+        150deg,
+        color-mix(in srgb, var(--lane-accent) 16%, transparent),
+        color-mix(in srgb, var(--lane-accent) 5%, transparent) 55%,
+        color-mix(in srgb, var(--lane-accent) 3%, transparent)
+      )
+      padding-box,
+    linear-gradient(var(--sidebar), var(--sidebar)) padding-box,
+    linear-gradient(
+        150deg,
+        var(--lane-accent),
+        color-mix(in srgb, var(--lane-accent) 35%, var(--contrast-sidebar-border)) 30%,
+        var(--contrast-sidebar-border) 60%
+      )
+      border-box;
+}
+
+[data-needs-you="title"] {
+  color: var(--lane-accent);
+}
+
+[data-needs-you="count"] {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--lane-accent) 70%, white),
+    var(--lane-accent)
+  );
+  color: var(--app-theme-accent-foreground, var(--primary-foreground));
+  font-weight: 700;
+}
+
+/* Opaque cards; the open one keeps a stronger fill. Unlayered, so it beats the cards' utilities. */
+[data-needs-you="lane"] > ul > li {
+  background-color: var(--lane-card);
+}
+
+[data-needs-you="lane"] > ul > li:has([aria-current="page"]) {
+  background-color: color-mix(in srgb, var(--contrast-sidebar-foreground) 9%, var(--sidebar));
+}

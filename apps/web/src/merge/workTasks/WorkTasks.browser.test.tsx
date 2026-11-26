@@ -6,6 +6,7 @@ import { page } from "vite-plus/test/browser";
 import { SidebarProvider } from "~/components/ui/sidebar";
 import { render } from "../../../test/render";
 import { buildWorkTaskViews, workTaskKey } from "./logic";
+import { SidebarNeedsYou } from "../needsYou/SidebarNeedsYou";
 import { SidebarWorkTasks } from "./SidebarWorkTasks";
 import { ENV, link, shell, workTask } from "./testFixtures";
 import { WorkTaskChrome } from "./WorkTaskChrome";
@@ -45,8 +46,10 @@ vi.mock("./state", async () => {
   return {
     useWorkTaskViews: () => views,
     useWorkTaskItems: () => items,
+    useWorkTaskProjects: () => [],
     useLinkedWorkTasks: () => linked,
     useThreadWorkTask: () => null,
+    useThreadsOutsideWorkTasks: <T,>(threads: ReadonlyArray<T>) => threads,
     useWorkTaskView: () => null,
     readLinkedWorkTasks: () => [],
     readWorkTaskView: () => null,
@@ -77,10 +80,11 @@ describe("Work Tasks UI", () => {
   it("lists active Work Tasks with status, repo and the linked-branch hint", async () => {
     await using _screen = await render(
       <SidebarProvider>
+        <SidebarNeedsYou searchQuery="" scopedProjectKeys={null} />
         <SidebarWorkTasks />
       </SidebarProvider>,
     );
-    await expect.element(page.getByText("Work Tasks", { exact: true })).toBeVisible();
+    await expect.element(page.getByText("Work tasks", { exact: true })).toBeVisible();
     await expect
       .element(page.getByRole("button", { name: /^Permissions API, Working · feature\/perm/ }))
       .toBeVisible();

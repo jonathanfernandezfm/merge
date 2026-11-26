@@ -226,6 +226,11 @@
     "purpose": "The Threads list leaves threads filed in a folder to the fork Folders section and Work Task threads to their task; the sidebar search gets filed threads back (v0.0.10 behaviour)"
   },
   {
+    "id": "folders",
+    "file": "apps/web/src/components/sidebar/SidebarThreadRow.tsx",
+    "purpose": "Export the plain thread row so fork Folders draw filed threads exactly like the Threads list"
+  },
+  {
     "id": "compact-threads",
     "file": "apps/web/src/components/sidebar/SidebarThreadRow.tsx",
     "purpose": "Compact thread rows reuse the card's no-meta-line layout (no branch line) and keep the PR badge and terminal indicator on the title line",
@@ -349,5 +354,35 @@
     "id": "shell-keep-work-task-threads",
     "file": "apps/server/src/orchestration-v2/ShellStream.ts",
     "purpose": "Shell snapshot always includes Work Task threads, even older settled ones"
+  },
+  {
+    "id": "work-item-drawer-ref",
+    "file": "apps/web/src/components/ChatView.tsx",
+    "purpose": "Inside a Work Task thread the bottom drawer is the ADO item's drawer"
+  },
+  {
+    "id": "work-item-drawer-actions",
+    "file": "apps/web/src/components/chat/useChatTerminalActions.ts",
+    "purpose": "Inside a Work Task thread the bottom drawer is the ADO item's drawer"
+  },
+  {
+    "id": "work-item-drawer-mount",
+    "file": "apps/web/src/components/chat/ChatTerminalDrawers.tsx",
+    "purpose": "Inside a Work Task thread the bottom drawer is the ADO item's drawer"
+  },
+  {
+    "id": "work-item-drawer-launch",
+    "file": "apps/web/src/components/PersistentThreadTerminals.tsx",
+    "purpose": "Inside a Work Task thread the bottom drawer is the ADO item's drawer"
+  },
+  {
+    "id": "work-item-drawer-launcher",
+    "file": "apps/web/src/components/terminal/useThreadTerminalActions.ts",
+    "purpose": "Inside a Work Task thread the bottom drawer is the ADO item's drawer: item drawer launches take their project and worktree from the active thread"
+  },
+  {
+    "id": "work-item-drawer-focus",
+    "file": "apps/web/src/lib/terminalFocus.ts",
+    "purpose": "Inside a Work Task thread the bottom drawer is the ADO item's drawer: entering the thread focuses the item drawer, while a navigation request keeps the thread's own key"
   }
 ]

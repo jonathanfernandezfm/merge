@@ -5,7 +5,7 @@ import {
   type ScopedThreadRef,
   type ThreadId,
 } from "@t3tools/contracts";
-import { scopeProjectRef } from "@t3tools/client-runtime/environment";
+import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment"; // merge-seam: work-item-drawer-launch
 import { projectScriptCwd, projectScriptRuntimeEnv } from "@t3tools/shared/projectScripts";
 import { resolveTerminalSessionLabel } from "@t3tools/shared/terminalLabels";
 import { memo, useEffect } from "react";
@@ -26,11 +26,17 @@ import { selectThreadTerminalUiState, useTerminalUiStateStore } from "../termina
 import { useThreadTerminalActions } from "./terminal/useThreadTerminalActions";
 import ThreadTerminalDrawer from "./ThreadTerminalDrawer";
 import { resolveTerminalWorktreePath } from "./ChatView.logic";
+import {
+  itemTabLabel,
+  itemTabLaunchLocation,
+  useWorkItemDrawerMembers,
+} from "../merge/workTasks/workItemDrawer"; // merge-seam: work-item-drawer-launch
 
 /** Where a drawer or panel opens new terminals when a script run overrides the thread's own. */
 export type PersistentTerminalLaunchContext = {
   readonly cwd: string;
   readonly worktreePath: string | null;
+  readonly threadId?: ThreadId; // merge-seam: work-item-drawer-launch
 };
 
 function terminalIdListsEqual(left: readonly string[], right: readonly string[]): boolean {
@@ -101,14 +107,25 @@ export const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerm
   onAddTerminalContext,
 }: PersistentThreadTerminalDrawerProps) {
   const canOperateTerminal = useEnvironmentScope(threadRef.environmentId, AuthTerminalOperateScope);
-  const terminalActions = useThreadTerminalActions(threadRef);
+  const itemMembers = useWorkItemDrawerMembers(threadRef); // merge-seam: work-item-drawer-launch
+  const terminalActions = useThreadTerminalActions(
+    threadRef,
+    // merge-seam: work-item-drawer-launch
+    itemMembers !== null && launchContext?.threadId !== undefined
+      ? scopeThreadRef(threadRef.environmentId, launchContext.threadId)
+      : threadRef,
+  );
   const serverThread = useQuietThreadShell(threadRef);
   const draftThread = useComposerDraftStore((store) => store.getDraftThreadByRef(threadRef));
   const projectRef = serverThread
     ? scopeProjectRef(serverThread.environmentId, serverThread.projectId)
     : draftThread
       ? scopeProjectRef(draftThread.environmentId, draftThread.projectId)
-      : null;
+      : // merge-seam: work-item-drawer-launch
+        ((
+          itemMembers?.find((member) => member.worktreePath === launchContext?.worktreePath) ??
+          itemMembers?.[0]
+        )?.projectRef ?? null);
   const project = useProject(projectRef);
   const terminalUiState = useTerminalUiStateStore((state) =>
     selectThreadTerminalUiState(state.terminalUiStateByThreadKey, threadRef),
@@ -129,15 +146,28 @@ export const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerm
     [];
   const terminalLabelsById = new Map<string, string>();
   for (const session of drawerTerminalSessions) {
+    const label = resolveTerminalSessionLabel(session.target.terminalId, session.state.summary);
     terminalLabelsById.set(
       session.target.terminalId,
-      resolveTerminalSessionLabel(session.target.terminalId, session.state.summary),
+      // merge-seam: work-item-drawer-launch
+      itemMembers !== null && session.state.summary
+        ? itemTabLabel(label, itemMembers, session.state.summary.cwd)
+        : label,
     );
   }
   const terminalLaunchLocationsById = new Map<string, TerminalLaunchLocationWithEnv>();
   for (const session of drawerTerminalSessions) {
     const summary = session.state.summary;
     if (!project || !summary) continue;
+    // merge-seam: work-item-drawer-launch
+    if (itemMembers !== null) {
+      // Item tabs re-attach exactly as launched, whichever thread is active; a change restarts them.
+      terminalLaunchLocationsById.set(
+        session.target.terminalId,
+        itemTabLaunchLocation(summary, itemMembers, project.workspaceRoot),
+      );
+      continue;
+    }
     const worktreePathForLaunch =
       launchContext !== null ? launchContext.worktreePath : summary.worktreePath;
     terminalLaunchLocationsById.set(session.target.terminalId, {

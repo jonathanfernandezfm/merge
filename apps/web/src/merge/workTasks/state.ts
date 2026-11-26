@@ -1,6 +1,9 @@
 import { useAtomValue } from "@effect/atom-react";
 import { enabledEnvironmentIds } from "@t3tools/client-runtime/state/connections";
-import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
+import type {
+  EnvironmentProject,
+  EnvironmentThreadShell,
+} from "@t3tools/client-runtime/state/shell";
 import { arrayElementsEqual } from "@t3tools/client-runtime/state/entities";
 import {
   createEnvironmentRpcCommand,
@@ -24,7 +27,7 @@ import { environmentCatalog } from "~/connection/catalog";
 import { connectionAtomRuntime } from "~/connection/runtime";
 import { appAtomRegistry } from "~/rpc/atomRegistry";
 import { hasUnseenCompletion } from "~/components/Sidebar.logic";
-import { useProjects } from "~/state/entities";
+import { environmentProjects } from "~/state/projects";
 import { environmentThreadShells } from "~/state/threads";
 import {
   buildWorkTaskViews,
@@ -241,13 +244,29 @@ export function useWorkTaskInsights(): ReadonlyMap<string, WorkTaskInsight> {
   return useAtomValue(workTaskInsightsAtom);
 }
 
+const NO_VIEWS_ATOM = Atom.make<ReadonlyMap<string, WorkTaskView>>(new Map()).pipe(
+  Atom.withLabel("merge-work-task-views:empty"),
+);
+const NO_INSIGHTS_ATOM = Atom.make<ReadonlyMap<string, WorkTaskInsight>>(new Map()).pipe(
+  Atom.withLabel("merge-work-task-insights:empty"),
+);
+const NO_PROJECTS_ATOM = Atom.make<ReadonlyArray<EnvironmentProject>>([]).pipe(
+  Atom.withLabel("merge-work-task-projects:empty"),
+);
+
+/** The projects, or none while `enabled` is false (then it never re-renders its caller). */
+export function useWorkTaskProjects(enabled: boolean): ReadonlyArray<EnvironmentProject> {
+  return useAtomValue(enabled ? environmentProjects.projectsAtom : NO_PROJECTS_ATOM);
+}
+
 /**
  * Active Work Tasks grouped by ADO item (each task alone when insights are unavailable).
+ * With `enabled` false it reads empty atoms and returns no items.
  */
-export function useWorkTaskItems(): ReadonlyArray<WorkTaskItem> {
-  const views = useWorkTaskViews();
-  const insights = useAtomValue(workTaskInsightsAtom);
-  const projects = useProjects();
+export function useWorkTaskItems(enabled = true): ReadonlyArray<WorkTaskItem> {
+  const views = useAtomValue(enabled ? workTaskViewsAtom : NO_VIEWS_ATOM);
+  const insights = useAtomValue(enabled ? workTaskInsightsAtom : NO_INSIGHTS_ATOM);
+  const projects = useWorkTaskProjects(enabled);
   const titles = new Map(
     projects.map((project) => [`${project.environmentId}:${project.id}`, project.title]),
   );
@@ -262,7 +281,6 @@ export function useWorkTaskItems(): ReadonlyArray<WorkTaskItem> {
     // Live work and waiting outrank a new response, which only replaces calmer statuses.
     unseen: ({ status, tabs }) =>
       status !== "working" &&
-      status !== "monitoring" &&
       status !== "waiting-for-user" &&
       tabs.some(({ shell }) =>
         hasUnseenCompletion({ ...shell, lastVisitedAt: shell.lastVisitedAt }),

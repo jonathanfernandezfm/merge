@@ -1,4 +1,4 @@
-import type { ResolvedKeybindingsConfig } from "@t3tools/contracts";
+import { isWorkItemTerminalThreadId, type ResolvedKeybindingsConfig } from "@t3tools/contracts"; // merge-seam: work-item-drawer-mount
 import {
   parseScopedThreadKey,
   scopedThreadKey,
@@ -66,7 +66,11 @@ export function ChatTerminalDrawers(props: ChatTerminalDrawersProps) {
   const [mountedTerminalThreadKeys, setMountedTerminalThreadKeys] = useState<string[]>([]);
   const existingOpenTerminalThreadKeys = (() => {
     const existingThreadKeys = new Set<string>([...serverThreadKeys, ...draftThreadKeys]);
-    return openTerminalThreadKeys.filter((nextThreadKey) => existingThreadKeys.has(nextThreadKey));
+    return openTerminalThreadKeys.filter(
+      (nextThreadKey) =>
+        existingThreadKeys.has(nextThreadKey) ||
+        isWorkItemTerminalThreadId(parseScopedThreadKey(nextThreadKey)?.threadId ?? ""), // merge-seam: work-item-drawer-mount
+    );
   })();
   const reconciledMountedTerminalThreadKeys = reconcileMountedTerminalThreadIds({
     currentThreadIds: mountedTerminalThreadKeys,

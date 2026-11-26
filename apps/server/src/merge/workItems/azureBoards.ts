@@ -4,20 +4,10 @@ import type {
   WorkItemState,
   WorkItemStateCategory,
 } from "@t3tools/contracts";
-import { TrimmedNonEmptyString } from "@t3tools/contracts";
+import { TrimmedNonEmptyString, workItemIdFromBranch } from "@t3tools/contracts";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import { decodeJsonResult } from "@t3tools/shared/schemaJson";
-
-/**
- * The work item a branch is named after: the first 4-7 digit run that stands alone between
- * separators, as in `feature/#123456-x` or `bugfix/ESP-123456`. Runs joined to other digits
- * (`2026-10-05`) or longer (`20240101`) are dates.
- */
-export function workItemIdFromBranch(branch: string): number | null {
-  const match = /(?:^|[/#_-])(?<!\d[_-])(\d{4,7})(?=$|[/_-])(?![_-]\d)/u.exec(branch);
-  return match?.[1] === undefined ? null : Number(match[1]);
-}
 
 /** Git config key holding a work item linked to a branch by hand. */
 export const branchWorkItemConfigKey = (branch: string) => `branch.${branch}.work-item`;

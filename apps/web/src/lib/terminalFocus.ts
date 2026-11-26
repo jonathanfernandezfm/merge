@@ -127,7 +127,10 @@ export function focusTerminalOnNavigation(threadRef: ScopedThreadRef, terminalId
  * navigating handler already asked for a terminal there. Returns the leave
  * cleanup for ChatView's effect.
  */
-export function focusTerminalOnThreadEnter(threadRef: ScopedThreadRef): () => void {
+export function focusTerminalOnThreadEnter(
+  threadRef: ScopedThreadRef,
+  focusRef: ScopedThreadRef = threadRef, // merge-seam: work-item-drawer-focus
+): () => void {
   const threadKey = scopedThreadKey(threadRef);
   const requestedByHandler = navigationRequestThreadKey === threadKey;
   navigationRequestThreadKey = null;
@@ -135,9 +138,9 @@ export function focusTerminalOnThreadEnter(threadRef: ScopedThreadRef): () => vo
   if (!requestedByHandler) {
     const { terminalOpen, activeTerminalId } = selectThreadTerminalUiState(
       useTerminalUiStateStore.getState().terminalUiStateByThreadKey,
-      threadRef,
+      focusRef, // merge-seam: work-item-drawer-focus
     );
-    if (terminalOpen && activeTerminalId) focusTerminal(threadRef, activeTerminalId);
+    if (terminalOpen && activeTerminalId) focusTerminal(focusRef, activeTerminalId); // merge-seam: work-item-drawer-focus
   }
   return () => {
     // A handler navigating elsewhere marks its target before this cleanup runs.

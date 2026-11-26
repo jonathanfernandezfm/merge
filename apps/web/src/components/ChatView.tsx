@@ -387,6 +387,11 @@ const EMPTY_PROVIDER_MODELS: ServerProvider["models"] = [];
 const EMPTY_USAGE_LIMIT_SOURCES: UsageLimitSourceSnapshots = [];
 import type { CodexArtifactTemplate } from "@t3tools/shared/codexArtifactTemplates";
 import { MergeChatHeader } from "../merge/MergeChatHeader"; // merge-seam: chat-header
+import {
+  useItemDrawerTerminals,
+  useStableByKey,
+  useWorkItemDrawerRef,
+} from "../merge/workTasks/workItemDrawer"; // merge-seam: work-item-drawer-ref
 
 const EMPTY_FEEDBACK_SUBMISSIONS: ReadonlyArray<CodexFeedbackSubmission> = [];
 const EMPTY_PROVIDER_SKILLS: ServerProvider["skills"] = [];
@@ -439,6 +444,7 @@ export default function ChatView(props: ChatViewProps) {
   const handleNewThread = useNewThreadHandler();
   const routeThreadRef = scopeThreadRef(environmentId, threadId);
   const routeThreadKey = scopedThreadKey(routeThreadRef);
+  const drawerThreadRef = useWorkItemDrawerRef(routeThreadRef); // merge-seam: work-item-drawer-ref
   const currentRouteThreadKeyRef = useRef<string | null>(routeThreadKey);
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- publishes the committed route thread key to a ref that async handlers check before applying results
   useLayoutEffect(() => {
@@ -752,8 +758,8 @@ export default function ChatView(props: ChatViewProps) {
   const setMultipleModelSelectionsStable = useStableCallback(setMultipleModelSelections);
   const feedbackUploadsInFlightRef = useRef(new Set<string>());
 
-  const terminalUiState = useTerminalUiStateStore((state) =>
-    selectThreadTerminalUiState(state.terminalUiStateByThreadKey, routeThreadRef),
+  const terminalUiState = useTerminalUiStateStore(
+    (state) => selectThreadTerminalUiState(state.terminalUiStateByThreadKey, drawerThreadRef), // merge-seam: work-item-drawer-ref
   );
 
   const fallbackDraftProjectRef = draftThread
@@ -984,6 +990,9 @@ export default function ChatView(props: ChatViewProps) {
       (session) => session.target.threadId === activeThreadId,
     );
   })();
+  const itemDrawerTerminals = useItemDrawerTerminals(
+    activeThreadId === null ? null : drawerThreadRef,
+  ); // merge-seam: work-item-drawer-ref
   const activeServerOrderedTerminalIds = activeThreadKnownSessions.map(
     (session) => session.target.terminalId,
   );
@@ -1723,6 +1732,17 @@ export default function ChatView(props: ChatViewProps) {
   const activeWorkspaceRoot = activeThreadWorktreePath ?? activeProjectCwd ?? undefined;
   const activeTerminalLaunchContext =
     terminalUiLaunchContext?.threadId === activeThreadId ? terminalUiLaunchContext : null;
+  // merge-seam: work-item-drawer-ref
+  const itemDrawerLaunchContext = useStableByKey(
+    activeThreadId === null || activeWorkspaceRoot === undefined
+      ? null
+      : {
+          threadId: activeThreadId,
+          cwd: activeWorkspaceRoot,
+          worktreePath: activeThreadWorktreePath,
+        },
+    JSON.stringify([activeThreadId, activeWorkspaceRoot ?? null, activeThreadWorktreePath]),
+  );
   const liveIsGitRepo = gitStatusQuery.data?.isRepo;
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- records live git repo status in the session cache read while the status query is unavailable
   useEffect(() => {
@@ -1915,6 +1935,8 @@ export default function ChatView(props: ChatViewProps) {
     activeThread,
     activeThreadId,
     activeThreadRef,
+    drawerThreadRef, // merge-seam: work-item-drawer-ref
+    itemDrawerTerminals, // merge-seam: work-item-drawer-ref
     activeProject,
     activeRightPanelSurface,
     runningTerminalIds,
@@ -2680,10 +2702,16 @@ export default function ChatView(props: ChatViewProps) {
   // Entering a thread with its drawer open focuses the drawer terminal; opening
   // it from a handler requests focus there. A closed drawer leaves focus to the
   // composer effect above.
+  // merge-seam: work-item-drawer-ref
+  const enterFocusDrawerRef =
+    drawerThreadRef === routeThreadRef ? activeThreadRef : drawerThreadRef;
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- focuses the open drawer terminal when entering a thread
   useEffect(() => {
-    if (activeThreadRef && !embedded) return focusTerminalOnThreadEnter(activeThreadRef);
-  }, [activeThreadRef, embedded]);
+    // merge-seam: work-item-drawer-ref
+    if (activeThreadRef && enterFocusDrawerRef && !embedded) {
+      return focusTerminalOnThreadEnter(activeThreadRef, enterFocusDrawerRef);
+    }
+  }, [activeThreadRef, enterFocusDrawerRef, embedded]); // merge-seam: work-item-drawer-ref
 
   const getShortcutContext = (eventTarget: EventTarget | null = document.activeElement) => ({
     terminalFocus: getTerminalFocusOwner() !== null,
@@ -3941,10 +3969,15 @@ export default function ChatView(props: ChatViewProps) {
 
         {embedded ? null : (
           <ChatTerminalDrawers
-            activeThreadKey={activeThreadKey}
+            // merge-seam: work-item-drawer-ref
+            activeThreadKey={activeThreadKey === null ? null : scopedThreadKey(drawerThreadRef)}
             activeTerminalOpen={Boolean(terminalUiState.terminalOpen)}
             composerHeight={composerReservedHeight}
-            launchContext={activeTerminalLaunchContext ?? null}
+            // merge-seam: work-item-drawer-ref
+            launchContext={
+              activeTerminalLaunchContext ??
+              (drawerThreadRef !== routeThreadRef ? itemDrawerLaunchContext : null)
+            }
             splitShortcutLabel={splitTerminalShortcutLabel ?? undefined}
             splitVerticalShortcutLabel={splitTerminalVerticalShortcutLabel ?? undefined}
             newShortcutLabel={newTerminalShortcutLabel ?? undefined}

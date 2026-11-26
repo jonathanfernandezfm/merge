@@ -155,10 +155,30 @@ export function useWorkTaskContextMenu(onNavigate?: () => void) {
       case "rename":
         openRenameWorkTaskDialog({ refs, title: item.title });
         return;
-      case "rename-ai":
-        for (const ref of refs)
-          await rename({ environmentId: ref.environmentId, input: { taskId: ref.taskId } });
+      case "rename-ai": {
+        const toastId = toastManager.add({
+          type: "loading",
+          title: `Renaming ${item.title} with AI...`,
+          timeout: 0,
+        });
+        let renamed = true;
+        for (const ref of refs) {
+          const result = await rename({
+            environmentId: ref.environmentId,
+            input: { taskId: ref.taskId },
+          });
+          if (result._tag !== "Success") renamed = false;
+        }
+        // Failures are already reported by the command, so only success needs its own toast.
+        if (renamed)
+          toastManager.update(toastId, {
+            type: "success",
+            title: "Renamed with AI",
+            timeout: 4000,
+          });
+        else toastManager.close(toastId);
         return;
+      }
       case "mark-waiting":
         openWaitingReasonDialog(refs);
         return;

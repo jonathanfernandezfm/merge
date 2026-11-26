@@ -27,6 +27,7 @@ import { connectionAtomRuntime } from "~/connection/runtime";
 import { appAtomRegistry } from "~/rpc/atomRegistry";
 import { useDelegatedUnderParent } from "~/state/entities";
 import { environmentThreadShells } from "~/state/threads";
+import { useNeedsYouThreads, useWithoutNeedsYou } from "../needsYou/state";
 import {
   buildFolderViews,
   filedThreadKeys,
@@ -126,18 +127,33 @@ export function useFolderViews(
 ): ReadonlyArray<FolderView> {
   const folders = useAtomValue(foldersAtom);
   const filed = useAtomValue(filedAtom);
-  const shells = useAtomValue(environmentThreadShells.quietThreadShellsAtom);
+  // A filed thread that needs you waits in the Needs you lane and comes back once opened.
+  const shells = useWithoutNeedsYou(useAtomValue(environmentThreadShells.quietThreadShellsAtom));
   const delegatedUnderParent = useDelegatedUnderParent();
   return buildFolderViews({ folders, filed, shells, scopedProjectKeys, delegatedUnderParent });
 }
 
-/** At the `folders` seam: filed threads join upstream's sidebar search, messages included. */
+/**
+ * At the `folders` seam: threads the Threads list hands to fork sections join upstream's sidebar
+ * search, messages included: filed ones, and unfiled ones waiting in the Needs you lane.
+ */
 export function useMergeFiledSearchThreads(
   scopedProjectKeys: ReadonlySet<string> | null,
 ): ReadonlyArray<EnvironmentThreadShell> {
   const filed = useAtomValue(filedAtom);
   const shells = useAtomValue(environmentThreadShells.quietThreadShellsAtom);
-  return filedVisibleThreads(shells, filed, scopedProjectKeys, useDelegatedUnderParent());
+  const filedThreads = filedVisibleThreads(
+    shells,
+    filed,
+    scopedProjectKeys,
+    useDelegatedUnderParent(),
+  );
+  const waiting = unfiledThreads(useNeedsYouThreads(), filed).filter(
+    (thread) =>
+      scopedProjectKeys === null ||
+      scopedProjectKeys.has(`${thread.environmentId}:${thread.projectId}`),
+  );
+  return waiting.length === 0 ? filedThreads : [...filedThreads, ...waiting];
 }
 
 let previousEnvironments: ReadonlyArray<EnvironmentId> = [];
